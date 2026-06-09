@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Editor and IDE state
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependency directories
+node_modules/
+
+# Build and cache output
+dist/
+build/
+.cache/
+.parcel-cache/
+
+# Logs and local environment files
+*.log
+.env
+.env.*
