@@ -5,24 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="面向新手的Codex配置教程。"
+      content="Codex配置教程。"
     />
-    <title>面向新手的Codex配置教程</title>
+    <title>Codex配置教程</title>
     <link rel="icon" type="image/png" href="./jhss-logo-cropped.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="page" id="Nodejs">
+    <main class="page" id="setup-guide">
       <header class="site-header" aria-label="公司标识">
         <img class="company-logo" src="./jhss-logo-cropped.png" alt="公司 Logo" />
       </header>
 
       <section class="hero">
         <div class="hero-grid">
-          <p class="kicker">嘉合杉升 · Codex setup</p>
-          <h1>面向新手的 Codex 配置教程</h1>
-          <div class="system-tabs hero-tabs" role="tablist" aria-label="选择操作系统">
-            <button class="system-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-macos" id="tab-macos" data-system="macos">
+          <h1>Codex配置教程</h1>
+          <div class="system-tabs hero-tabs" aria-label="选择操作系统">
+            <button class="system-tab is-active" type="button" aria-pressed="true" data-system="macos">
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M7 4h10a2 2 0 0 1 2 2v9H5V6a2 2 0 0 1 2-2Z" />
                 <path d="M4 18h16" />
@@ -30,7 +29,7 @@
               </svg>
               <span>macOS</span>
             </button>
-            <button class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-windows" id="tab-windows" data-system="windows">
+            <button class="system-tab" type="button" aria-pressed="false" data-system="windows">
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 5.5 11 4v7H4V5.5Z" />
                 <path d="M13 3.6 20 2v9h-7V3.6Z" />
@@ -39,7 +38,7 @@
               </svg>
               <span>Windows</span>
             </button>
-            <button class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-linux" id="tab-linux" data-system="linux">
+            <button class="system-tab" type="button" aria-pressed="false" data-system="linux">
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 3c-2.2 0-3.5 1.7-3.5 4.3 0 1.2.3 2.2.8 3.1L6.6 15 5 20h14l-1.6-5-2.7-4.6c.5-.9.8-1.9.8-3.1C15.5 4.7 14.2 3 12 3Z" />
                 <path d="M9.6 15.2h4.8" />
@@ -60,121 +59,36 @@
           <div class="step-content">
             <div class="section-head">
               <div>
-                <h2>第一步：安装 Node.js</h2>
+                <h2>第一步：安装 Codex App</h2>
+                <p>
+                  根据当前系统选择对应安装方式。macOS 和 Linux 可从
+                  <a href="https://github.com/Wangnov/codex-app-mirror/releases" target="_blank" rel="noopener noreferrer">codex-app-mirror releases</a>
+                  下载最新版安装包，Windows 请通过 Microsoft Store 安装。
+                </p>
               </div>
             </div>
-
-            <div class="system-panel is-active" id="panel-macos" role="tabpanel" aria-labelledby="tab-macos" data-system-panel="macos">
-              <div class="body-grid">
-                <div>
-                  <ol class="steps">
-                    <li>打开 macOS 的“终端”。</li>
-                    <li>复制右侧整段脚本并执行，按提示输入电脑密码。</li>
-                    <li>脚本会自动检查 Homebrew，缺失时先从清华镜像安装，再继续安装 Node.js。</li>
-                    <li>等待终端输出 <code>Node.js is ready</code>。</li>
-                  </ol>
-                  <p class="note-line">
-                    安装 Homebrew 与 Node.js 均优先使用清华镜像。期间如果终端要求确认，请按提示输入 <code>Return</code> 或电脑密码。
-                  </p>
-                </div>
-                <div class="code-block">
-                  <button class="copy-button" type="button" aria-label="复制 macOS 安装脚本">
-                    <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M9 9h9v11H9z" />
-                      <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
-                    </svg>
-                    <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="m5 12 4 4L19 6" />
-                    </svg>
-                    <span>复制</span>
-                  </button>
-                  <pre><code>export HOMEBREW_BREW_GIT_REMOTE="https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/brew.git"
-export HOMEBREW_CORE_GIT_REMOTE="https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/homebrew-core.git"
-export HOMEBREW_INSTALL_FROM_API=1
-export HOMEBREW_API_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"
-export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"
-export HOMEBREW_PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
-
-if ! command -v brew >/dev/null 2>&1; then
-  git clone --depth=1 https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/install.git /tmp/brew-install
-  /bin/bash /tmp/brew-install/install.sh
-  eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
-
-brew update
-brew install node
-node -v
-npm -v
-node -e "console.log('Node.js is ready')"</code></pre>
-                </div>
-              </div>
+            <div class="body-grid system-panel is-active" data-system-panel="macos">
+              <ol class="steps">
+                <li>打开 Codex App GitHub Releases，选择标记为 Latest 的版本。</li>
+                <li>在 Assets 中下载与系统匹配的安装包。</li>
+                <li>运行安装包并按系统提示完成安装。</li>
+                <li>安装完成后打开 Codex App，确认应用能正常启动。</li>
+              </ol>
             </div>
-
-            <div class="system-panel" id="panel-windows" role="tabpanel" aria-labelledby="tab-windows" data-system-panel="windows" hidden>
-              <div class="body-grid">
-                <div>
-                  <ol class="steps">
-                    <li>
-                      访问
-                      <a href="https://npmmirror.com/mirrors/node/" target="_blank" rel="noopener noreferrer">npmmirror Node.js 镜像</a>
-                      下载 LTS 版本的 Windows Installer。
-                    </li>
-                    <li>运行安装程序，并保留“添加到 PATH”的默认设置。</li>
-                    <li>安装结束后重新打开 PowerShell。</li>
-                    <li>运行验证命令，确认 Node.js 可以执行脚本。</li>
-                  </ol>
-                </div>
-                <div class="code-block">
-                  <button class="copy-button" type="button" aria-label="复制 Windows 验证命令">
-                    <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M9 9h9v11H9z" />
-                      <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
-                    </svg>
-                    <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="m5 12 4 4L19 6" />
-                    </svg>
-                    <span>复制</span>
-                  </button>
-                  <pre><code>node -v
-npm -v
-node -e "console.log('Node.js is ready')"</code></pre>
-                </div>
-              </div>
+            <div class="body-grid system-panel" data-system-panel="windows" hidden>
+              <ol class="steps">
+                <li>打开 Microsoft Store。</li>
+                <li>在 Microsoft Store 中搜索 <code>Codex</code>。</li>
+                <li>进入 Codex 页面并点击“获取”或“安装”。</li>
+              </ol>
             </div>
-
-            <div class="system-panel" id="panel-linux" role="tabpanel" aria-labelledby="tab-linux" data-system-panel="linux" hidden>
-              <div class="body-grid">
-                <div>
-                  <ol class="steps">
-                    <li>打开终端。</li>
-                    <li>
-                      先把系统软件源切换到国内镜像，例如
-                      <a href="https://mirrors.tuna.tsinghua.edu.cn/help/ubuntu/" target="_blank" rel="noopener noreferrer">清华 Ubuntu 镜像帮助</a>
-                      或对应发行版镜像。
-                    </li>
-                    <li>更新软件源并安装 Node.js 与 npm。</li>
-                    <li>运行验证命令，确认 Node.js 可以执行脚本。</li>
-                    <li>多项目开发时，再考虑用 nvm 管理多个版本。</li>
-                  </ol>
-                </div>
-                <div class="code-block">
-                  <button class="copy-button" type="button" aria-label="复制 Linux 安装命令">
-                    <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M9 9h9v11H9z" />
-                      <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
-                    </svg>
-                    <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="m5 12 4 4L19 6" />
-                    </svg>
-                    <span>复制</span>
-                  </button>
-                  <pre><code>sudo apt update
-sudo apt install nodejs npm
-node -v
-npm -v
-node -e "console.log('Node.js is ready')"</code></pre>
-                </div>
-              </div>
+            <div class="body-grid system-panel" data-system-panel="linux" hidden>
+              <ol class="steps">
+                <li>打开 Codex App GitHub Releases，选择标记为 Latest 的版本。</li>
+                <li>在 Assets 中下载与系统匹配的安装包。</li>
+                <li>运行安装包并按系统提示完成安装。</li>
+                <li>安装完成后打开 Codex App，确认应用能正常启动。</li>
+              </ol>
             </div>
           </div>
         </div>
@@ -186,36 +100,7 @@ node -e "console.log('Node.js is ready')"</code></pre>
           <div class="step-content">
             <div class="section-head">
               <div>
-                <h2>第二步：安装 Codex App</h2>
-                <p>
-                  访问
-                  <a href="https://github.com/Wangnov/codex-app-mirror/releases" target="_blank" rel="noopener noreferrer">codex-app-mirror releases</a>
-                  下载最新版安装包，并按当前系统完成安装。
-                </p>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>打开 Codex App GitHub Releases，选择标记为 Latest 的版本。</li>
-                <li>在 Assets 中下载与系统匹配的安装包。</li>
-                <li>运行安装包并按系统提示完成安装。</li>
-                <li>安装完成后打开 Codex App，确认应用能正常启动。</li>
-              </ol>
-            </div>
-            <p class="note-line system-only-note" data-system-note="windows" hidden>
-              Windows 如果安装 <code>.Msix</code> 时提示“你的系统管理员已阻止此程序”，通常是当前设备策略不允许从商店外安装 MSIX / AppX 包，或应用安装器 / AppX 部署服务被禁用。请优先尝试 Microsoft Store 官方页面；公司、学校或其他受组织策略管理的设备需要联系设备管理员放行，GitHub Release 安装包不会绕过本机安装策略。
-            </p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>03</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第三步：安装 Codex++</h2>
+                <h2>第二步：安装 Codex++</h2>
                 <p>
                   访问
                   <a href="https://github.com/BigPizzaV3/CodexPlusPlus/releases" target="_blank" rel="noopener noreferrer">codex++ releases</a>
@@ -239,12 +124,12 @@ node -e "console.log('Node.js is ready')"</code></pre>
 
         <div class="step">
           <div class="step-marker">
-            <span>04</span>
+            <span>03</span>
           </div>
           <div class="step-content">
             <div class="section-head">
               <div>
-                <h2>第四步：注册账号</h2>
+                <h2>第三步：注册账号</h2>
                 <p>
                   前往
                   <a href="http://124.222.133.97" target="_blank" rel="noopener noreferrer">嘉合杉升AI接入系统</a>
@@ -265,12 +150,12 @@ node -e "console.log('Node.js is ready')"</code></pre>
 
         <div class="step">
           <div class="step-marker">
-            <span>05</span>
+            <span>04</span>
           </div>
           <div class="step-content">
             <div class="section-head">
               <div>
-                <h2>第五步：添加令牌</h2>
+                <h2>第四步：添加令牌</h2>
               </div>
             </div>
             <div class="body-grid">
@@ -279,7 +164,97 @@ node -e "console.log('Node.js is ready')"</code></pre>
                 <li>在控制台中打开“令牌管理”。</li>
                 <li>点击“添加令牌”。</li>
                 <li>在“基本信息”中填写“名称”，名称可以随便命名。</li>
+                <li>复制创建令牌后生成的密钥，确认它以 <code>sk-</code> 开头。</li>
+                <li>将 API Key 保存到本地，后续配置 Codex 时会用到。</li>
               </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-marker">
+            <span>05</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第五步：配置供应商</h2>
+                <p>确认桌面上已有 Codex、Codex++ 和 Codex++ 管理工具。先关闭后台中的相关应用会话，再打开 Codex++ 管理工具，按右侧表单填写供应商配置。</p>
+              </div>
+            </div>
+            <div class="body-grid">
+              <ol class="steps">
+                <li>确认后台中的 Codex、Codex++ 和 Codex++ 管理工具会话都已关闭。</li>
+                <li>打开 Codex++ 管理工具。</li>
+                <li>在侧边栏选择“供应商配置”。</li>
+                <li>点击“+ 添加供应商”。</li>
+                <li>按照右侧表单完成配置，其中 Key 使用第四步保存的内容。</li>
+                <li>点击上方“保存”按钮保存配置。</li>
+              </ol>
+              <div class="provider-form" aria-label="供应商配置表单示例">
+                <div class="form-field">
+                  <span class="field-label">名称</span>
+                  <div class="field-value">
+                    <button class="copy-button" type="button" aria-label="复制名称">
+                      <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M9 9h9v11H9z" />
+                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                      </svg>
+                      <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <span>复制</span>
+                    </button>
+                    <code>jhss</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">接入模式</span>
+                  <div class="field-value">
+                    <code>选择“纯 API”</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">配置模型</span>
+                  <div class="field-value">
+                    <code>无需填写</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">Codex 目标</span>
+                  <div class="field-value">
+                    <code>勾选“启用目标功能”</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">Base URL</span>
+                  <div class="field-value">
+                    <button class="copy-button" type="button" aria-label="复制 Base URL">
+                      <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M9 9h9v11H9z" />
+                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                      </svg>
+                      <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <span>复制</span>
+                    </button>
+                    <code>http://124.222.133.97/v1</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">Key</span>
+                  <div class="field-value">
+                    <code>使用第四步保存的 API Key</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">上游协议</span>
+                  <div class="field-value">
+                    <code>选择“Responses API”</code>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -291,57 +266,7 @@ node -e "console.log('Node.js is ready')"</code></pre>
           <div class="step-content">
             <div class="section-head">
               <div>
-                <h2>第六步：保存令牌信息</h2>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>复制创建令牌后生成的密钥，确认它以 <code>sk-</code> 开头。</li>
-                <li>回到嘉合杉升 AI 接入系统首页。</li>
-                <li>在首页复制基址，也就是后续配置需要填写的 base URL。</li>
-                <li>将 API key 和 base URL 保存到本地，后续配置 Codex 时会用到。</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>07</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第七步：配置供应商</h2>
-                <p>确认桌面上已有 Codex、Codex++ 和 Codex++ 管理工具。先关闭后台中的相关应用会话，再打开 Codex++ 管理工具，按右侧截图填写供应商配置。</p>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>确认后台中的 Codex、Codex++ 和 Codex++ 管理工具会话都已关闭。</li>
-                <li>打开 Codex++ 管理工具。</li>
-                <li>在侧边栏选择“供应商配置”。</li>
-                <li>点击“+ 添加供应商”。</li>
-                <li>按照右侧截图完成配置（图片可单击放大查看），其中 Base URL 和 Key 使用第六步保存的内容。</li>
-                <li>点击上方“保存”按钮保存配置。</li>
-              </ol>
-              <figure class="image-panel">
-                <button class="image-zoom-trigger" type="button" data-image-zoom="./config.png" aria-label="放大查看 Codex++ 管理工具供应商配置示例">
-                  <img src="./config.png" alt="Codex++ 管理工具供应商配置示例" />
-                </button>
-              </figure>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>08</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第八步：启动配置好的 Codex</h2>
+                <h2>第六步：启动配置好的 Codex</h2>
               </div>
             </div>
             <div class="body-grid">
@@ -355,16 +280,6 @@ node -e "console.log('Node.js is ready')"</code></pre>
           </div>
         </div>
       </section>
-
-      <dialog class="image-lightbox" aria-label="截图预览">
-        <button class="lightbox-close" type="button" aria-label="关闭截图预览">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M6 6l12 12" />
-            <path d="M18 6 6 18" />
-          </svg>
-        </button>
-        <img src="./config.png" alt="Codex++ 管理工具供应商配置示例放大图" />
-      </dialog>
 
       <footer class="footer">
         <span>嘉合杉升 版权所有</span>
@@ -382,7 +297,7 @@ node -e "console.log('Node.js is ready')"</code></pre>
           systemTabs.forEach((item) => {
             const isSelected = item.dataset.system === selectedSystem;
             item.classList.toggle("is-active", isSelected);
-            item.setAttribute("aria-selected", String(isSelected));
+            item.setAttribute("aria-pressed", String(isSelected));
           });
 
           systemPanels.forEach((panel) => {
@@ -397,10 +312,12 @@ node -e "console.log('Node.js is ready')"</code></pre>
         });
       });
 
-      document.querySelectorAll(".code-block").forEach((block) => {
+      document.querySelectorAll(".code-block, .field-value").forEach((block) => {
         const button = block.querySelector(".copy-button");
+        if (!button) return;
+
         const label = button.querySelector("span");
-        const code = block.querySelector("code");
+        const code = block.querySelector("code") || block;
 
         button.addEventListener("click", async () => {
           const text = code.textContent;
@@ -418,7 +335,7 @@ node -e "console.log('Node.js is ready')"</code></pre>
             selection.removeAllRanges();
             selection.addRange(range);
             button.dataset.state = "success";
-            label.textContent = "已选中";
+            label.textContent = document.execCommand("copy") ? "已复制" : "已选中";
           }
 
           window.setTimeout(() => {
@@ -428,29 +345,6 @@ node -e "console.log('Node.js is ready')"</code></pre>
         });
       });
 
-      const imageLightbox = document.querySelector(".image-lightbox");
-      const lightboxImage = imageLightbox?.querySelector("img");
-      const lightboxClose = imageLightbox?.querySelector(".lightbox-close");
-
-      document.querySelectorAll("[data-image-zoom]").forEach((button) => {
-        button.addEventListener("click", () => {
-          if (!imageLightbox || !lightboxImage) return;
-
-          lightboxImage.src = button.dataset.imageZoom;
-          imageLightbox.showModal();
-          lightboxClose?.focus();
-        });
-      });
-
-      lightboxClose?.addEventListener("click", () => {
-        imageLightbox.close();
-      });
-
-      imageLightbox?.addEventListener("click", (event) => {
-        if (event.target === imageLightbox) {
-          imageLightbox.close();
-        }
-      });
     </script>
   </body>
 </html>
