@@ -5,346 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Codex配置教程。"
+      content="嘉合杉升 AI 手册，整理 Codex 配置与 skills 使用文章。"
     />
-    <title>Codex配置教程</title>
+    <title>嘉合杉升 AI 手册</title>
     <link rel="icon" type="image/png" href="./jhss-logo-cropped.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="page" id="setup-guide">
-      <header class="site-header" aria-label="公司标识">
-        <img class="company-logo" src="./jhss-logo-cropped.png" alt="公司 Logo" />
+    <a class="skip-link" href="#main-content">跳到正文</a>
+    <main class="page blog-home" id="main-content">
+      <header class="site-header blog-header" aria-label="博客导航">
+        <a class="brand-lockup" href="./index.html" aria-label="嘉合杉升 AI 手册首页">
+          <img class="company-logo" src="./jhss-logo-cropped.png" alt="嘉合杉升 Logo" />
+          <span>嘉合杉升 AI 手册</span>
+        </a>
       </header>
 
-      <section class="hero">
-        <div class="hero-grid">
-          <h1>Codex配置教程</h1>
-          <div class="system-tabs hero-tabs" aria-label="选择操作系统">
-            <button class="system-tab is-active" type="button" aria-pressed="true" data-system="macos">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M7 4h10a2 2 0 0 1 2 2v9H5V6a2 2 0 0 1 2-2Z" />
-                <path d="M4 18h16" />
-                <path d="M9 21h6" />
-              </svg>
-              <span>macOS</span>
-            </button>
-            <button class="system-tab" type="button" aria-pressed="false" data-system="windows">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M4 5.5 11 4v7H4V5.5Z" />
-                <path d="M13 3.6 20 2v9h-7V3.6Z" />
-                <path d="M4 13h7v7l-7-1.5V13Z" />
-                <path d="M13 13h7v9l-7-1.6V13Z" />
-              </svg>
-              <span>Windows</span>
-            </button>
-            <button class="system-tab" type="button" aria-pressed="false" data-system="linux">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M12 3c-2.2 0-3.5 1.7-3.5 4.3 0 1.2.3 2.2.8 3.1L6.6 15 5 20h14l-1.6-5-2.7-4.6c.5-.9.8-1.9.8-3.1C15.5 4.7 14.2 3 12 3Z" />
-                <path d="M9.6 15.2h4.8" />
-                <path d="M10.2 7.2h.1" />
-                <path d="M13.7 7.2h.1" />
-              </svg>
-              <span>Linux</span>
-            </button>
-          </div>
-        </div>
+      <section class="blog-hero" aria-labelledby="home-title">
+        <h1 id="home-title">Codex 入门与团队实践</h1>
       </section>
 
-      <section class="guide" aria-label="配置步骤">
-        <div class="step">
-          <div class="step-marker">
-            <span>01</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第一步：安装 Codex App</h2>
-                <p>
-                  根据当前系统选择对应安装方式。macOS 和 Linux 可从
-                  <a href="https://github.com/Wangnov/codex-app-mirror/releases" target="_blank" rel="noopener noreferrer">codex-app-mirror releases</a>
-                  下载最新版安装包，Windows 请通过 Microsoft Store 安装。
-                </p>
-              </div>
-            </div>
-            <div class="body-grid system-panel is-active" data-system-panel="macos">
-              <ol class="steps">
-                <li>打开 Codex App GitHub Releases，选择标记为 Latest 的版本。</li>
-                <li>在 Assets 中下载与系统匹配的安装包。</li>
-                <li>运行安装包并按系统提示完成安装。</li>
-                <li>安装完成后打开 Codex App，确认应用能正常启动。</li>
-              </ol>
-            </div>
-            <div class="body-grid system-panel" data-system-panel="windows" hidden>
-              <ol class="steps">
-                <li>打开 Microsoft Store。</li>
-                <li>在 Microsoft Store 中搜索 <code>Codex</code>。</li>
-                <li>进入 Codex 页面并点击“获取”或“安装”。</li>
-              </ol>
-            </div>
-            <div class="body-grid system-panel" data-system-panel="linux" hidden>
-              <ol class="steps">
-                <li>打开 Codex App GitHub Releases，选择标记为 Latest 的版本。</li>
-                <li>在 Assets 中下载与系统匹配的安装包。</li>
-                <li>运行安装包并按系统提示完成安装。</li>
-                <li>安装完成后打开 Codex App，确认应用能正常启动。</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>02</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第二步：安装 Codex++</h2>
-                <p>
-                  访问
-                  <a href="https://github.com/BigPizzaV3/CodexPlusPlus/releases" target="_blank" rel="noopener noreferrer">codex++ releases</a>
-                  下载最新版安装包，并按当前系统完成安装。
-                </p>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>打开 Codex++ GitHub Releases，选择标记为 Latest 的版本。</li>
-                <li>在 Assets 中下载与系统和芯片架构匹配的安装包。</li>
-                <li>运行安装包并按系统提示完成安装。</li>
-                <li>安装完成后重新打开 Codex 或终端，再检查 Codex++ 是否正常加载。</li>
-              </ol>
-            </div>
-            <p class="note-line system-only-note" data-system-note="macos">
-              macOS 如果提示无法打开来自互联网的应用，请在“系统设置 → 隐私与安全性”中允许打开对应应用。
-            </p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>03</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第三步：注册账号</h2>
-                <p>
-                  前往
-                  <a href="http://124.222.133.97" target="_blank" rel="noopener noreferrer">嘉合杉升AI接入系统</a>
-                  完成注册。注册时用户名请使用真名，方便管理员识别并给予额度。本系统获得的 API Key 只能用于 Codex，不可接入龙虾或其他工具。
-                </p>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>打开注册页面并按提示填写账号信息。</li>
-                <li>用户名填写本人真名，避免使用昵称或缩写。</li>
-                <li>提交注册后等待管理员审核并分配额度。</li>
-                <li>额度生效后，只在 Codex 中使用对应 API Key，不要接入龙虾或其他工具。</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>04</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第四步：添加令牌</h2>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>登录嘉合杉升 AI 接入系统，进入控制台。</li>
-                <li>在控制台中打开“令牌管理”。</li>
-                <li>点击“添加令牌”。</li>
-                <li>在“基本信息”中填写“名称”，名称可以随便命名。</li>
-                <li>复制创建令牌后生成的密钥，确认它以 <code>sk-</code> 开头。</li>
-                <li>将 API Key 保存到本地，后续配置 Codex 时会用到。</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>05</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第五步：配置供应商</h2>
-                <p>确认桌面上已有 Codex、Codex++ 和 Codex++ 管理工具。先关闭后台中的相关应用会话，再打开 Codex++ 管理工具，按右侧表单填写供应商配置。</p>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>确认后台中的 Codex、Codex++ 和 Codex++ 管理工具会话都已关闭。</li>
-                <li>打开 Codex++ 管理工具。</li>
-                <li>在侧边栏选择“供应商配置”。</li>
-                <li>点击“+ 添加供应商”。</li>
-                <li>按照右侧表单完成配置，其中 Key 使用第四步保存的内容。</li>
-                <li>点击上方“保存”按钮保存配置。</li>
-              </ol>
-              <div class="provider-form" aria-label="供应商配置表单示例">
-                <div class="form-field">
-                  <span class="field-label">名称</span>
-                  <div class="field-value">
-                    <button class="copy-button" type="button" aria-label="复制名称">
-                      <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="M9 9h9v11H9z" />
-                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
-                      </svg>
-                      <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m5 12 4 4L19 6" />
-                      </svg>
-                      <span>复制</span>
-                    </button>
-                    <code>jhss</code>
-                  </div>
-                </div>
-                <div class="form-field">
-                  <span class="field-label">接入模式</span>
-                  <div class="field-value">
-                    <code>选择“纯 API”</code>
-                  </div>
-                </div>
-                <div class="form-field">
-                  <span class="field-label">配置模型</span>
-                  <div class="field-value">
-                    <code>无需填写</code>
-                  </div>
-                </div>
-                <div class="form-field">
-                  <span class="field-label">Codex 目标</span>
-                  <div class="field-value">
-                    <code>勾选“启用目标功能”</code>
-                  </div>
-                </div>
-                <div class="form-field">
-                  <span class="field-label">Base URL</span>
-                  <div class="field-value">
-                    <button class="copy-button" type="button" aria-label="复制 Base URL">
-                      <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="M9 9h9v11H9z" />
-                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
-                      </svg>
-                      <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m5 12 4 4L19 6" />
-                      </svg>
-                      <span>复制</span>
-                    </button>
-                    <code>http://124.222.133.97/v1</code>
-                  </div>
-                </div>
-                <div class="form-field">
-                  <span class="field-label">Key</span>
-                  <div class="field-value">
-                    <code>使用第四步保存的 API Key</code>
-                  </div>
-                </div>
-                <div class="form-field">
-                  <span class="field-label">上游协议</span>
-                  <div class="field-value">
-                    <code>选择“Responses API”</code>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-marker">
-            <span>06</span>
-          </div>
-          <div class="step-content">
-            <div class="section-head">
-              <div>
-                <h2>第六步：启动配置好的 Codex</h2>
-              </div>
-            </div>
-            <div class="body-grid">
-              <ol class="steps">
-                <li>回到“供应商配置”列表。</li>
-                <li>选择并使用刚刚添加的供应商配置。</li>
-                <li>点击上方“重启 Codex++”按钮，让配置生效。</li>
-                <li>双击桌面上的 Codex++（注意不是Codex），启动已经配置好的 Codex。</li>
-              </ol>
-            </div>
-          </div>
-        </div>
+      <section class="article-list" aria-label="文章列表">
+        <a class="article-list-item" href="./codex-setup.html">
+          <h2>Codex 配置教程</h2>
+          <p>安装、注册、令牌、供应商配置。</p>
+          <em>阅读文章</em>
+        </a>
+        <a class="article-list-item" href="./codex-skill-install.html">
+          <h2>寻找、安装skills的方法</h2>
+          <p>路径、安装器、迁移、创建。</p>
+          <em>阅读文章</em>
+        </a>
       </section>
 
       <footer class="footer">
         <span>嘉合杉升 版权所有</span>
       </footer>
     </main>
-    <script>
-      const systemTabs = document.querySelectorAll("[data-system]");
-      const systemPanels = document.querySelectorAll("[data-system-panel]");
-      const systemNotes = document.querySelectorAll("[data-system-note]");
-
-      systemTabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-          const selectedSystem = tab.dataset.system;
-
-          systemTabs.forEach((item) => {
-            const isSelected = item.dataset.system === selectedSystem;
-            item.classList.toggle("is-active", isSelected);
-            item.setAttribute("aria-pressed", String(isSelected));
-          });
-
-          systemPanels.forEach((panel) => {
-            const isSelected = panel.dataset.systemPanel === selectedSystem;
-            panel.classList.toggle("is-active", isSelected);
-            panel.hidden = !isSelected;
-          });
-
-          systemNotes.forEach((note) => {
-            note.hidden = note.dataset.systemNote !== selectedSystem;
-          });
-        });
-      });
-
-      document.querySelectorAll(".code-block, .field-value").forEach((block) => {
-        const button = block.querySelector(".copy-button");
-        if (!button) return;
-
-        const label = button.querySelector("span");
-        const code = block.querySelector("code") || block;
-
-        button.addEventListener("click", async () => {
-          const text = code.textContent;
-          const originalText = label.textContent;
-          button.dataset.state = "pending";
-
-          try {
-            await navigator.clipboard.writeText(text);
-            button.dataset.state = "success";
-            label.textContent = "已复制";
-          } catch {
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(code);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            button.dataset.state = "success";
-            label.textContent = document.execCommand("copy") ? "已复制" : "已选中";
-          }
-
-          window.setTimeout(() => {
-            button.dataset.state = "";
-            label.textContent = originalText;
-          }, 1600);
-        });
-      });
-
-    </script>
   </body>
 </html>

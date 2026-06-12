@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="面向新手整理 Codex skill 的含义、安装路径、寻找办法与创建方式。"
+    />
+    <title>寻找、安装skills的方法</title>
+    <link rel="icon" type="image/png" href="./jhss-logo-cropped.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#article-main">跳到正文</a>
+    <main class="page article-page" id="article-main">
+      <header class="site-header blog-header" aria-label="博客导航">
+        <a class="brand-lockup" href="./index.html" aria-label="返回博客首页">
+          <img class="company-logo" src="./jhss-logo-cropped.png" alt="嘉合杉升 Logo" />
+          <span>嘉合杉升 AI 手册</span>
+        </a>
+        <nav class="top-nav" aria-label="主要栏目">
+          <a href="./index.html#guides">配置教程</a>
+          <a href="./index.html#skills">Skills</a>
+          <a href="./index.html#workflow">工作流</a>
+        </nav>
+      </header>
+
+      <article class="article-shell">
+        <header class="article-hero">
+          <a class="back-link" href="./index.html">返回博客首页</a>
+          <h1>寻找、安装skills的方法</h1>
+          <div class="article-meta" aria-label="文章信息">
+            <span>5 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="article-layout">
+          <aside class="article-toc" aria-label="目录">
+            <p>目录</p>
+            <a href="#what-is-skill">Codex skill 是什么</a>
+            <a href="#install-path">安装在哪里</a>
+            <a href="#find-skills">寻找 skill 的办法</a>
+            <a href="#create-skill">让 Codex 生成 skill</a>
+          </aside>
+
+          <div class="article-content">
+            <section id="what-is-skill">
+              <h2>1. Codex skill 是什么？</h2>
+              <p>你可以把 <strong>Codex skill</strong> 理解成给 Codex 安装的一份“专项工作说明书”。</p>
+              <blockquote>
+                <p>它不是一个神秘插件，更像是一份结构化说明：什么时候触发、要读哪些资料、该怎么完成某类任务。</p>
+              </blockquote>
+              <p>一个 skill 通常是一个文件夹，里面最重要的是 <code>SKILL.md</code>。</p>
+              <div class="code-block" data-label="skill-folder">
+                <button class="copy-button" type="button" aria-label="复制 skill 文件结构">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>my-skill/
+  SKILL.md
+  scripts/
+  references/
+  assets/</code></pre>
+              </div>
+              <dl class="definition-list">
+                <div>
+                  <dt>SKILL.md</dt>
+                  <dd>必须有，用来告诉 Codex 这个 skill 是什么、什么时候用、怎么做。</dd>
+                </div>
+                <div>
+                  <dt>scripts/</dt>
+                  <dd>可选，用来放辅助脚本。</dd>
+                </div>
+                <div>
+                  <dt>references/</dt>
+                  <dd>可选，用来放参考资料。</dd>
+                </div>
+                <div>
+                  <dt>assets/</dt>
+                  <dd>可选，用来放模板、图片、示例文件。</dd>
+                </div>
+              </dl>
+              <p>最小可用结构只有一个文件：</p>
+              <div class="code-block compact-code" data-label="minimum">
+                <button class="copy-button" type="button" aria-label="复制最小结构">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>my-skill/
+  SKILL.md</code></pre>
+              </div>
+              <p>
+                Skills 通常可以自动触发，也可以输入美元符号 <code>$</code> 加 skill 名称手动调用，例如：
+              </p>
+              <div class="code-block compact-code" data-label="manual-trigger">
+                <button class="copy-button" type="button" aria-label="复制调用示例">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>$jhss-weekly-ppt 帮我生成周报</code></pre>
+              </div>
+            </section>
+
+            <section id="install-path">
+              <h2>2. Codex skill 应该安装在哪里？</h2>
+              <h3>macOS / Linux 常用路径</h3>
+              <p>个人全局 skill 放在用户目录下的 <code>.codex/skills</code>。</p>
+              <div class="code-block compact-code" data-label="macos-linux">
+                <button class="copy-button" type="button" aria-label="复制 macOS Linux 路径">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>~/.codex/skills</code></pre>
+              </div>
+              <p>完整展开后，在 macOS 上通常类似：</p>
+              <div class="code-block compact-code" data-label="expanded-path">
+                <button class="copy-button" type="button" aria-label="复制 macOS 完整路径">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>/Users/<你的用户名>/.codex/skills</code></pre>
+              </div>
+              <h3>Windows 常用路径</h3>
+              <p>Windows 上对应的是用户目录下的 <code>.codex\skills</code>。</p>
+              <div class="code-block compact-code" data-label="windows">
+                <button class="copy-button" type="button" aria-label="复制 Windows 路径">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>%USERPROFILE%\.codex\skills</code></pre>
+              </div>
+              <p>完整路径通常类似：</p>
+              <div class="code-block compact-code" data-label="windows-example">
+                <button class="copy-button" type="button" aria-label="复制 Windows 示例路径">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>C:\Users\<你的用户名>\.codex\skills</code></pre>
+              </div>
+            </section>
+
+            <section id="find-skills">
+              <h2>3. 寻找 Codex skill 的几种办法</h2>
+              <div class="method-list">
+                <section>
+                  <h3>办法一：用 Codex 内置的 <code>$skill-installer</code></h3>
+                  <p>这是最适合新手的方法。你可以直接在 Codex 里输入：</p>
+                  <div class="code-block compact-code" data-label="installer">
+                    <button class="copy-button" type="button" aria-label="复制 skill-installer">
+                      <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M9 9h9v11H9z" />
+                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                      </svg>
+                      <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <span>复制</span>
+                    </button>
+                    <pre><code>$skill-installer</code></pre>
+                  </div>
+                  <p>也可以直接让它安装某个 skill：</p>
+                  <div class="code-block compact-code" data-label="install-one">
+                    <button class="copy-button" type="button" aria-label="复制安装命令">
+                      <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M9 9h9v11H9z" />
+                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                      </svg>
+                      <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
+                      <span>复制</span>
+                    </button>
+                    <pre><code>$skill-installer gh-address-comments</code></pre>
+                  </div>
+                  <p>
+                    OpenAI 官方 <code>openai/skills</code> 仓库说明，可以通过 <code>$skill-installer</code>
+                    安装 curated skills，也可以指定 experimental skill 文件夹。
+                  </p>
+                  <ul>
+                    <li>你不想手动下载。</li>
+                    <li>你不知道 skill 文件该放哪。</li>
+                    <li>你想安装官方或 curated skills。</li>
+                  </ul>
+                </section>
+                <section>
+                  <h3>办法二：去 GitHub 搜索现成 skill</h3>
+                  <p>推特、抖音、小红书等社区有时会推荐一些 skills。你通常可以在 GitHub 找到它们。</p>
+                  <p class="note-line">社区仓库要注意安全，尤其是带 <code>scripts/</code> 的 skill。</p>
+                </section>
+                <section>
+                  <h3>办法三：从 Claude / Agent Skills 生态迁移</h3>
+                  <p>
+                    很多 skill 采用通用的 Agent Skills 结构，也就是 <code>skill-folder/SKILL.md</code>。
+                    所以有些 Claude Code、OpenClaw、Codex skill 之间可以互相参考。
+                  </p>
+                  <blockquote>
+                    <p>新手可以先不管兼容细节，只记住：核心是 <code>SKILL.md</code>，路径是 <code>~/.codex/skills</code>。</p>
+                  </blockquote>
+                </section>
+              </div>
+            </section>
+
+            <section id="create-skill">
+              <h2>4. 让 Codex 帮你生成一个 skill</h2>
+              <p>你也可以直接对 Codex 说：</p>
+              <div class="code-block" data-label="create-skill">
+                <button class="copy-button" type="button" aria-label="复制创建 skill 示例">
+                  <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 9h9v11H9z" />
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                  </svg>
+                  <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="m5 12 4 4L19 6" />
+                  </svg>
+                  <span>复制</span>
+                </button>
+                <pre><code>使用 $skill-creator 帮我创建一个 Codex skill，用来阅读 A 股券商研报。
+要求面向新手，输出投资逻辑、估值假设、风险点、财务数据、后续追问清单。</code></pre>
+              </div>
+              <p>
+                如果你的目标还不清楚，先写明使用场景、输入材料、输出格式和安全边界。Codex 能更稳定地把这些要求整理进 <code>SKILL.md</code>。
+              </p>
+            </section>
+          </div>
+        </div>
+      </article>
+
+      <footer class="footer">
+        <span>嘉合杉升 版权所有</span>
+        <a href="./index.html">回到首页</a>
+      </footer>
+    </main>
+    <script>
+      document.querySelectorAll(".code-block, .field-value").forEach((block) => {
+        const button = block.querySelector(".copy-button");
+        if (!button) return;
+
+        const label = button.querySelector("span");
+        const code = block.querySelector("code") || block;
+
+        button.addEventListener("click", async () => {
+          const text = code.textContent;
+          const originalText = label.textContent;
+          button.dataset.state = "pending";
+
+          try {
+            await navigator.clipboard.writeText(text);
+            button.dataset.state = "success";
+            label.textContent = "已复制";
+          } catch {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(code);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            button.dataset.state = "success";
+            label.textContent = document.execCommand("copy") ? "已复制" : "已选中";
+          }
+
+          window.setTimeout(() => {
+            button.dataset.state = "";
+            label.textContent = originalText;
+          }, 1600);
+        });
+      });
+    </script>
+  </body>
+</html>
