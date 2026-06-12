@@ -17,12 +17,10 @@
       <header class="site-header blog-header" aria-label="博客导航">
         <a class="brand-lockup" href="./index.html" aria-label="返回博客首页">
           <img class="company-logo" src="./assets/jhss-logo-cropped.png" alt="嘉合杉升 Logo" />
-          <span>嘉合杉升 AI 手册</span>
+          <span>嘉合杉升AI手册</span>
         </a>
-        <nav class="top-nav" aria-label="主要栏目">
-          <a href="./index.html#guides">配置教程</a>
-          <a href="./index.html#skills">Skills</a>
-          <a href="./index.html#workflow">工作流</a>
+        <nav class="top-nav" aria-label="进入嘉合杉升AI接入系统">
+          <a href="http://124.222.133.97/">进入嘉合杉升AI接入系统</a>
         </nav>
       </header>
 
@@ -31,29 +29,26 @@
           <a class="back-link" href="./index.html">返回博客首页</a>
           <h1>寻找、安装skills的方法</h1>
           <div class="article-meta" aria-label="文章信息">
-            <span>5 分钟阅读</span>
+            <span>10分钟阅读</span>
           </div>
         </header>
 
         <div class="article-layout">
           <aside class="article-toc" aria-label="目录">
             <p>目录</p>
-            <a href="#what-is-skill">Codex skill 是什么</a>
+            <a href="#what-is-skill">Skills是什么</a>
             <a href="#install-path">安装在哪里</a>
-            <a href="#find-skills">寻找 skill 的办法</a>
-            <a href="#create-skill">让 Codex 生成 skill</a>
+            <a href="#find-skills">寻找Skills的方法</a>
+            <a href="#create-skill">让Codex生成Skills</a>
           </aside>
 
           <div class="article-content">
             <section id="what-is-skill">
-              <h2>1. Codex skill 是什么？</h2>
-              <p>你可以把 <strong>Codex skill</strong> 理解成给 Codex 安装的一份“专项工作说明书”。</p>
-              <blockquote>
-                <p>它不是一个神秘插件，更像是一份结构化说明：什么时候触发、要读哪些资料、该怎么完成某类任务。</p>
-              </blockquote>
-              <p>一个 skill 通常是一个文件夹，里面最重要的是 <code>SKILL.md</code>。</p>
+              <h2>1. Skills是什么</h2>
+              <p>你可以把 <strong>Skills</strong> 理解成给 Codex 安装的一份“专项工作说明书”。</p>
+              <p>一个 Skills 通常是一个文件夹，里面最重要的是 <code>SKILL.md</code>。</p>
               <div class="code-block" data-label="skill-folder">
-                <button class="copy-button" type="button" aria-label="复制 skill 文件结构">
+                <button class="copy-button" type="button" aria-label="复制 Skills 文件结构">
                   <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M9 9h9v11H9z" />
                     <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
@@ -121,7 +116,7 @@
             </section>
 
             <section id="install-path">
-              <h2>2. Codex skill 应该安装在哪里？</h2>
+              <h2>2. Skills安装在哪里</h2>
               <h3>macOS / Linux 常用路径</h3>
               <p>个人全局 skill 放在用户目录下的 <code>.codex/skills</code>。</p>
               <div class="code-block compact-code" data-label="macos-linux">
@@ -183,7 +178,7 @@
             </section>
 
             <section id="find-skills">
-              <h2>3. 寻找 Codex skill 的几种办法</h2>
+              <h2>3. 寻找Skills的方法</h2>
               <div class="method-list">
                 <section>
                   <h3>办法一：用 Codex 内置的 <code>$skill-installer</code></h3>
@@ -244,7 +239,7 @@
             </section>
 
             <section id="create-skill">
-              <h2>4. 让 Codex 帮你生成一个 skill</h2>
+              <h2>4. 让Codex生成Skills</h2>
               <p>你也可以直接对 Codex 说：</p>
               <div class="code-block" data-label="create-skill">
                 <button class="copy-button" type="button" aria-label="复制创建 skill 示例">
