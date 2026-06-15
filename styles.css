@@ -476,8 +476,8 @@ h2 {
 
 .setup-choice {
   display: grid;
-  gap: 12px;
-  max-width: 520px;
+  gap: 14px;
+  max-width: 460px;
   margin-top: 24px;
   padding: 18px 0 2px;
   border-top: 1px solid var(--border-soft);
@@ -508,13 +508,52 @@ h2 {
 }
 
 .system-tabs {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(108px, 1fr));
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
   margin-top: 26px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.system-option {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
   padding: 4px;
-  background: #ebe9df;
-  border-radius: 10px;
+  background: #ece9df;
+  border-radius: 12px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.82) inset,
+    0 1px 3px rgba(40, 38, 31, 0.08);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.system-option > .system-tab {
+  width: 100%;
+}
+
+.system-option:not(.is-expanded) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.architecture-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+  padding: 3px;
+  background: #dedbd0;
+  border-radius: 9px;
+  animation: option-child-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.architecture-tabs[hidden] {
+  display: none;
 }
 
 .system-tab {
@@ -523,12 +562,12 @@ h2 {
   justify-content: center;
   gap: 7px;
   min-width: 0;
-  min-height: 42px;
-  padding: 8px 18px;
+  min-height: 44px;
+  padding: 9px 16px;
   color: var(--olive);
-  background: transparent;
+  background: #efede4;
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   cursor: pointer;
   font: 500 15px/1 var(--serif);
   letter-spacing: 0;
@@ -538,6 +577,15 @@ h2 {
     background 160ms ease,
     transform 160ms ease,
     box-shadow 160ms ease;
+}
+
+.architecture-tab {
+  min-height: 36px;
+  padding: 7px 10px;
+  color: #5f5d56;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 13px;
 }
 
 .system-tab span {
@@ -559,7 +607,7 @@ h2 {
 
 .system-tab:hover {
   color: var(--brand);
-  background: #f5f4ed;
+  background: #f7f6ef;
 }
 
 .system-tab:active {
@@ -569,7 +617,16 @@ h2 {
 .system-tab.is-active {
   color: var(--brand);
   background: var(--ivory);
-  box-shadow: 0 1px 0 #ffffff inset, 0 8px 18px rgba(27, 54, 93, 0.08);
+  box-shadow:
+    0 1px 0 #ffffff inset,
+    0 7px 16px rgba(27, 54, 93, 0.08);
+}
+
+.architecture-tab.is-active {
+  background: #fbfaf5;
+  box-shadow:
+    0 1px 0 #ffffff inset,
+    0 4px 10px rgba(40, 38, 31, 0.08);
 }
 
 .system-tab:focus-visible {
@@ -582,6 +639,12 @@ h2 {
   animation: panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.system-panel.body-grid,
+.text-panel.body-grid {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 620px;
+}
+
 .system-panel[hidden] {
   display: none;
 }
@@ -590,6 +653,18 @@ h2 {
   from {
     opacity: 0;
     transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes option-child-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
   }
 
   to {
@@ -1128,7 +1203,7 @@ pre code {
 
   .system-tabs {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     width: 100%;
   }
 }
@@ -1304,14 +1379,13 @@ pre code {
   }
 
   .system-tabs {
-    display: flex;
-    gap: 4px;
-    width: max-content;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
     max-width: calc(100vw - 32px);
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    padding: 4px;
-    scrollbar-width: none;
+    overflow-x: visible;
+    padding: 0;
   }
 
   .system-tabs::-webkit-scrollbar {
@@ -1319,11 +1393,14 @@ pre code {
   }
 
   .system-tab {
-    flex: 0 0 auto;
     min-height: 40px;
     gap: 5px;
     padding: 8px 12px;
     font-size: 13px;
+  }
+
+  .architecture-tab {
+    min-height: 34px;
   }
 
   .system-tab svg {
