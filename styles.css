@@ -33,6 +33,11 @@
   --timeline-gap: 16px;
   --timeline-marker-size: 40px;
   --timeline-step-pad: 34px;
+  --motion-ios-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-ios-control: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ios-duration-fast: 180ms;
+  --motion-ios-duration: 320ms;
+  --motion-ios-duration-page: 560ms;
   --serif: "TsangerJinKai02", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", Georgia, serif;
   --sans: var(--serif);
   --mono: "JetBrains Mono", "SF Mono", Consolas, "TsangerJinKai02", "Source Han Serif SC", monospace;
@@ -72,8 +77,8 @@ a {
   text-decoration: none;
   border-bottom: 1px solid #d0dce9;
   transition:
-    color 160ms ease,
-    border-color 160ms ease;
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    border-color var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 a:hover {
@@ -117,7 +122,7 @@ a:hover {
   border: 0;
   border-radius: 6px;
   transform: translateY(-140%);
-  transition: transform 160ms ease;
+  transition: transform var(--motion-ios-duration) var(--motion-ios-standard);
 }
 
 .skip-link:focus {
@@ -167,8 +172,8 @@ button.brand-lockup:focus-visible {
   border-radius: 10px;
   text-align: left;
   transition:
-    color 160ms ease,
-    transform 160ms ease;
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    transform var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .home-gxy-lockup:active {
@@ -182,9 +187,9 @@ button.brand-lockup:focus-visible {
   object-fit: contain;
   object-position: center bottom;
   transition:
-    opacity 180ms ease,
-    transform 180ms ease,
-    visibility 180ms ease;
+    opacity var(--motion-ios-duration) var(--motion-ios-standard),
+    transform var(--motion-ios-duration) var(--motion-ios-standard),
+    visibility var(--motion-ios-duration) var(--motion-ios-standard);
 }
 
 .header-speech {
@@ -205,9 +210,9 @@ button.brand-lockup:focus-visible {
   font-size: 15px;
   line-height: 1.28;
   transition:
-    opacity 180ms ease,
-    transform 180ms ease,
-    visibility 180ms ease;
+    opacity var(--motion-ios-duration) var(--motion-ios-standard),
+    transform var(--motion-ios-duration) var(--motion-ios-standard),
+    visibility var(--motion-ios-duration) var(--motion-ios-standard);
 }
 
 .home-gxy-lockup.is-gxy-hidden .header-portrait,
@@ -260,7 +265,7 @@ button.brand-lockup:focus-visible {
   max-width: 100%;
   padding: clamp(58px, 8vw, 92px) 0 clamp(48px, 6vw, 72px);
   border-bottom: 1px solid rgba(216, 213, 200, 0.9);
-  animation: page-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: page-rise var(--motion-ios-duration-page) var(--motion-ios-standard) both;
 }
 
 .blog-hero::after {
@@ -456,10 +461,10 @@ button.brand-lockup:focus-visible {
   color: var(--near-black);
   border-bottom: 1px solid rgba(232, 230, 220, 0.95);
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-ios-duration-fast) var(--motion-ios-control),
+    border-color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    transform var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .article-list-item::before {
@@ -473,8 +478,8 @@ button.brand-lockup:focus-visible {
   transform: scaleX(0.985);
   transform-origin: left center;
   transition:
-    opacity 160ms ease,
-    transform 160ms ease;
+    opacity var(--motion-ios-duration) var(--motion-ios-standard),
+    transform var(--motion-ios-duration) var(--motion-ios-standard);
 }
 
 .article-list-item h3 {
@@ -502,8 +507,8 @@ button.brand-lockup:focus-visible {
   white-space: nowrap;
   transform: translateX(0);
   transition:
-    color 160ms ease,
-    transform 160ms ease;
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    transform var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .article-step {
@@ -519,10 +524,10 @@ button.brand-lockup:focus-visible {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.76) inset;
   font-variant-numeric: tabular-nums;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-ios-duration-fast) var(--motion-ios-control),
+    border-color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    transform var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .article-list-item:active {
@@ -567,7 +572,7 @@ button.brand-lockup:focus-visible {
 
 .hero-grid {
   max-width: 780px;
-  animation: page-rise 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: page-rise var(--motion-ios-duration-page) var(--motion-ios-standard) both;
 }
 
 .kicker {
@@ -744,8 +749,8 @@ h2 {
     0 1px 0 rgba(255, 255, 255, 0.82) inset,
     0 1px 3px rgba(40, 38, 31, 0.08);
   transition:
-    background 160ms ease,
-    box-shadow 160ms ease;
+    background var(--motion-ios-duration-fast) var(--motion-ios-control),
+    box-shadow var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .system-option > .system-tab {
@@ -765,7 +770,7 @@ h2 {
   padding: 3px;
   background: #dedbd0;
   border-radius: 9px;
-  animation: option-child-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: option-child-in var(--motion-ios-duration-fast) var(--motion-ios-standard) both;
 }
 
 .architecture-tabs[hidden] {
@@ -789,10 +794,10 @@ h2 {
   letter-spacing: 0;
   touch-action: manipulation;
   transition:
-    color 160ms ease,
-    background 160ms ease,
-    transform 160ms ease,
-    box-shadow 160ms ease;
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    background var(--motion-ios-duration-fast) var(--motion-ios-control),
+    transform var(--motion-ios-duration-fast) var(--motion-ios-control),
+    box-shadow var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .architecture-tab {
@@ -852,7 +857,7 @@ h2 {
 
 .system-panel {
   max-width: 100%;
-  animation: panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: panel-in var(--motion-ios-duration-fast) var(--motion-ios-standard) both;
 }
 
 .system-panel.body-grid,
@@ -1076,10 +1081,10 @@ h2 {
   letter-spacing: 0;
   touch-action: manipulation;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-ios-duration-fast) var(--motion-ios-control),
+    border-color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    color var(--motion-ios-duration-fast) var(--motion-ios-control),
+    transform var(--motion-ios-duration-fast) var(--motion-ios-control);
 }
 
 .copy-button svg {
@@ -1205,7 +1210,7 @@ pre code {
 .article-hero {
   padding: 52px 0 44px;
   border-bottom: 1px solid var(--line);
-  animation: page-rise 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: page-rise var(--motion-ios-duration-page) var(--motion-ios-standard) both;
 }
 
 .back-link {
