@@ -421,13 +421,10 @@ button.brand-lockup:focus-visible {
   place-items: center;
   width: 46px;
   height: 46px;
-  color: #f7f6ef;
-  background: var(--brand);
-  border: 1px solid rgba(27, 54, 93, 0.14);
+  color: var(--brand);
+  background: var(--parchment);
+  border: 1px solid var(--line);
   border-radius: 50%;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.22) inset,
-    0 12px 26px rgba(27, 54, 93, 0.12);
   font-variant-numeric: tabular-nums;
 }
 
@@ -518,10 +515,9 @@ button.brand-lockup:focus-visible {
   height: 36px;
   margin-top: 0;
   color: var(--brand);
-  background: rgba(238, 242, 247, 0.96);
-  border: 1px solid rgba(216, 224, 235, 0.96);
+  background: var(--parchment);
+  border: 1px solid var(--line);
   border-radius: 50%;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.76) inset;
   font-variant-numeric: tabular-nums;
   transition:
     background var(--motion-ios-duration-fast) var(--motion-ios-control),
@@ -553,9 +549,9 @@ button.brand-lockup:focus-visible {
   }
 
   .article-list-item:hover .article-step {
-    color: #f7f6ef;
-    background: var(--brand);
-    border-color: rgba(27, 54, 93, 0.2);
+    color: var(--brand);
+    background: var(--ivory);
+    border-color: var(--brand);
     transform: scale(1.04);
   }
 
