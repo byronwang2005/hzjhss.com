@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="嘉合杉升AI手册，整理 Codex 配置与 skills 使用文章。"
+      content="嘉合杉升AI手册，按学习路径整理 Codex 接入、Skills 扩展与 AI 应用文章。"
     />
     <title>嘉合杉升AI手册</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
@@ -18,7 +18,7 @@
         <button
           class="brand-lockup home-gxy-lockup is-gxy-hidden"
           type="button"
-          aria-label="唤出高小英"
+          aria-label="唤出gxy"
           aria-pressed="false"
         >
           <img
@@ -47,36 +47,85 @@
             height="501"
             alt="嘉合杉升 Logo"
           />
-          <h1 id="home-title">嘉合杉升AI手册</h1>
+          <div class="blog-hero-copy">
+            <h1 id="home-title">嘉合杉升AI手册</h1>
+          </div>
         </div>
       </section>
 
-      <section class="article-list" aria-label="文章列表">
-        <a class="article-list-item" href="./codex-setup.html">
-          <h2>Codex配置教程</h2>
-          <p>安装、注册、令牌、供应商配置。</p>
-          <em>阅读文章</em>
-        </a>
-        <a class="article-list-item" href="./codex-skill-install.html">
-          <h2>寻找、安装Skills的方法</h2>
-          <p>路径、安装器、迁移、创建。</p>
-          <em>阅读文章</em>
-        </a>
-        <a class="article-list-item" href="./wechat-finance-essay.html">
-          <h2>怎么用AI在微信公众号写“小作文”</h2>
-          <p>DeepSeek、Codex、html富文本。</p>
-          <em>阅读文章</em>
-        </a>
-        <a class="article-list-item" href="./codex-pet.html">
-          <h2>Codex宠物的用法</h2>
-          <p>开启、状态提示、自定义宠物。</p>
-          <em>阅读文章</em>
-        </a>
-        <a class="article-list-item" href="./ai-mini-apps.html">
-          <h2>一些有趣的AI小应用</h2>
-          <p>股票走势上骑车、多Agent算命、大模型赌球大赛。</p>
-          <em>阅读文章</em>
-        </a>
+      <section class="learning-path" aria-label="学习路径">
+        <section class="path-stage" aria-labelledby="stage-foundation">
+          <header class="path-stage-head">
+            <span>01</span>
+            <div>
+              <h2 id="stage-foundation">基础接入</h2>
+            </div>
+          </header>
+          <div class="article-list">
+            <a class="article-list-item" href="./articles/codex-setup.html">
+              <span class="article-step">01</span>
+              <div>
+                <h3>配置Codex</h3>
+                <p>安装软件，完成账号、令牌和供应商配置。</p>
+              </div>
+              <em>阅读文章</em>
+            </a>
+          </div>
+        </section>
+
+        <section class="path-stage" aria-labelledby="stage-extension">
+          <header class="path-stage-head">
+            <span>02</span>
+            <div>
+              <h2 id="stage-extension">能力扩展</h2>
+            </div>
+          </header>
+          <div class="article-list">
+            <a class="article-list-item" href="./articles/codex-skill-install.html">
+              <span class="article-step">02</span>
+              <div>
+                <h3>安装Skills</h3>
+                <p>了解Skills的安装方法、安装路径、迁移方式和创建方法。</p>
+              </div>
+              <em>阅读文章</em>
+            </a>
+            <a class="article-list-item" href="./articles/codex-pet.html">
+              <span class="article-step">03</span>
+              <div>
+                <h3>启用Codex宠物</h3>
+                <p>开启状态提示，并自定义一个更有存在感的工作伙伴。</p>
+              </div>
+              <em>阅读文章</em> 
+            </a>
+          </div>
+        </section>
+
+        <section class="path-stage" aria-labelledby="stage-application">
+          <header class="path-stage-head">
+            <span>03</span>
+            <div>
+              <h2 id="stage-application">场景应用</h2>
+            </div>
+          </header>
+          <div class="article-list">
+            <a class="article-list-item" href="./articles/wechat-finance-essay.html">
+              <span class="article-step">04</span>
+              <div>
+                <h3>写微信公众号财经小作文</h3>
+                <p>用DeepSeek Chat生成内容，再让Codex排版成公众号富文本。</p>
+              </div>
+              <em>阅读文章</em> 
+            </a>
+            <a class="article-list-item" href="./articles/ai-mini-apps.html">
+              <span class="article-step">05</span>
+              <div>
+                <h3>体验AI小应用</h3>
+                <p>股票走势骑车、多Agent算命、大模型赌球大赛。</p>
+              </div>
+              <em>阅读文章</em> 
+            </a>
+          </div>
+        </section>
       </section>
 
       <footer class="footer">

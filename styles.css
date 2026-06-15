@@ -249,7 +249,7 @@ button.brand-lockup:focus-visible {
 
 .blog-hero-title {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: clamp(24px, 5vw, 54px);
 }
 
@@ -302,6 +302,21 @@ button.brand-lockup:focus-visible {
   text-wrap: balance;
 }
 
+.blog-hero-copy {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.blog-hero-copy p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--dark-warm);
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
 .typewriter-title::after {
   content: "";
   display: inline-block;
@@ -326,25 +341,75 @@ button.brand-lockup:focus-visible {
 .article-meta,
 .back-link,
 .article-arrow,
-.column-head span {
+.column-head span,
+.path-stage-head > span,
+.article-step {
   color: var(--brand);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.6px;
 }
 
+.learning-path {
+  display: grid;
+  gap: 34px;
+  max-width: 900px;
+  padding: 30px 0 52px;
+}
+
+.path-stage {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);
+  gap: clamp(22px, 4vw, 46px);
+  padding: 30px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.path-stage:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.path-stage-head {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.path-stage-head > span {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--brand);
+  background: rgba(250, 249, 245, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-stage-head h2 {
+  font-size: clamp(23px, 2.8vw, 30px);
+}
+
+.path-stage-head p {
+  margin: 9px 0 0;
+  color: var(--olive);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
 .article-list {
   display: grid;
-  max-width: 900px;
-  padding: 22px 0 52px;
+  align-content: start;
 }
 
 .article-list-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.38fr) auto;
-  gap: 28px;
-  align-items: center;
-  padding: 28px 0;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  padding: 22px 0;
   color: var(--near-black);
   border-bottom: 1px solid var(--border-soft);
   transition:
@@ -358,13 +423,18 @@ button.brand-lockup:focus-visible {
   transform: translateX(4px);
 }
 
-.article-list-item h2 {
-  font-size: clamp(24px, 3vw, 32px);
+.article-list-item h3 {
+  margin: 0;
+  color: var(--near-black);
+  font-size: clamp(22px, 2.5vw, 28px);
+  font-weight: 500;
   line-height: 1.22;
+  letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .article-list-item p {
-  margin: 0;
+  margin: 8px 0 0;
   color: var(--olive);
   line-height: 1.5;
   text-wrap: pretty;
@@ -375,6 +445,19 @@ button.brand-lockup:focus-visible {
   font-style: normal;
   font-size: 14px;
   white-space: nowrap;
+}
+
+.article-step {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 2px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border: 1px solid #d8e0eb;
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
 }
 
 .hero {
@@ -1274,9 +1357,22 @@ pre code {
     grid-template-columns: 1fr;
   }
 
-  .article-list-item {
+  .path-stage {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 18px;
+  }
+
+  .path-stage-head {
+    max-width: 620px;
+  }
+
+  .article-list-item {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .article-list-item em {
+    grid-column: 2;
   }
 
   .article-toc {
@@ -1369,6 +1465,14 @@ pre code {
     gap: 16px;
   }
 
+  .blog-hero-copy {
+    gap: 10px;
+  }
+
+  .blog-hero-copy p {
+    font-size: 16px;
+  }
+
   .speech-card {
     padding: 17px 18px;
   }
@@ -1396,15 +1500,16 @@ pre code {
     max-width: 34%;
   }
 
-  .article-list {
-    padding: 12px 0 34px;
+  .learning-path {
+    gap: 28px;
+    padding: 24px 0 34px;
   }
 
   .article-list-item {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
     align-items: start;
-    padding: 24px 0;
+    padding: 20px 0;
   }
 
   .article-list-item:hover {
@@ -1412,7 +1517,27 @@ pre code {
   }
 
   .article-list-item em {
+    grid-column: 2;
     padding-top: 4px;
+  }
+
+  .article-step {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .path-stage {
+    padding-top: 24px;
+  }
+
+  .path-stage-head {
+    gap: 10px;
+  }
+
+  .path-stage-head > span {
+    width: 36px;
+    height: 36px;
   }
 
   .hero {
