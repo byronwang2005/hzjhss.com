@@ -128,9 +128,22 @@ a:hover {
   letter-spacing: 0;
 }
 
+button.brand-lockup {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 .brand-lockup:hover {
   color: var(--brand);
   border-bottom: 0;
+}
+
+button.brand-lockup:focus-visible {
+  outline: 2px solid var(--brand-light);
+  outline-offset: 5px;
 }
 
 .blog-header .company-logo {
@@ -142,6 +155,7 @@ a:hover {
   max-width: min(720px, 100%);
   align-items: center;
   gap: 12px;
+  text-align: left;
 }
 
 .header-portrait {
@@ -150,6 +164,10 @@ a:hover {
   height: auto;
   object-fit: contain;
   object-position: center bottom;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 180ms ease;
 }
 
 .header-speech {
@@ -167,6 +185,17 @@ a:hover {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset;
   font-size: 15px;
   line-height: 1.28;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 180ms ease;
+}
+
+.home-gxy-lockup.is-gxy-hidden .header-portrait,
+.home-gxy-lockup.is-gxy-hidden .header-speech {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .header-speech::before {

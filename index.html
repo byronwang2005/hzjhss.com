@@ -15,19 +15,24 @@
     <a class="skip-link" href="#main-content">跳到正文</a>
     <main class="page blog-home" id="main-content">
       <header class="site-header blog-header" aria-label="博客导航">
-        <a class="brand-lockup home-gxy-lockup" href="./index.html" aria-label="嘉合杉升AI手册首页">
+        <button
+          class="brand-lockup home-gxy-lockup is-gxy-hidden"
+          type="button"
+          aria-label="唤出高小英"
+          aria-pressed="false"
+        >
           <img
             class="header-portrait"
-            src="./assets/gxy-520.png"
-            width="520"
-            height="493"
+            src="./assets/gxy.png"
+            width="1288"
+            height="1221"
             alt=""
             aria-hidden="true"
           />
           <span class="header-speech" aria-live="polite">
             <span class="typewriter-title"></span>
           </span>
-        </a>
+        </button>
         <nav class="top-nav" aria-label="进入嘉合杉升AI接入系统">
           <a href="http://124.222.133.97/">进入嘉合杉升AI接入系统</a>
         </nav>
@@ -89,12 +94,14 @@
         "这次不一样。"
       ];
 
+      const gxyTrigger = document.querySelector(".home-gxy-lockup");
       const title = document.querySelector(".typewriter-title");
       const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       let activeLine = "";
       let index = 0;
       let typingTimer;
       let nextLineTimer;
+      let hasRevealedGxy = false;
 
       function pickLine() {
         if (gxyLines.length === 1) {
@@ -140,7 +147,28 @@
         typeLine();
       }
 
-      showLine();
+      function hideGxy() {
+        window.clearTimeout(typingTimer);
+        window.clearTimeout(nextLineTimer);
+        hasRevealedGxy = false;
+        activeLine = "";
+        index = 0;
+        title.textContent = "";
+        gxyTrigger.classList.add("is-gxy-hidden");
+        gxyTrigger.setAttribute("aria-pressed", "false");
+      }
+
+      gxyTrigger.addEventListener("click", () => {
+        if (hasRevealedGxy) {
+          hideGxy();
+          return;
+        }
+
+        hasRevealedGxy = true;
+        gxyTrigger.classList.remove("is-gxy-hidden");
+        gxyTrigger.setAttribute("aria-pressed", "true");
+        showLine();
+      });
     </script>
   </body>
 </html>
