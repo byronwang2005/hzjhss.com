@@ -1,0 +1,21 @@
+{
+  "name": "jhssdoc-cloud-drive",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev . --compatibility-date=2026-07-08",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "fast-xml-parser": "^4.5.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.24.0"
+  }
+}

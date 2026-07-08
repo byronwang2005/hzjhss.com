@@ -10,6 +10,10 @@
 # Dependency directories
 node_modules/
 
+# Agent skills
+.agents/
+skills-lock.json
+
 # Build and cache output
 dist/
 build/
@@ -20,3 +24,5 @@ build/
 *.log
 .env
 .env.*
+.dev.vars
+.dev.vars.*

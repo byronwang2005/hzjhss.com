@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="嘉合杉升云盘，支持通过访问码上传、下载和管理腾讯云 COS 文件。"
+    />
+    <title>嘉合杉升云盘</title>
+    <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到正文</a>
+    <main class="page drive-page" id="main-content">
+      <header class="site-header drive-header" aria-label="云盘导航">
+        <a class="brand-lockup" href="./index.html" aria-label="返回嘉合杉升AI手册首页">
+          <img
+            class="company-logo"
+            src="./assets/jhss-logo-cropped.png"
+            width="400"
+            height="501"
+            alt=""
+            aria-hidden="true"
+          />
+          <span>嘉合杉升云盘</span>
+        </a>
+        <nav class="top-nav" aria-label="云盘导航链接">
+          <a href="./index.html">AI手册</a>
+          <a href="http://124.222.133.97/">AI接入系统</a>
+        </nav>
+      </header>
+
+      <section class="drive-shell" aria-labelledby="drive-title">
+        <div class="drive-title-row">
+          <div>
+            <p class="kicker">Cloud Drive</p>
+            <h1 id="drive-title">公司文件云盘</h1>
+          </div>
+          <p>
+            文件存储在腾讯云 COS。页面只获取短时链接，上传和下载都由浏览器直连对象存储。
+          </p>
+        </div>
+
+        <section class="drive-login" data-drive-login>
+          <form class="drive-login-form" data-login-form>
+            <div class="field-group">
+              <label for="drive-access-code">访问码</label>
+              <input
+                id="drive-access-code"
+                name="accessCode"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+              <p class="field-help">请输入公司内部共享访问码。</p>
+            </div>
+            <button class="drive-button drive-button-primary" type="submit">进入云盘</button>
+          </form>
+        </section>
+
+        <section class="drive-app" data-drive-app hidden>
+          <div class="drive-toolbar">
+            <nav class="drive-breadcrumbs" aria-label="当前目录" data-breadcrumbs></nav>
+            <div class="drive-actions">
+              <form class="drive-folder-form" data-folder-form>
+                <label class="sr-only" for="folder-name">新建文件夹</label>
+                <input id="folder-name" name="folderName" type="text" placeholder="文件夹名称" />
+                <button class="drive-button" type="submit">新建文件夹</button>
+              </form>
+              <label class="drive-button drive-button-primary drive-upload-button">
+                <span>上传文件</span>
+                <input data-file-input type="file" />
+              </label>
+              <button class="drive-button" type="button" data-logout>退出</button>
+            </div>
+          </div>
+
+          <div class="drive-progress" data-upload-progress hidden>
+            <div>
+              <span data-progress-name></span>
+              <strong data-progress-percent>0%</strong>
+            </div>
+            <progress value="0" max="100" data-progress-bar></progress>
+          </div>
+
+          <div class="drive-status" aria-live="polite" data-status></div>
+          <div class="drive-list" data-drive-list aria-live="polite"></div>
+        </section>
+      </section>
+    </main>
+    <script src="./assets/drive.js"></script>
+  </body>
+</html>
