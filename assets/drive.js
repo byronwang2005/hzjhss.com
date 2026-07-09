@@ -172,15 +172,21 @@
   });
 
   topicPanel.addEventListener("click", async (event) => {
+    const agentTarget = event.target.closest("[data-agent-manifest]");
+    if (agentTarget) {
+      await copyAgentManifestPrompt();
+      return;
+    }
+
     const target = event.target.closest("[data-copy-prompt]");
     if (!target) {
       return;
     }
     const value = target.dataset.copyPrompt === "read" ? readPrompt.value : generatePrompt.value;
-    try {
-      await navigator.clipboard.writeText(value);
+    const copied = await copyText(value);
+    if (copied) {
       setStatus("提示词已复制。");
-    } catch {
+    } else {
       setStatus("复制失败，请手动选中文本复制。", true);
     }
   });
@@ -231,6 +237,30 @@
     }
     if (action === "delete-file") {
       openDeleteModal(path, target.dataset.name || path.split("/").pop() || path);
+    }
+  }
+
+  async function copyAgentManifestPrompt() {
+    if (!state.topic) {
+      return;
+    }
+    try {
+      setStatus("正在生成 agent 分析提示词...");
+      const data = await api("/agent-manifest", {
+        method: "POST",
+        body: { prefix: state.topic.prefix },
+      });
+      const copied = await copyText(data.prompt || "");
+      if (copied) {
+        setStatus(`agent 分析提示词已复制。资料 ${data.fileCount || 0} 个，链接 ${data.expiresIn || 0} 秒内有效。`);
+      } else {
+        readPrompt.value = data.prompt || "";
+        readPrompt.focus();
+        readPrompt.select();
+        setStatus("浏览器未允许自动复制，已把 agent 分析提示词放入读取提示词框，请手动复制。", true);
+      }
+    } catch (error) {
+      setStatus(error.message, true);
     }
   }
 
@@ -412,6 +442,18 @@
       throw error;
     }
     return data;
+  }
+
+  async function copyText(value) {
+    if (!value) {
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function renderControls() {

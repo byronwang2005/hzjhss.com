@@ -1,5 +1,5 @@
 import type { DriveConfig } from "./config";
-import { type DriveFile, type DriveListResult, createFolder, getObjectText, listObjects, putObjectText } from "./cos";
+import { type DriveFile, type DriveListResult, createFolder, getObjectText, listObjects, presignObjectUrl, putObjectText } from "./cos";
 import { normalizeFolderName, normalizeObjectPath, normalizePrefix } from "./paths";
 
 export const DRIVE_META_FILENAME = "._drive-meta.json";
@@ -7,6 +7,7 @@ export const TOPIC_META_FILENAME = "._topic.json";
 export const READ_PROMPT_FILENAME = "01-读取专题资料.prompt.md";
 export const GENERATE_PROMPT_FILENAME = "02-方法论生成与回传.prompt.md";
 export const OUTPUTS_FOLDER_NAME = "outputs";
+export const AGENT_MANIFEST_FOLDER_NAME = "._agent-manifests";
 
 export interface DriveFileMetadata {
   uploadedBy: string;
@@ -37,6 +38,35 @@ export interface TopicDetail {
   readPrompt: string;
   generatePrompt: string;
   outputs: DriveFile[];
+}
+
+export interface AgentManifestFile {
+  path: string;
+  name: string;
+  size: number;
+  lastModified: string;
+  uploadedBy?: string;
+  contentType?: string;
+  signedUrl: string;
+}
+
+export interface AgentManifest {
+  version: 1;
+  topic: Pick<TopicMetadata, "name" | "prefix" | "description">;
+  generatedAt: string;
+  expiresAt: string;
+  expiresIn: number;
+  files: AgentManifestFile[];
+  instructions: string[];
+}
+
+export interface AgentManifestResult {
+  prompt: string;
+  manifestUrl: string;
+  manifestPath: string;
+  expiresIn: number;
+  generatedAt: string;
+  fileCount: number;
 }
 
 export function normalizeTopicName(input: unknown): string {
@@ -228,6 +258,151 @@ export async function removeFileMetadata(config: DriveConfig, rawPath: unknown):
   await writeDriveMeta(config, prefix, meta);
 }
 
+export async function createAgentManifest(
+  config: DriveConfig,
+  input: { prefix: unknown },
+): Promise<AgentManifestResult> {
+  const prefix = normalizeTopicPrefix(input.prefix);
+  const topic = await readTopicMetadata(config, prefix);
+  const generatedAt = new Date();
+  const expiresAt = new Date(generatedAt.getTime() + config.signExpiresSeconds * 1000);
+  const materialFiles = await listTopicMaterialFiles(config, prefix);
+  const files: AgentManifestFile[] = await Promise.all(
+    materialFiles.map(async (file) => ({
+      path: file.path,
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified,
+      uploadedBy: file.uploadedBy,
+      contentType: file.contentType,
+      signedUrl: await presignObjectUrl(config, "GET", file.path),
+    })),
+  );
+  const manifest: AgentManifest = {
+    version: 1,
+    topic: {
+      name: topic.name,
+      prefix: topic.prefix,
+      description: topic.description,
+    },
+    generatedAt: generatedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    expiresIn: config.signExpiresSeconds,
+    files,
+    instructions: [
+      "不需要登录，不需要 cookie。",
+      "先下载本 manifest JSON，再逐个读取 files[].signedUrl。",
+      "保留每条结论的来源 path、文件名、作者或机构、发布日期和关键数据。",
+      "跳过 outputs/、系统隐藏文件和提示词文件。",
+      "链接过期后回到专题资料库重新生成 agent 分析提示词。",
+    ],
+  };
+  const manifestPath = `${prefix}${AGENT_MANIFEST_FOLDER_NAME}/${compactTimestamp(generatedAt)}-${createNonce()}.json`;
+  await putObjectText(config, manifestPath, JSON.stringify(manifest, null, 2), "application/json; charset=utf-8");
+  const manifestUrl = await presignObjectUrl(config, "GET", manifestPath);
+  return {
+    prompt: createAgentManifestPrompt({
+      topic,
+      generatedAt: manifest.generatedAt,
+      expiresAt: manifest.expiresAt,
+      expiresIn: manifest.expiresIn,
+      fileCount: files.length,
+      manifestUrl,
+    }),
+    manifestUrl,
+    manifestPath,
+    expiresIn: config.signExpiresSeconds,
+    generatedAt: manifest.generatedAt,
+    fileCount: files.length,
+  };
+}
+
+export function createAgentManifestPrompt(input: {
+  topic: Pick<TopicMetadata, "name" | "prefix" | "description">;
+  generatedAt: string;
+  expiresAt: string;
+  expiresIn: number;
+  fileCount: number;
+  manifestUrl: string;
+}): string {
+  return `# ${input.topic.name}：Agent 资料分析任务
+
+你是本地 AI agent。你不需要登录网盘，也不需要携带 cookie。
+
+请先下载这一个 manifest JSON：
+${input.manifestUrl}
+
+链接信息：
+- 专题路径：${input.topic.prefix}
+- 专题说明：${input.topic.description || "暂无专题说明。"}
+- 生成时间：${input.generatedAt}
+- 过期时间：${input.expiresAt}
+- 有效期：${input.expiresIn} 秒
+- 资料数量：${input.fileCount}
+
+读取方法：
+1. 下载 manifest JSON。
+2. 遍历 manifest.files，使用每个文件的 signedUrl 下载资料。
+3. 分析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件 path。
+4. 输出资料索引和结构化分析，至少包含：来源 path、资料类型、作者或机构、发布日期、核心观点、关键数据、待核验问题。
+5. 每个重要判断必须标注来源 path。链接过期后停止读取，并提示用户重新生成 agent 分析提示词。
+`;
+}
+
+export async function listTopicMaterialFiles(config: DriveConfig, topicPrefix: string): Promise<DriveFile[]> {
+  const files: DriveFile[] = [];
+  const pending = [topicPrefix];
+  while (pending.length) {
+    const currentPrefix = pending.shift() as string;
+    const listing = await listAllDirectoryWithMetadata(config, currentPrefix);
+    for (const folder of listing.folders) {
+      if (isAgentReadableFolder(topicPrefix, folder.path)) {
+        pending.push(folder.path);
+      }
+    }
+    for (const file of listing.files) {
+      if (isAgentReadableFile(topicPrefix, file)) {
+        files.push(file);
+      }
+    }
+  }
+  return files;
+}
+
+async function listAllDirectoryWithMetadata(config: DriveConfig, prefix: string): Promise<DriveListResult> {
+  const folders = new Map<string, { name: string; path: string }>();
+  const files: DriveFile[] = [];
+  let cursor: string | null = null;
+  do {
+    const result = await listDirectoryWithMetadata(config, prefix, cursor);
+    for (const folder of result.folders) {
+      folders.set(folder.path, folder);
+    }
+    files.push(...result.files);
+    cursor = result.nextCursor;
+  } while (cursor);
+
+  return {
+    prefix,
+    folders: Array.from(folders.values()),
+    files,
+    nextCursor: null,
+  };
+}
+
+export function isAgentReadableFolder(topicPrefix: string, folderPath: string): boolean {
+  return folderPath !== `${topicPrefix}${OUTPUTS_FOLDER_NAME}/` && !hasSystemPathSegment(folderPath);
+}
+
+export function isAgentReadableFile(topicPrefix: string, file: Pick<DriveFile, "path" | "name">): boolean {
+  return (
+    !file.path.startsWith(`${topicPrefix}${OUTPUTS_FOLDER_NAME}/`) &&
+    !hasSystemPathSegment(file.path) &&
+    file.name !== READ_PROMPT_FILENAME &&
+    file.name !== GENERATE_PROMPT_FILENAME
+  );
+}
+
 export function createDefaultPrompts(input: {
   origin: string;
   name: string;
@@ -243,11 +418,11 @@ export function createDefaultPrompts(input: {
 ${description}
 
 从网盘读取资料的方法：
-1. 登录：调用 \`${input.origin}/api/drive/login\`，method 为 \`POST\`，body 包含 \`displayName\` 和 \`accessCode\`，保存响应返回的 session cookie。
-2. 列目录：携带 cookie 调用 \`${input.origin}/api/drive/list?prefix=${encodeURIComponent(input.prefix)}\`，读取返回的 \`folders\` 和 \`files\`。
-3. 递归读取：对每个非 \`outputs/\` 的子文件夹继续调用 \`/api/drive/list?prefix=子文件夹路径\`，直到列完全部资料文件。
-4. 过滤规则：跳过系统隐藏文件、\`outputs/\`、\`${READ_PROMPT_FILENAME}\`、\`${GENERATE_PROMPT_FILENAME}\`；只读取研报、周报和补充资料。
-5. 获取下载链接：对每个需要读取的文件调用 \`${input.origin}/api/drive/download-url\`，method 为 \`POST\`，body 包含 \`path\`，使用返回的短时 GET 链接下载文件。
+1. 在专题资料库页面点击“获取 agent 分析提示词”。
+2. 页面会生成一份只包含一个 manifest 下载链接的短时提示词。
+3. 将该提示词交给本地 AI agent；agent 不需要登录，不需要 cookie。
+4. agent 先下载 manifest JSON，再按 manifest.files 中的 signedUrl 下载资料。
+5. manifest 和其中的资料链接会过期，过期后回到页面重新生成。
 6. 解析资料：按文件类型解析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件名。
 
 工作规则：
@@ -405,4 +580,14 @@ function fileNameFromPath(path: string): string {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).length;
+}
+
+function compactTimestamp(value: Date): string {
+  return value.toISOString().replace(/[-:.]/g, "").replace("T", "-").replace("Z", "Z");
+}
+
+function createNonce(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

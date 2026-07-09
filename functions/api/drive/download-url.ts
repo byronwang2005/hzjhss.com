@@ -3,7 +3,7 @@ import { getDriveConfig } from "../../../src/drive/config";
 import { presignObjectUrl } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody, requireDriveSession } from "../../../src/drive/http";
 import { normalizeObjectPath } from "../../../src/drive/paths";
-import { isSystemFileName } from "../../../src/drive/topic";
+import { hasSystemPathSegment } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -14,7 +14,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
 
     const body = await readJsonBody(request);
     const path = normalizeObjectPath(body.path);
-    if (isSystemFileName(path.split("/").pop() || "")) {
+    if (hasSystemPathSegment(path)) {
       return jsonResponse({ error: "不能下载系统文件" }, 400);
     }
     const url = await presignObjectUrl(getDriveConfig(env), "GET", path);

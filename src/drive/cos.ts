@@ -137,7 +137,7 @@ export function parseListObjectsXml(xml: string, rootPrefix: string, currentPref
       const name = path.slice(currentPrefix.length).replace(/\/$/, "");
       return { name, path };
     })
-    .filter((folder) => folder.name && !folder.name.includes("/"));
+    .filter((folder) => folder.name && !folder.name.includes("/") && !isSystemFile(folder.name));
 
   const files = toArray<Record<string, unknown>>(result.Contents)
     .map((entry) => ({

@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelativeFilePath } from "../src/drive/paths";
 import { parseListObjectsXml } from "../src/drive/cos";
 import { createSessionCookie, getDriveSession, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
-import { createDefaultPrompts, hasSystemPathSegment, mergeListMetadata, normalizeTopicPrefix } from "../src/drive/topic";
+import {
+  GENERATE_PROMPT_FILENAME,
+  READ_PROMPT_FILENAME,
+  createAgentManifestPrompt,
+  createDefaultPrompts,
+  hasSystemPathSegment,
+  isAgentReadableFile,
+  isAgentReadableFolder,
+  mergeListMetadata,
+  normalizeTopicPrefix,
+} from "../src/drive/topic";
 import type { DriveEnv } from "../src/drive/config";
 
 const env: DriveEnv = {
@@ -71,6 +81,9 @@ describe("COS list XML parser", () => {
         </Contents>
         <CommonPrefixes>
           <Prefix>cloud-drive/reports/archive/</Prefix>
+        </CommonPrefixes>
+        <CommonPrefixes>
+          <Prefix>cloud-drive/reports/._agent-manifests/</Prefix>
         </CommonPrefixes>
         <NextContinuationToken>next-page</NextContinuationToken>
       </ListBucketResult>`;
@@ -157,11 +170,41 @@ describe("topic prompts", () => {
     });
 
     expect(prompts.readPrompt).toContain("新能源/");
-    expect(prompts.readPrompt).toContain("/api/drive/login");
-    expect(prompts.readPrompt).toContain("/api/drive/list");
-    expect(prompts.readPrompt).toContain("/api/drive/download-url");
-    expect(prompts.readPrompt).toContain("递归读取");
+    expect(prompts.readPrompt).toContain("获取 agent 分析提示词");
+    expect(prompts.readPrompt).toContain("不需要登录");
+    expect(prompts.readPrompt).toContain("manifest JSON");
     expect(prompts.generatePrompt).toContain("新能源/outputs/");
     expect(prompts.generatePrompt).toContain("/api/drive/upload-complete");
+  });
+
+  it("creates an agent prompt with one manifest link", () => {
+    const prompt = createAgentManifestPrompt({
+      topic: {
+        name: "新能源",
+        prefix: "新能源/",
+        description: "跟踪新能源行业。",
+      },
+      generatedAt: "2026-07-09T01:00:00.000Z",
+      expiresAt: "2026-07-09T01:15:00.000Z",
+      expiresIn: 900,
+      fileCount: 3,
+      manifestUrl: "https://cos.example.com/manifest.json?X-Amz-Signature=abc",
+    });
+
+    expect(prompt).toContain("https://cos.example.com/manifest.json?X-Amz-Signature=abc");
+    expect(prompt).toContain("不需要登录");
+    expect(prompt).toContain("资料数量：3");
+    expect(prompt).not.toContain("/api/drive/download-url");
+  });
+
+  it("filters agent-readable files and folders", () => {
+    expect(isAgentReadableFolder("新能源/", "新能源/reports/")).toBe(true);
+    expect(isAgentReadableFolder("新能源/", "新能源/outputs/")).toBe(false);
+    expect(isAgentReadableFolder("新能源/", "新能源/._agent-manifests/")).toBe(false);
+    expect(isAgentReadableFile("新能源/", { name: "report.pdf", path: "新能源/reports/report.pdf" })).toBe(true);
+    expect(isAgentReadableFile("新能源/", { name: READ_PROMPT_FILENAME, path: `新能源/${READ_PROMPT_FILENAME}` })).toBe(false);
+    expect(isAgentReadableFile("新能源/", { name: GENERATE_PROMPT_FILENAME, path: `新能源/${GENERATE_PROMPT_FILENAME}` })).toBe(false);
+    expect(isAgentReadableFile("新能源/", { name: "summary.pdf", path: "新能源/outputs/summary.pdf" })).toBe(false);
+    expect(isAgentReadableFile("新能源/", { name: "manifest.json", path: "新能源/._agent-manifests/manifest.json" })).toBe(false);
   });
 });
