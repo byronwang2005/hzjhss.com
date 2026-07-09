@@ -506,6 +506,12 @@ button.brand-lockup:focus-visible {
   position: relative;
 }
 
+.drive-upload-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .drive-progress {
   display: grid;
   gap: 8px;
@@ -1966,6 +1972,10 @@ pre code {
   .drive-button,
   .drive-upload-button {
     width: 100%;
+  }
+
+  .drive-upload-group {
+    display: grid;
   }
 
   .drive-row {

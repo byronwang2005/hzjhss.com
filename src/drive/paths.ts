@@ -29,6 +29,13 @@ export function normalizeFileName(input: unknown): string {
   return name;
 }
 
+export function normalizeRelativeFilePath(input: unknown): string {
+  if (typeof input !== "string") {
+    throw new PathValidationError("文件路径不能为空");
+  }
+  return normalizeStrictRelativeFilePath(input);
+}
+
 export function normalizeFolderName(input: unknown): string {
   return normalizeFileName(input);
 }
@@ -84,6 +91,32 @@ function normalizeRelativePath(
     return `${normalized}/`;
   }
   return normalized;
+}
+
+function normalizeStrictRelativeFilePath(input: string): string {
+  const raw = input.trim().replace(/\\/g, "/");
+  if (CONTROL_CHARS.test(raw)) {
+    throw new PathValidationError("路径包含非法控制字符");
+  }
+  if (raw.startsWith("/")) {
+    throw new PathValidationError("路径不能以 / 开头");
+  }
+  if (raw.endsWith("/")) {
+    throw new PathValidationError("文件路径不能以 / 结尾");
+  }
+  if (raw.length > MAX_RELATIVE_PATH_LENGTH) {
+    throw new PathValidationError("路径过长");
+  }
+
+  const segments = raw.split("/");
+  if (!segments.length || segments.some((segment) => !segment)) {
+    throw new PathValidationError("路径不能包含空片段");
+  }
+
+  for (const segment of segments) {
+    validateSegment(segment);
+  }
+  return segments.join("/");
 }
 
 function validateSegment(segment: string): void {

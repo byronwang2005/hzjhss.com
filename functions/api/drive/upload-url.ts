@@ -2,8 +2,8 @@ import type { DriveEnv } from "../../../src/drive/config";
 import { getDriveConfig } from "../../../src/drive/config";
 import { presignObjectUrl } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody, requireDriveSession } from "../../../src/drive/http";
-import { normalizeFileName, normalizePrefix } from "../../../src/drive/paths";
-import { isSystemFileName } from "../../../src/drive/topic";
+import { normalizeFileName, normalizePrefix, normalizeRelativeFilePath } from "../../../src/drive/paths";
+import { hasSystemPathSegment } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -15,8 +15,8 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     const body = await readJsonBody(request);
     const config = getDriveConfig(env);
     const prefix = normalizePrefix(body.prefix ?? "");
-    const filename = normalizeFileName(body.filename);
-    if (isSystemFileName(filename)) {
+    const relativePath = normalizeUploadPath(body.relativePath, body.filename);
+    if (hasSystemPathSegment(relativePath)) {
       return jsonResponse({ error: "不能上传系统文件名" }, 400);
     }
     const size = typeof body.size === "number" ? body.size : Number(body.size ?? 0);
@@ -28,7 +28,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     }
 
     const contentType = typeof body.contentType === "string" && body.contentType ? body.contentType : "application/octet-stream";
-    const path = `${prefix}${filename}`;
+    const path = `${prefix}${relativePath}`;
     const url = await presignObjectUrl(config, "PUT", path, { "content-type": contentType });
     return jsonResponse({
       url,
@@ -41,3 +41,10 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     return errorResponse(error);
   }
 };
+
+function normalizeUploadPath(relativePath: unknown, filename: unknown): string {
+  if (typeof relativePath === "string" && relativePath.trim()) {
+    return normalizeRelativeFilePath(relativePath);
+  }
+  return normalizeFileName(filename);
+}

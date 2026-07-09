@@ -9,7 +9,7 @@
     />
     <title>嘉合杉升专题资料库</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709" />
+    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-folder" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">跳到正文</a>
@@ -83,10 +83,16 @@
                 <input id="topic-description" name="topicDescription" type="text" placeholder="专题说明（可选）" />
                 <button class="drive-button" type="submit">创建专题</button>
               </form>
-              <label class="drive-button drive-button-primary drive-upload-button" data-upload-wrap hidden>
-                <span>上传文件</span>
-                <input data-file-input type="file" />
-              </label>
+              <div class="drive-upload-group" data-upload-wrap hidden>
+                <label class="drive-button drive-button-primary drive-upload-button">
+                  <span>上传文件</span>
+                  <input data-file-input type="file" multiple />
+                </label>
+                <label class="drive-button drive-button-primary drive-upload-button">
+                  <span>上传文件夹</span>
+                  <input data-folder-input type="file" webkitdirectory multiple />
+                </label>
+              </div>
               <button class="drive-button" type="button" data-logout>退出</button>
             </div>
           </div>
@@ -158,6 +164,6 @@
         </div>
       </div>
     </main>
-    <script src="./assets/drive.js?v=topic-drive-20260709"></script>
+    <script src="./assets/drive.js?v=topic-drive-20260709-folder"></script>
   </body>
 </html>

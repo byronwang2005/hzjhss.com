@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { normalizeFileName, normalizeObjectPath, normalizePrefix } from "../src/drive/paths";
+import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelativeFilePath } from "../src/drive/paths";
 import { parseListObjectsXml } from "../src/drive/cos";
 import { createSessionCookie, getDriveSession, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
-import { createDefaultPrompts, mergeListMetadata, normalizeTopicPrefix } from "../src/drive/topic";
+import { createDefaultPrompts, hasSystemPathSegment, mergeListMetadata, normalizeTopicPrefix } from "../src/drive/topic";
 import type { DriveEnv } from "../src/drive/config";
 
 const env: DriveEnv = {
@@ -32,6 +32,20 @@ describe("drive path validation", () => {
     expect(normalizeTopicPrefix("新能源汽车/")).toBe("新能源汽车/");
     expect(() => normalizeTopicPrefix("行业/新能源/")).toThrow();
     expect(() => normalizeTopicPrefix("")).toThrow();
+  });
+
+  it("allows safe multi-level upload relative paths", () => {
+    expect(normalizeRelativeFilePath(" 行业资料/子目录/current.pdf ")).toBe("行业资料/子目录/current.pdf");
+    expect(normalizeRelativeFilePath("行业资料\\子目录\\current.pdf")).toBe("行业资料/子目录/current.pdf");
+  });
+
+  it("rejects unsafe upload relative paths", () => {
+    expect(() => normalizeRelativeFilePath("../a.pdf")).toThrow();
+    expect(() => normalizeRelativeFilePath("/a.pdf")).toThrow();
+    expect(() => normalizeRelativeFilePath("a//b.pdf")).toThrow();
+    expect(() => normalizeRelativeFilePath("a/")).toThrow();
+    expect(() => normalizeRelativeFilePath("a/\u0000.pdf")).toThrow();
+    expect(hasSystemPathSegment("a/._drive-meta.json")).toBe(true);
   });
 });
 
@@ -143,6 +157,10 @@ describe("topic prompts", () => {
     });
 
     expect(prompts.readPrompt).toContain("新能源/");
+    expect(prompts.readPrompt).toContain("/api/drive/login");
+    expect(prompts.readPrompt).toContain("/api/drive/list");
+    expect(prompts.readPrompt).toContain("/api/drive/download-url");
+    expect(prompts.readPrompt).toContain("递归读取");
     expect(prompts.generatePrompt).toContain("新能源/outputs/");
     expect(prompts.generatePrompt).toContain("/api/drive/upload-complete");
   });

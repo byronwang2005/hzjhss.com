@@ -18,6 +18,7 @@
   const loginForm = document.querySelector("[data-login-form]");
   const topicForm = document.querySelector("[data-topic-form]");
   const fileInput = document.querySelector("[data-file-input]");
+  const folderInput = document.querySelector("[data-folder-input]");
   const uploadWrap = document.querySelector("[data-upload-wrap]");
   const logoutButton = document.querySelector("[data-logout]");
   const breadcrumbs = document.querySelector("[data-breadcrumbs]");
@@ -89,8 +90,8 @@
   });
 
   fileInput.addEventListener("change", async () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) {
+    const files = Array.from(fileInput.files || []);
+    if (!files.length) {
       return;
     }
     try {
@@ -98,16 +99,34 @@
         setStatus("请先进入一个专题再上传资料。", true);
         return;
       }
-      if (state.files.some((item) => item.name === file.name) && !(await confirmDeleteLikeOverwrite(file.name))) {
-        return;
-      }
-      await uploadFile(file, state.prefix, "material");
-      setStatus("上传完成，上传者已登记。");
+      await uploadFiles(files, (file) => file.name);
+      setStatus(`上传完成，已登记 ${files.length} 个文件的上传者。`);
       await loadList(state.prefix);
     } catch (error) {
       setStatus(error.message, true);
     } finally {
       fileInput.value = "";
+      hideProgress();
+    }
+  });
+
+  folderInput.addEventListener("change", async () => {
+    const files = Array.from(folderInput.files || []);
+    if (!files.length) {
+      return;
+    }
+    try {
+      if (!state.prefix || !state.topic) {
+        setStatus("请先进入一个专题再上传资料。", true);
+        return;
+      }
+      await uploadFiles(files, (file) => file.webkitRelativePath || file.name);
+      setStatus(`文件夹上传完成，已登记 ${files.length} 个文件的上传者。`);
+      await loadList(state.prefix);
+    } catch (error) {
+      setStatus(error.message, true);
+    } finally {
+      folderInput.value = "";
       hideProgress();
     }
   });
@@ -251,17 +270,38 @@
     state.outputs = Array.isArray(detail.outputs) ? detail.outputs : [];
   }
 
-  async function uploadFile(file, prefix, kind) {
+  async function uploadFiles(files, relativePathForFile) {
+    const entries = files.map((file) => ({
+      file,
+      relativePath: normalizeClientRelativePath(relativePathForFile(file)),
+    }));
+    const conflicts = await findUploadConflicts(entries);
+    if (conflicts.length && !window.confirm(`将覆盖 ${conflicts.length} 个同路径同名文件。是否继续上传？`)) {
+      return;
+    }
+
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      try {
+        await uploadFile(entry.file, state.prefix, "material", entry.relativePath, `${index + 1}/${entries.length} ${entry.relativePath}`);
+      } catch (error) {
+        throw new Error(`上传失败：${entry.relativePath}。${error.message}`);
+      }
+    }
+  }
+
+  async function uploadFile(file, prefix, kind, relativePath, progressLabel) {
     const data = await api("/upload-url", {
       method: "POST",
       body: {
         prefix,
         filename: file.name,
+        relativePath,
         size: file.size,
         contentType: file.type || "application/octet-stream",
       },
     });
-    await uploadWithProgress(data.url, file, data.contentType);
+    await uploadWithProgress(data.url, file, data.contentType, progressLabel || relativePath || file.name);
     await api("/upload-complete", {
       method: "POST",
       body: {
@@ -273,20 +313,20 @@
     });
   }
 
-  function uploadWithProgress(url, file, contentType) {
+  function uploadWithProgress(url, file, contentType, label) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", url, true);
       xhr.setRequestHeader("content-type", contentType);
-      showProgress(file.name, 0);
+      showProgress(label, 0);
       xhr.upload.addEventListener("progress", (event) => {
         if (event.lengthComputable) {
-          showProgress(file.name, Math.round((event.loaded / event.total) * 100));
+          showProgress(label, Math.round((event.loaded / event.total) * 100));
         }
       });
       xhr.addEventListener("load", () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          showProgress(file.name, 100);
+          showProgress(label, 100);
           resolve();
         } else {
           reject(new Error(`上传失败，COS 返回 ${xhr.status}`));
@@ -294,6 +334,27 @@
       });
       xhr.addEventListener("error", () => reject(new Error("上传失败，请检查 COS CORS 配置。")));
       xhr.send(file);
+    });
+  }
+
+  async function findUploadConflicts(entries) {
+    const directoryPrefixes = Array.from(new Set(entries.map((entry) => directoryPrefix(entry.relativePath))));
+    const existingByDirectory = new Map();
+    await Promise.all(directoryPrefixes.map(async (directory) => {
+      const prefix = `${state.prefix}${directory}`;
+      try {
+        const data = await api(`/list?${new URLSearchParams({ prefix }).toString()}`);
+        const names = new Set((Array.isArray(data.files) ? data.files : []).map((file) => file.name));
+        existingByDirectory.set(directory, names);
+      } catch {
+        existingByDirectory.set(directory, new Set());
+      }
+    }));
+
+    return entries.filter((entry) => {
+      const directory = directoryPrefix(entry.relativePath);
+      const name = fileNameFromPath(entry.relativePath);
+      return existingByDirectory.get(directory)?.has(name);
     });
   }
 
@@ -410,7 +471,7 @@
     }
     rows.push(...visibleFiles.map((file) => renderFileRow(file, { includePreview: true })));
     if (!visibleFolders.length && !visibleFiles.length) {
-      rows.push('<div class="drive-empty">这个专题还没有资料。上传研报、周报或补充材料开始沉淀。</div>');
+      rows.push('<div class="drive-empty">这个专题还没有资料。上传研报、周报或整个资料文件夹开始沉淀。</div>');
     }
     list.innerHTML = rows.join("");
   }
@@ -489,10 +550,6 @@
     deleteConfirm.disabled = true;
   }
 
-  async function confirmDeleteLikeOverwrite(name) {
-    return window.confirm(`当前专题已有同名文件「${name}」，继续上传会覆盖原文件。是否继续？`);
-  }
-
   function showLogin() {
     loginPanel.hidden = false;
     appPanel.hidden = true;
@@ -536,6 +593,20 @@
 
   function isPreviewable(name) {
     return previewExtensions.has(extension(name));
+  }
+
+  function normalizeClientRelativePath(value) {
+    return String(value || "").replace(/\\/g, "/").replace(/^\/+/, "").split("/").filter(Boolean).join("/");
+  }
+
+  function directoryPrefix(path) {
+    const index = path.lastIndexOf("/");
+    return index === -1 ? "" : path.slice(0, index + 1);
+  }
+
+  function fileNameFromPath(path) {
+    const index = path.lastIndexOf("/");
+    return index === -1 ? path : path.slice(index + 1);
   }
 
   function extension(name) {

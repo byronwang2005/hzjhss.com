@@ -60,6 +60,10 @@ export function isSystemFileName(name: string): boolean {
   return name.startsWith("._");
 }
 
+export function hasSystemPathSegment(path: string): boolean {
+  return path.split("/").some(isSystemFileName);
+}
+
 export async function createTopic(
   config: DriveConfig,
   input: { name: unknown; description?: unknown; displayName: string; origin: string },
@@ -238,11 +242,18 @@ export function createDefaultPrompts(input: {
 专题说明：
 ${description}
 
+从网盘读取资料的方法：
+1. 登录：调用 \`${input.origin}/api/drive/login\`，method 为 \`POST\`，body 包含 \`displayName\` 和 \`accessCode\`，保存响应返回的 session cookie。
+2. 列目录：携带 cookie 调用 \`${input.origin}/api/drive/list?prefix=${encodeURIComponent(input.prefix)}\`，读取返回的 \`folders\` 和 \`files\`。
+3. 递归读取：对每个非 \`outputs/\` 的子文件夹继续调用 \`/api/drive/list?prefix=子文件夹路径\`，直到列完全部资料文件。
+4. 过滤规则：跳过系统隐藏文件、\`outputs/\`、\`${READ_PROMPT_FILENAME}\`、\`${GENERATE_PROMPT_FILENAME}\`；只读取研报、周报和补充资料。
+5. 获取下载链接：对每个需要读取的文件调用 \`${input.origin}/api/drive/download-url\`，method 为 \`POST\`，body 包含 \`path\`，使用返回的短时 GET 链接下载文件。
+6. 解析资料：按文件类型解析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件名。
+
 工作规则：
-1. 先列出专题目录，识别 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料。
-2. 下载并阅读资料，保留来源文件名、作者或机构、发布日期、核心观点和关键数据。
-3. 不要改写原始资料，不要删除文件，不要把临时过程文件回传到专题。
-4. 输出给下一步 agent 的材料索引，至少包含：文件名、资料类型、主题标签、核心结论、可引用数据、待核验问题。
+1. 保留来源路径、文件名、作者或机构、发布日期、核心观点和关键数据。
+2. 不要改写原始资料，不要删除文件，不要把临时过程文件回传到专题。
+3. 输出给下一步 agent 的材料索引，至少包含：文件路径、资料类型、主题标签、核心结论、可引用数据、待核验问题。
 `;
 
   const generatePrompt = `# ${input.name}：方法论生成与成果回传
