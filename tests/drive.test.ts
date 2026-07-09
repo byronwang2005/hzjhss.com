@@ -15,6 +15,7 @@ import {
   isAgentReadableFolder,
   mergeListMetadata,
   normalizeTopicPrefix,
+  readDriveOverview,
   readTopic,
 } from "../src/drive/topic";
 import type { DriveConfig } from "../src/drive/config";
@@ -306,6 +307,89 @@ describe("topic scaffolding", () => {
         expect(detail.generatePrompt).toBe("自定义生成提示词");
         expect(storage.get(`旧专题/${GENERATE_PROMPT_FILENAME}`)).toBe("自定义生成提示词");
         expect(storage.has(`旧专题/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
+      },
+    );
+  });
+});
+
+describe("drive overview", () => {
+  it("summarizes topics, keeps empty output topics, and picks the latest output", async () => {
+    const topicA = {
+      version: 1,
+      name: "新能源",
+      prefix: "新能源/",
+      description: "跟踪新能源行业。",
+      createdBy: "王小明",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedBy: "王小明",
+      updatedAt: "2026-07-02T00:00:00.000Z",
+    };
+    const topicB = {
+      version: 1,
+      name: "半导体",
+      prefix: "半导体/",
+      description: "",
+      createdBy: "李小明",
+      createdAt: "2026-07-03T00:00:00.000Z",
+      updatedBy: "李小明",
+      updatedAt: "2026-07-03T00:00:00.000Z",
+    };
+
+    await withMockCos(
+      [
+        [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(topicA)],
+        [`新能源/${GENERATE_PROMPT_FILENAME}`, "prompt"],
+        ["新能源/outputs/", ""],
+        ["新能源/outputs/2026-07-08-summary.md", "old"],
+        ["新能源/outputs/2026-07-09-summary.pdf", "new"],
+        [
+          `新能源/outputs/${DRIVE_META_FILENAME}`,
+          JSON.stringify({
+            version: 1,
+            files: {
+              "2026-07-08-summary.md": {
+                uploadedBy: "王小明",
+                uploadedAt: "2026-07-08T08:00:00.000Z",
+                contentType: "text/markdown",
+                size: 3,
+                kind: "output",
+              },
+              "2026-07-09-summary.pdf": {
+                uploadedBy: "王小明",
+                uploadedAt: "2026-07-09T08:00:00.000Z",
+                contentType: "application/pdf",
+                size: 3,
+                kind: "output",
+              },
+            },
+          }),
+        ],
+        [`半导体/${TOPIC_META_FILENAME}`, JSON.stringify(topicB)],
+        [`半导体/${GENERATE_PROMPT_FILENAME}`, "prompt"],
+        ["半导体/outputs/", ""],
+        [`半导体/outputs/${DRIVE_META_FILENAME}`, JSON.stringify({ version: 1, files: {} })],
+      ],
+      async () => {
+        const overview = await readDriveOverview(testConfig, {
+          displayName: "管理员",
+          origin: "https://example.com",
+        });
+
+        expect(overview.topics).toHaveLength(2);
+        expect(overview.topics[0]).toMatchObject({
+          name: "新能源",
+          outputCount: 2,
+          latestOutput: {
+            name: "2026-07-09-summary.pdf",
+            path: "新能源/outputs/2026-07-09-summary.pdf",
+            contentType: "application/pdf",
+          },
+        });
+        expect(overview.topics[1]).toMatchObject({
+          name: "半导体",
+          outputCount: 0,
+          latestOutput: undefined,
+        });
       },
     );
   });

@@ -84,6 +84,29 @@ export interface AgentManifestResult {
   fileCount: number;
 }
 
+export interface DriveOverviewOutput {
+  name: string;
+  path: string;
+  uploadedAt?: string;
+  lastModified: string;
+  contentType?: string;
+  size: number;
+}
+
+export interface DriveOverviewTopic {
+  prefix: string;
+  name: string;
+  description: string;
+  createdBy: string;
+  updatedAt: string;
+  outputCount: number;
+  latestOutput?: DriveOverviewOutput;
+}
+
+export interface DriveOverview {
+  topics: DriveOverviewTopic[];
+}
+
 export interface TopicScaffoldOptions {
   displayName: string;
   origin: string;
@@ -228,6 +251,45 @@ export async function deleteTopic(
     prefix,
     name: topic.name,
     deletedCount: paths.length,
+  };
+}
+
+export async function readDriveOverview(config: DriveConfig, options: TopicScaffoldOptions): Promise<DriveOverview> {
+  const root = await listDirectoryWithMetadata(config, "");
+  const topics = await Promise.all(
+    root.folders.map(async (folder): Promise<DriveOverviewTopic | null> => {
+      try {
+        const detail = await readTopic(config, folder.path, options);
+        const outputs = [...detail.outputs].sort((a, b) => timestampForFile(b) - timestampForFile(a));
+        const latest = outputs[0];
+        return {
+          prefix: detail.topic.prefix,
+          name: detail.topic.name,
+          description: detail.topic.description,
+          createdBy: detail.topic.createdBy,
+          updatedAt: detail.topic.updatedAt,
+          outputCount: outputs.length,
+          latestOutput: latest
+            ? {
+                name: latest.name,
+                path: latest.path,
+                uploadedAt: latest.uploadedAt,
+                lastModified: latest.lastModified,
+                contentType: latest.contentType,
+                size: latest.size,
+              }
+            : undefined,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return {
+    topics: topics
+      .filter((topic): topic is DriveOverviewTopic => Boolean(topic))
+      .sort((a, b) => timestampForTopic(b) - timestampForTopic(a) || a.name.localeCompare(b.name, "zh-Hans-CN")),
   };
 }
 
@@ -578,6 +640,14 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
 
 function topicNameFromPrefix(prefix: string): string {
   return prefix.replace(/\/$/, "");
+}
+
+function timestampForTopic(topic: Pick<DriveOverviewTopic, "updatedAt" | "latestOutput">): number {
+  return Math.max(Date.parse(topic.latestOutput?.uploadedAt || topic.latestOutput?.lastModified || "") || 0, Date.parse(topic.updatedAt) || 0);
+}
+
+function timestampForFile(file: Pick<DriveFile, "uploadedAt" | "lastModified">): number {
+  return Date.parse(file.uploadedAt || file.lastModified) || 0;
 }
 
 async function recordFileMetadata(config: DriveConfig, path: string, fileMeta: DriveFileMetadata): Promise<void> {

@@ -3,188 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="嘉合杉升专题资料库"
-    />
-    <title>嘉合杉升专题资料库</title>
+    <meta name="description" content="嘉合杉升专题成果交付中心" />
+    <title>嘉合杉升成果中心</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-view-create" />
+    <link rel="stylesheet" href="./styles.css?v=drive-delivery-center-20260709" />
+    <link rel="stylesheet" href="./assets/drive.css?v=drive-delivery-center-20260709" />
   </head>
-  <body>
+  <body class="drive-body">
     <a class="skip-link" href="#main-content">跳到正文</a>
-    <main class="page drive-page" id="main-content">
-      <header class="site-header drive-header" aria-label="资料库导航">
-        <a class="brand-lockup" href="./index.html" aria-label="返回嘉合杉升AI手册首页">
-          <img
-            class="company-logo"
-            src="./assets/jhss-logo-cropped.png"
-            width="400"
-            height="501"
-            alt=""
-            aria-hidden="true"
-          />
-          <span>嘉合杉升专题资料库</span>
-        </a>
-        <nav class="top-nav" aria-label="资料库导航链接">
-          <a href="./index.html">返回首页</a>
-        </nav>
-      </header>
-
-      <section class="drive-shell" aria-labelledby="drive-title">
-        <div class="drive-title-row">
-          <div>
-            <h1 id="drive-title">专题资料库</h1>
-          </div>
-          <button class="drive-button" type="button" data-logout hidden>退出登录</button>
-        </div>
-
-        <div class="drive-status" aria-live="polite" data-status></div>
-
-        <section class="drive-login" data-drive-login>
-          <form class="drive-login-form" data-login-form>
-            <div class="field-group">
-              <label for="drive-display-name">登录姓名</label>
-              <input
-                id="drive-display-name"
-                name="displayName"
-                type="text"
-                autocomplete="name"
-                required
-              />
-              <p class="field-help">请使用真实姓名，上传记录会显示该姓名。</p>
-            </div>
-            <div class="field-group">
-              <label for="drive-access-code">访问码</label>
-              <input
-                id="drive-access-code"
-                name="accessCode"
-                type="password"
-                autocomplete="current-password"
-                required
-              />
-              <p class="field-help">登录态会定时失效，请勿在公共设备保存访问码。</p>
-            </div>
-            <button class="drive-button drive-button-primary" type="submit">进入资料库</button>
-          </form>
+    <main class="drive-page" id="main-content">
+      <div data-drive-root>
+        <section class="drive-noscript-card">
+          <h1>嘉合杉升成果中心</h1>
+          <p>正在加载成果中心...</p>
         </section>
-
-        <section class="drive-app" data-drive-app hidden>
-          <div class="drive-toolbar">
-            <nav class="drive-breadcrumbs" aria-label="当前目录" data-breadcrumbs></nav>
-            <div class="drive-actions">
-              <button class="drive-button drive-button-primary" type="button" data-create-topic>新建专题</button>
-              <div class="drive-upload-group" data-upload-wrap hidden>
-                <label class="drive-button drive-button-primary drive-upload-button">
-                  <span>上传文件</span>
-                  <input data-file-input type="file" multiple />
-                </label>
-                <label class="drive-button drive-button-primary drive-upload-button">
-                  <span>上传文件夹</span>
-                  <input data-folder-input type="file" webkitdirectory multiple />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="drive-progress" data-upload-progress hidden>
-            <div>
-              <span data-progress-name></span>
-              <strong data-progress-percent>0%</strong>
-            </div>
-            <progress value="0" max="100" data-progress-bar></progress>
-          </div>
-
-          <section class="drive-create-panel" data-create-panel hidden>
-            <div class="drive-section-heading">
-              <h2>新建专题</h2>
-              <p>创建后会自动生成成果目录和默认提示词，资料上传入口会出现在专题详情中。</p>
-            </div>
-            <form class="drive-create-form" data-topic-form>
-              <div class="field-group">
-                <label for="topic-name">专题名称</label>
-                <input id="topic-name" name="topicName" type="text" autocomplete="off" required />
-              </div>
-              <div class="field-group">
-                <label for="topic-description">专题说明</label>
-                <textarea id="topic-description" name="topicDescription" rows="5" placeholder="可选：记录研究范围、资料口径或成果要求。"></textarea>
-              </div>
-              <div class="drive-create-actions">
-                <button class="drive-button" type="button" data-cancel-create>取消</button>
-                <button class="drive-button drive-button-primary" type="submit">创建专题</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="drive-topic-panel" data-topic-panel hidden>
-            <div class="drive-topic-head">
-              <div>
-                <h2 data-topic-title></h2>
-                <p data-topic-meta></p>
-              </div>
-            </div>
-
-            <section class="drive-topic-summary" aria-labelledby="topic-description-title">
-              <h3 id="topic-description-title">专题说明</h3>
-              <p data-topic-description-view></p>
-            </section>
-
-            <div class="drive-topic-tools">
-              <button class="drive-button drive-button-primary" type="button" data-agent-manifest>获取 agent 分析提示词</button>
-              <button class="drive-button" type="button" data-copy-prompt="generate">复制生成提示词</button>
-              <button class="drive-button" type="button" data-toggle-topic-settings aria-expanded="false">专题设置</button>
-            </div>
-
-            <section class="drive-topic-settings" data-topic-settings hidden>
-              <div class="drive-section-heading">
-                <h3>专题设置</h3>
-                <p>这里用于维护专题说明、生成提示词，以及删除整个专题。</p>
-              </div>
-              <div class="drive-topic-grid">
-                <label class="field-group">
-                  <span>专题说明</span>
-                  <textarea data-topic-description rows="4"></textarea>
-                </label>
-                <label class="field-group">
-                  <span>成果生成与回传提示词</span>
-                  <textarea data-generate-prompt rows="12"></textarea>
-                </label>
-              </div>
-              <div class="drive-topic-actions">
-                <button class="drive-button drive-button-primary" type="button" data-save-topic>保存专题设置</button>
-                <button class="drive-button drive-button-danger" type="button" data-delete-topic>删除专题</button>
-              </div>
-            </section>
-
-            <section class="drive-output-section">
-              <div class="drive-section-heading">
-                <h3>专题成果</h3>
-                <p>聚合 outputs/ 下的 Markdown、HTML 和 PDF，可直接预览。</p>
-              </div>
-              <div class="drive-list drive-output-list" data-output-list></div>
-            </section>
-          </section>
-
-          <div class="drive-list" data-drive-list aria-live="polite"></div>
-        </section>
-      </section>
-
-      <div class="drive-danger-modal" data-delete-modal hidden>
-        <div class="drive-danger-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
-          <p class="kicker">Danger Zone</p>
-          <h2 id="delete-title" data-delete-title>确认删除文件</h2>
-          <p data-delete-message></p>
-          <label class="field-group">
-            <span data-delete-input-label>请输入完整文件名以确认删除</span>
-            <input data-delete-confirm-input type="text" autocomplete="off" />
-          </label>
-          <div class="drive-danger-actions">
-            <button class="drive-button" type="button" data-delete-cancel>取消</button>
-            <button class="drive-button drive-button-danger" type="button" data-delete-confirm disabled>永久删除</button>
-          </div>
-        </div>
       </div>
+      <noscript>
+        <section class="drive-noscript-card">
+          <h1>需要启用 JavaScript</h1>
+          <p>成果预览、上传和短时链接复制都需要浏览器 JavaScript 支持。</p>
+        </section>
+      </noscript>
     </main>
-    <script src="./assets/drive.js?v=topic-drive-20260709-view-create"></script>
+    <script type="module" src="./assets/drive.js?v=drive-delivery-center-20260709"></script>
   </body>
 </html>
