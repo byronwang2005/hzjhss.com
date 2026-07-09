@@ -9,7 +9,7 @@
     />
     <title>嘉合杉升专题资料库</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-title-logout" />
+    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-view-create" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">跳到正文</a>
@@ -73,12 +73,7 @@
           <div class="drive-toolbar">
             <nav class="drive-breadcrumbs" aria-label="当前目录" data-breadcrumbs></nav>
             <div class="drive-actions">
-              <form class="drive-folder-form" data-topic-form>
-                <label class="sr-only" for="topic-name">创建专题</label>
-                <input id="topic-name" name="topicName" type="text" placeholder="专题名称" />
-                <input id="topic-description" name="topicDescription" type="text" placeholder="专题说明（可选）" />
-                <button class="drive-button" type="submit">创建专题</button>
-              </form>
+              <button class="drive-button drive-button-primary" type="button" data-create-topic>新建专题</button>
               <div class="drive-upload-group" data-upload-wrap hidden>
                 <label class="drive-button drive-button-primary drive-upload-button">
                   <span>上传文件</span>
@@ -100,33 +95,66 @@
             <progress value="0" max="100" data-progress-bar></progress>
           </div>
 
+          <section class="drive-create-panel" data-create-panel hidden>
+            <div class="drive-section-heading">
+              <h2>新建专题</h2>
+              <p>创建后会自动生成成果目录和默认提示词，资料上传入口会出现在专题详情中。</p>
+            </div>
+            <form class="drive-create-form" data-topic-form>
+              <div class="field-group">
+                <label for="topic-name">专题名称</label>
+                <input id="topic-name" name="topicName" type="text" autocomplete="off" required />
+              </div>
+              <div class="field-group">
+                <label for="topic-description">专题说明</label>
+                <textarea id="topic-description" name="topicDescription" rows="5" placeholder="可选：记录研究范围、资料口径或成果要求。"></textarea>
+              </div>
+              <div class="drive-create-actions">
+                <button class="drive-button" type="button" data-cancel-create>取消</button>
+                <button class="drive-button drive-button-primary" type="submit">创建专题</button>
+              </div>
+            </form>
+          </section>
+
           <section class="drive-topic-panel" data-topic-panel hidden>
             <div class="drive-topic-head">
               <div>
                 <h2 data-topic-title></h2>
                 <p data-topic-meta></p>
               </div>
-              <div class="drive-topic-actions">
-                <button class="drive-button drive-button-primary" type="button" data-save-topic>保存专题设置</button>
-                <button class="drive-button drive-button-danger" type="button" data-delete-topic>删除专题</button>
-              </div>
             </div>
 
-            <div class="drive-topic-grid">
-              <label class="field-group">
-                <span>专题说明</span>
-                <textarea data-topic-description rows="4"></textarea>
-              </label>
-              <label class="field-group">
-                <span>成果生成与回传提示词</span>
-                <textarea data-generate-prompt rows="12"></textarea>
-              </label>
-            </div>
+            <section class="drive-topic-summary" aria-labelledby="topic-description-title">
+              <h3 id="topic-description-title">专题说明</h3>
+              <p data-topic-description-view></p>
+            </section>
 
             <div class="drive-topic-tools">
               <button class="drive-button drive-button-primary" type="button" data-agent-manifest>获取 agent 分析提示词</button>
               <button class="drive-button" type="button" data-copy-prompt="generate">复制生成提示词</button>
+              <button class="drive-button" type="button" data-toggle-topic-settings aria-expanded="false">专题设置</button>
             </div>
+
+            <section class="drive-topic-settings" data-topic-settings hidden>
+              <div class="drive-section-heading">
+                <h3>专题设置</h3>
+                <p>这里用于维护专题说明、生成提示词，以及删除整个专题。</p>
+              </div>
+              <div class="drive-topic-grid">
+                <label class="field-group">
+                  <span>专题说明</span>
+                  <textarea data-topic-description rows="4"></textarea>
+                </label>
+                <label class="field-group">
+                  <span>成果生成与回传提示词</span>
+                  <textarea data-generate-prompt rows="12"></textarea>
+                </label>
+              </div>
+              <div class="drive-topic-actions">
+                <button class="drive-button drive-button-primary" type="button" data-save-topic>保存专题设置</button>
+                <button class="drive-button drive-button-danger" type="button" data-delete-topic>删除专题</button>
+              </div>
+            </section>
 
             <section class="drive-output-section">
               <div class="drive-section-heading">
@@ -157,6 +185,6 @@
         </div>
       </div>
     </main>
-    <script src="./assets/drive.js?v=topic-drive-20260709-title-logout"></script>
+    <script src="./assets/drive.js?v=topic-drive-20260709-view-create"></script>
   </body>
 </html>

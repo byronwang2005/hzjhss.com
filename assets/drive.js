@@ -3,10 +3,12 @@
   const promptFiles = new Set(["成果生成与回传.prompt.md"]);
   const previewExtensions = new Set(["html", "htm", "pdf", "md", "markdown", "txt"]);
   const state = {
+    view: "topics",
     prefix: "",
     files: [],
     folders: [],
     topic: null,
+    topicSettingsOpen: false,
     generatePrompt: "",
     outputs: [],
     displayName: "",
@@ -16,6 +18,9 @@
   const appPanel = document.querySelector("[data-drive-app]");
   const loginForm = document.querySelector("[data-login-form]");
   const topicForm = document.querySelector("[data-topic-form]");
+  const createPanel = document.querySelector("[data-create-panel]");
+  const createButton = document.querySelector("[data-create-topic]");
+  const cancelCreateButton = document.querySelector("[data-cancel-create]");
   const fileInput = document.querySelector("[data-file-input]");
   const folderInput = document.querySelector("[data-folder-input]");
   const uploadWrap = document.querySelector("[data-upload-wrap]");
@@ -31,8 +36,11 @@
   const topicPanel = document.querySelector("[data-topic-panel]");
   const topicTitle = document.querySelector("[data-topic-title]");
   const topicMeta = document.querySelector("[data-topic-meta]");
+  const topicDescriptionView = document.querySelector("[data-topic-description-view]");
   const topicDescription = document.querySelector("[data-topic-description]");
   const generatePrompt = document.querySelector("[data-generate-prompt]");
+  const topicSettings = document.querySelector("[data-topic-settings]");
+  const toggleTopicSettingsButton = document.querySelector("[data-toggle-topic-settings]");
   const saveTopicButton = document.querySelector("[data-save-topic]");
   const deleteModal = document.querySelector("[data-delete-modal]");
   const deleteTitle = document.querySelector("[data-delete-title]");
@@ -62,6 +70,15 @@
     } catch (error) {
       setStatus(error.message, true);
     }
+  });
+
+  createButton.addEventListener("click", () => {
+    showCreateTopic();
+  });
+
+  cancelCreateButton.addEventListener("click", async () => {
+    topicForm.reset();
+    await loadList("");
   });
 
   topicForm.addEventListener("submit", async (event) => {
@@ -163,6 +180,7 @@
         },
       });
       applyTopicDetail(detail);
+      state.topicSettingsOpen = false;
       renderTopicPanel();
       setStatus("专题设置已保存。");
     } catch (error) {
@@ -183,11 +201,18 @@
       return;
     }
 
+    const settingsTarget = event.target.closest("[data-toggle-topic-settings]");
+    if (settingsTarget) {
+      state.topicSettingsOpen = !state.topicSettingsOpen;
+      renderTopicPanel();
+      return;
+    }
+
     const target = event.target.closest("[data-copy-prompt]");
     if (!target) {
       return;
     }
-    const value = generatePrompt.value;
+    const value = state.generatePrompt;
     const copied = await copyText(value);
     if (copied) {
       setStatus("生成与回传提示词已复制。");
@@ -291,7 +316,9 @@
     state.prefix = data.prefix || "";
     state.files = Array.isArray(data.files) ? data.files : [];
     state.folders = Array.isArray(data.folders) ? data.folders : [];
+    state.view = state.prefix ? "topic" : "topics";
     state.topic = null;
+    state.topicSettingsOpen = false;
     state.generatePrompt = "";
     state.outputs = [];
 
@@ -488,11 +515,17 @@
   }
 
   function renderControls() {
-    topicForm.hidden = state.prefix !== "";
-    uploadWrap.hidden = !state.topic;
+    createButton.hidden = state.view !== "topics";
+    createPanel.hidden = state.view !== "create";
+    list.hidden = state.view === "create";
+    uploadWrap.hidden = state.view !== "topic" || !state.topic;
   }
 
   function renderBreadcrumbs() {
+    if (state.view === "create") {
+      breadcrumbs.innerHTML = '<button type="button" data-prefix="">专题库</button><span>/</span><span>新建专题</span>';
+      return;
+    }
     const segments = state.prefix.split("/").filter(Boolean);
     const parts = [`<button type="button" data-prefix="">专题库</button>`];
     let prefix = "";
@@ -504,15 +537,19 @@
   }
 
   function renderTopicPanel() {
-    if (!state.topic) {
+    if (!state.topic || state.view !== "topic") {
       topicPanel.hidden = true;
       return;
     }
     topicPanel.hidden = false;
     topicTitle.textContent = state.topic.name;
     topicMeta.textContent = `创建人：${state.topic.createdBy || "-"} · 最近更新：${formatDateTime(state.topic.updatedAt)} · 路径：${state.topic.prefix}`;
+    topicDescriptionView.textContent = state.topic.description || "暂无专题说明。";
     topicDescription.value = state.topic.description || "";
     generatePrompt.value = state.generatePrompt;
+    topicSettings.hidden = !state.topicSettingsOpen;
+    toggleTopicSettingsButton.setAttribute("aria-expanded", String(state.topicSettingsOpen));
+    toggleTopicSettingsButton.textContent = state.topicSettingsOpen ? "收起设置" : "专题设置";
     renderFileRows(outputList, state.outputs, {
       empty: "outputs/ 目录还没有成果。请让本地 AI agent 按提示词生成并回传。",
       includePreview: true,
@@ -530,6 +567,10 @@
   }
 
   function renderList() {
+    if (state.view === "create") {
+      list.innerHTML = "";
+      return;
+    }
     if (!state.prefix) {
       renderRootTopics();
       return;
@@ -642,6 +683,8 @@
   }
 
   function showLogin() {
+    state.view = "topics";
+    state.topicSettingsOpen = false;
     loginPanel.hidden = false;
     appPanel.hidden = true;
     logoutButton.hidden = true;
@@ -651,6 +694,21 @@
     loginPanel.hidden = true;
     appPanel.hidden = false;
     logoutButton.hidden = false;
+  }
+
+  function showCreateTopic() {
+    state.view = "create";
+    state.prefix = "";
+    state.topic = null;
+    state.topicSettingsOpen = false;
+    state.generatePrompt = "";
+    state.outputs = [];
+    hideProgress();
+    renderControls();
+    renderBreadcrumbs();
+    renderTopicPanel();
+    renderList();
+    setStatus("填写专题名称和说明后创建。");
   }
 
   function setStatus(message, isError = false) {

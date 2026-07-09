@@ -338,8 +338,7 @@ button.brand-lockup:focus-visible {
 }
 
 .field-group input,
-.field-group textarea,
-.drive-folder-form input {
+.field-group textarea {
   width: 100%;
   min-height: 42px;
   padding: 9px 12px;
@@ -356,8 +355,7 @@ button.brand-lockup:focus-visible {
 }
 
 .field-group input:focus,
-.field-group textarea:focus,
-.drive-folder-form input:focus {
+.field-group textarea:focus {
   outline: 2px solid var(--brand-light);
   outline-offset: 2px;
 }
@@ -409,16 +407,11 @@ button.brand-lockup:focus-visible {
 }
 
 .drive-actions {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-}
-
-.drive-folder-form {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1fr) auto;
-  gap: 10px;
+  justify-content: flex-end;
 }
 
 .drive-button {
@@ -605,6 +598,30 @@ button.brand-lockup:focus-visible {
   animation: skeleton-sheen 1.4s ease-in-out infinite;
 }
 
+.drive-create-panel {
+  display: grid;
+  gap: 18px;
+  max-width: 720px;
+  padding: 22px 0 8px;
+  border-top: 1px solid var(--line);
+}
+
+.drive-create-form {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  background: rgba(250, 249, 245, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.drive-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .drive-topic-panel {
   display: grid;
   gap: 18px;
@@ -620,6 +637,7 @@ button.brand-lockup:focus-visible {
 }
 
 .drive-topic-head h2,
+.drive-section-heading h2,
 .drive-section-heading h3 {
   margin: 0;
   color: var(--near-black);
@@ -630,6 +648,40 @@ button.brand-lockup:focus-visible {
   margin: 6px 0 0;
   color: var(--olive);
   line-height: 1.58;
+}
+
+.drive-topic-summary {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  background: rgba(250, 249, 245, 0.66);
+  border: 1px solid rgba(216, 213, 200, 0.72);
+  border-radius: 8px;
+}
+
+.drive-topic-summary h3,
+.drive-topic-summary p {
+  margin: 0;
+}
+
+.drive-topic-summary h3 {
+  color: var(--near-black);
+  font-size: 16px;
+}
+
+.drive-topic-summary p {
+  color: var(--dark-warm);
+  line-height: 1.68;
+  white-space: pre-wrap;
+}
+
+.drive-topic-settings {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  background: rgba(238, 242, 247, 0.54);
+  border: 1px solid #d0dce9;
+  border-radius: 8px;
 }
 
 .drive-topic-grid {
@@ -1966,11 +2018,8 @@ pre code {
   }
 
   .drive-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .drive-folder-form {
-    grid-template-columns: 1fr;
+    display: grid;
+    justify-content: stretch;
   }
 
   .drive-topic-head {
@@ -1980,6 +2029,10 @@ pre code {
   .drive-topic-actions {
     display: grid;
     justify-content: stretch;
+  }
+
+  .drive-create-actions {
+    display: grid;
   }
 
   .drive-button,
