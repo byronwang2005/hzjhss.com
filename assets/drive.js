@@ -7,7 +7,6 @@
     files: [],
     folders: [],
     topic: null,
-    readPrompt: "",
     generatePrompt: "",
     outputs: [],
     displayName: "",
@@ -33,7 +32,6 @@
   const topicTitle = document.querySelector("[data-topic-title]");
   const topicMeta = document.querySelector("[data-topic-meta]");
   const topicDescription = document.querySelector("[data-topic-description]");
-  const readPrompt = document.querySelector("[data-read-prompt]");
   const generatePrompt = document.querySelector("[data-generate-prompt]");
   const saveTopicButton = document.querySelector("[data-save-topic]");
   const deleteModal = document.querySelector("[data-delete-modal]");
@@ -161,7 +159,6 @@
         body: {
           prefix: state.topic.prefix,
           description: topicDescription.value,
-          readPrompt: readPrompt.value,
           generatePrompt: generatePrompt.value,
         },
       });
@@ -274,10 +271,8 @@
           button.disabled = false;
         }, 1600);
       } else {
-        readPrompt.value = data.prompt || "";
-        readPrompt.focus();
-        readPrompt.select();
-        setStatus("浏览器未允许自动复制，已把 agent 分析提示词放入读取提示词框，请手动复制。", true);
+        window.prompt("浏览器未允许自动复制，请手动复制 agent 分析提示词：", data.prompt || "");
+        setStatus("浏览器未允许自动复制，请在弹窗中手动复制 agent 分析提示词。", true);
         button.textContent = originalText;
         button.disabled = false;
       }
@@ -297,7 +292,6 @@
     state.files = Array.isArray(data.files) ? data.files : [];
     state.folders = Array.isArray(data.folders) ? data.folders : [];
     state.topic = null;
-    state.readPrompt = "";
     state.generatePrompt = "";
     state.outputs = [];
 
@@ -319,7 +313,6 @@
 
   function applyTopicDetail(detail) {
     state.topic = detail.topic || null;
-    state.readPrompt = detail.readPrompt || "";
     state.generatePrompt = detail.generatePrompt || "";
     state.outputs = Array.isArray(detail.outputs) ? detail.outputs : [];
   }
@@ -519,7 +512,6 @@
     topicTitle.textContent = state.topic.name;
     topicMeta.textContent = `创建人：${state.topic.createdBy || "-"} · 最近更新：${formatDateTime(state.topic.updatedAt)} · 路径：${state.topic.prefix}`;
     topicDescription.value = state.topic.description || "";
-    readPrompt.value = state.readPrompt;
     generatePrompt.value = state.generatePrompt;
     renderFileRows(outputList, state.outputs, {
       empty: "outputs/ 目录还没有成果。请让本地 AI agent 按提示词生成并回传。",

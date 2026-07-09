@@ -291,8 +291,8 @@ button.brand-lockup:focus-visible {
 
 .drive-title-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.48fr);
-  gap: clamp(24px, 5vw, 70px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
   align-items: end;
   padding-bottom: 28px;
   border-bottom: 1px solid var(--line);
@@ -301,13 +301,6 @@ button.brand-lockup:focus-visible {
 
 .drive-title-row h1 {
   font-size: clamp(42px, 6vw, 72px);
-}
-
-.drive-title-row p:last-child {
-  margin: 0 0 6px;
-  color: var(--olive);
-  line-height: 1.62;
-  text-wrap: pretty;
 }
 
 .drive-login,

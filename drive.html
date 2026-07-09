@@ -9,7 +9,7 @@
     />
     <title>嘉合杉升专题资料库</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-agent-copy" />
+    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-hide-read-prompt" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">跳到正文</a>
@@ -34,12 +34,8 @@
       <section class="drive-shell" aria-labelledby="drive-title">
         <div class="drive-title-row">
           <div>
-            <p class="kicker">Topic Drive</p>
             <h1 id="drive-title">专题资料库</h1>
           </div>
-          <p>
-            按专题沉淀研报、周报资料和 AI 方法论。资料存储在腾讯云 COS，上传和预览使用短时链接。
-          </p>
         </div>
 
         <div class="drive-status" aria-live="polite" data-status></div>
@@ -107,7 +103,6 @@
           <section class="drive-topic-panel" data-topic-panel hidden>
             <div class="drive-topic-head">
               <div>
-                <p class="kicker">Topic Methodology</p>
                 <h2 data-topic-title></h2>
                 <p data-topic-meta></p>
               </div>
@@ -121,10 +116,6 @@
               <label class="field-group">
                 <span>专题说明</span>
                 <textarea data-topic-description rows="4"></textarea>
-              </label>
-              <label class="field-group">
-                <span>读取资料提示词</span>
-                <textarea data-read-prompt rows="12"></textarea>
               </label>
               <label class="field-group">
                 <span>方法论生成与回传提示词</span>
@@ -166,6 +157,6 @@
         </div>
       </div>
     </main>
-    <script src="./assets/drive.js?v=topic-drive-20260709-agent-copy"></script>
+    <script src="./assets/drive.js?v=topic-drive-20260709-hide-read-prompt"></script>
   </body>
 </html>
