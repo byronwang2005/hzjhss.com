@@ -9,6 +9,7 @@ export interface DriveEnv {
   DRIVE_ROOT_PREFIX?: string;
   DRIVE_MAX_FILE_MB?: string;
   DRIVE_SIGN_EXPIRES_SECONDS?: string;
+  DRIVE_SESSION_MAX_AGE_SECONDS?: string;
 }
 
 export interface DriveConfig {
@@ -20,12 +21,14 @@ export interface DriveConfig {
   rootPrefix: string;
   maxFileBytes: number;
   signExpiresSeconds: number;
+  sessionMaxAgeSeconds: number;
 }
 
 const DEFAULT_ROOT_PREFIX = "cloud-drive/";
 const DEFAULT_MAX_FILE_MB = 512;
 const DEFAULT_SIGN_EXPIRES_SECONDS = 900;
 const MAX_SIGN_EXPIRES_SECONDS = 3600;
+const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
 export function getRequiredEnv(env: DriveEnv, key: keyof DriveEnv): string {
   const value = env[key];
@@ -62,6 +65,7 @@ export function getDriveConfig(env: DriveEnv): DriveConfig {
       parsePositiveInt(env.DRIVE_SIGN_EXPIRES_SECONDS, DEFAULT_SIGN_EXPIRES_SECONDS),
       MAX_SIGN_EXPIRES_SECONDS,
     ),
+    sessionMaxAgeSeconds: parsePositiveInt(env.DRIVE_SESSION_MAX_AGE_SECONDS, DEFAULT_SESSION_MAX_AGE_SECONDS),
   };
 }
 

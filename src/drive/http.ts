@@ -1,5 +1,5 @@
 import type { DriveEnv } from "./config";
-import { verifySessionCookie } from "./session";
+import { getDriveSession, type DriveSession } from "./session";
 
 export interface AuthedContext {
   request: Request;
@@ -27,8 +27,13 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
 }
 
 export async function requireDriveSession(context: AuthedContext): Promise<Response | null> {
-  const ok = await verifySessionCookie(context.env, context.request.headers.get("cookie"));
-  return ok ? null : jsonResponse({ error: "请先输入访问码" }, 401);
+  const ok = await getDriveSession(context.env, context.request.headers.get("cookie"));
+  return ok ? null : jsonResponse({ error: "请先输入姓名和访问码" }, 401);
+}
+
+export async function readDriveSession(context: AuthedContext): Promise<DriveSession | Response> {
+  const session = await getDriveSession(context.env, context.request.headers.get("cookie"));
+  return session ?? jsonResponse({ error: "请先输入姓名和访问码" }, 401);
 }
 
 export function errorResponse(error: unknown): Response {

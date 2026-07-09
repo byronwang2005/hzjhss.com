@@ -334,12 +334,14 @@ button.brand-lockup:focus-visible {
   gap: 8px;
 }
 
-.field-group label {
+.field-group label,
+.field-group span {
   color: var(--near-black);
   font-weight: 500;
 }
 
 .field-group input,
+.field-group textarea,
 .drive-folder-form input {
   width: 100%;
   min-height: 42px;
@@ -351,7 +353,13 @@ button.brand-lockup:focus-visible {
   font: inherit;
 }
 
+.field-group textarea {
+  resize: vertical;
+  line-height: 1.58;
+}
+
 .field-group input:focus,
+.field-group textarea:focus,
 .drive-folder-form input:focus {
   outline: 2px solid var(--brand-light);
   outline-offset: 2px;
@@ -412,7 +420,7 @@ button.brand-lockup:focus-visible {
 
 .drive-folder-form {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1fr) auto;
   gap: 10px;
 }
 
@@ -443,6 +451,11 @@ button.brand-lockup:focus-visible {
   border-color: var(--brand);
 }
 
+.drive-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .drive-button:active {
   transform: scale(0.98);
 }
@@ -450,7 +463,9 @@ button.brand-lockup:focus-visible {
 .drive-button:focus-visible,
 .drive-row-actions button:focus-visible,
 .drive-name:focus-visible,
-.drive-breadcrumbs button:focus-visible {
+.drive-breadcrumbs button:focus-visible,
+.drive-danger-dialog button:focus-visible,
+.drive-danger-dialog input:focus-visible {
   outline: 2px solid var(--brand-light);
   outline-offset: 3px;
 }
@@ -465,6 +480,18 @@ button.brand-lockup:focus-visible {
   color: var(--ivory);
   background: var(--brand-light);
   border-color: var(--brand-light);
+}
+
+.drive-button-danger {
+  color: #fff7f2;
+  background: #9f2f27;
+  border-color: #9f2f27;
+}
+
+.drive-button-danger:hover {
+  color: #fff7f2;
+  background: #7f211b;
+  border-color: #7f211b;
 }
 
 .drive-upload-button input {
@@ -517,7 +544,7 @@ button.brand-lockup:focus-visible {
 
 .drive-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(96px, 0.22fr) minmax(120px, 0.28fr) minmax(126px, auto);
+  grid-template-columns: minmax(220px, 1fr) minmax(86px, 0.18fr) minmax(92px, 0.18fr) minmax(108px, 0.22fr) minmax(150px, auto);
   gap: 18px;
   align-items: center;
   min-height: 64px;
@@ -573,6 +600,96 @@ button.brand-lockup:focus-visible {
   border-radius: 999px;
   background-size: 220% 100%;
   animation: skeleton-sheen 1.4s ease-in-out infinite;
+}
+
+.drive-topic-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px 0 8px;
+  border-top: 1px solid var(--line);
+}
+
+.drive-topic-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.drive-topic-head h2,
+.drive-section-heading h3 {
+  margin: 0;
+  color: var(--near-black);
+}
+
+.drive-topic-head p:last-child,
+.drive-section-heading p {
+  margin: 6px 0 0;
+  color: var(--olive);
+  line-height: 1.58;
+}
+
+.drive-topic-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.drive-topic-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.drive-output-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.drive-output-list {
+  border-top-color: rgba(16, 42, 75, 0.28);
+}
+
+.drive-danger-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(28, 24, 20, 0.42);
+}
+
+.drive-danger-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(520px, 100%);
+  padding: 26px;
+  background: var(--ivory);
+  border: 1px solid rgba(159, 47, 39, 0.42);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(28, 24, 20, 0.22);
+}
+
+.drive-danger-dialog h2,
+.drive-danger-dialog p {
+  margin: 0;
+}
+
+.drive-danger-dialog h2 {
+  color: #9f2f27;
+}
+
+.drive-danger-dialog p:not(.kicker) {
+  color: var(--dark-warm);
+  line-height: 1.58;
+}
+
+.drive-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 @keyframes skeleton-sheen {
@@ -1842,6 +1959,10 @@ pre code {
     grid-template-columns: 1fr;
   }
 
+  .drive-topic-head {
+    grid-template-columns: 1fr;
+  }
+
   .drive-button,
   .drive-upload-button {
     width: 100%;
@@ -1860,6 +1981,10 @@ pre code {
 
   .drive-row-actions {
     justify-content: flex-start;
+  }
+
+  .drive-danger-actions {
+    display: grid;
   }
 }
 

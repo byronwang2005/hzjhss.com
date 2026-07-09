@@ -7,7 +7,7 @@
       name="description"
       content="嘉合杉升云盘，支持通过访问码上传、下载和管理腾讯云 COS 文件。"
     />
-    <title>嘉合杉升云盘</title>
+    <title>嘉合杉升专题资料库</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -24,7 +24,7 @@
             alt=""
             aria-hidden="true"
           />
-          <span>嘉合杉升云盘</span>
+          <span>嘉合杉升专题资料库</span>
         </a>
         <nav class="top-nav" aria-label="云盘导航链接">
           <a href="./index.html">AI手册</a>
@@ -35,11 +35,11 @@
       <section class="drive-shell" aria-labelledby="drive-title">
         <div class="drive-title-row">
           <div>
-            <p class="kicker">Cloud Drive</p>
-            <h1 id="drive-title">公司文件云盘</h1>
+            <p class="kicker">Topic Drive</p>
+            <h1 id="drive-title">专题资料库</h1>
           </div>
           <p>
-            文件存储在腾讯云 COS。页面只获取短时链接，上传和下载都由浏览器直连对象存储。
+            按专题沉淀研报、周报资料和 AI 方法论。资料存储在腾讯云 COS，上传和预览使用短时链接。
           </p>
         </div>
 
@@ -47,6 +47,17 @@
 
         <section class="drive-login" data-drive-login>
           <form class="drive-login-form" data-login-form>
+            <div class="field-group">
+              <label for="drive-display-name">登录姓名</label>
+              <input
+                id="drive-display-name"
+                name="displayName"
+                type="text"
+                autocomplete="name"
+                required
+              />
+              <p class="field-help">请使用真实姓名，上传记录会显示该姓名。</p>
+            </div>
             <div class="field-group">
               <label for="drive-access-code">访问码</label>
               <input
@@ -56,9 +67,9 @@
                 autocomplete="current-password"
                 required
               />
-              <p class="field-help">请输入公司内部共享访问码。</p>
+              <p class="field-help">登录态会定时失效，请勿在公共设备保存访问码。</p>
             </div>
-            <button class="drive-button drive-button-primary" type="submit">进入云盘</button>
+            <button class="drive-button drive-button-primary" type="submit">进入资料库</button>
           </form>
         </section>
 
@@ -66,12 +77,13 @@
           <div class="drive-toolbar">
             <nav class="drive-breadcrumbs" aria-label="当前目录" data-breadcrumbs></nav>
             <div class="drive-actions">
-              <form class="drive-folder-form" data-folder-form>
-                <label class="sr-only" for="folder-name">新建文件夹</label>
-                <input id="folder-name" name="folderName" type="text" placeholder="文件夹名称" />
-                <button class="drive-button" type="submit">新建文件夹</button>
+              <form class="drive-folder-form" data-topic-form>
+                <label class="sr-only" for="topic-name">创建专题</label>
+                <input id="topic-name" name="topicName" type="text" placeholder="专题名称" />
+                <input id="topic-description" name="topicDescription" type="text" placeholder="专题说明（可选）" />
+                <button class="drive-button" type="submit">创建专题</button>
               </form>
-              <label class="drive-button drive-button-primary drive-upload-button">
+              <label class="drive-button drive-button-primary drive-upload-button" data-upload-wrap hidden>
                 <span>上传文件</span>
                 <input data-file-input type="file" />
               </label>
@@ -87,9 +99,64 @@
             <progress value="0" max="100" data-progress-bar></progress>
           </div>
 
+          <section class="drive-topic-panel" data-topic-panel hidden>
+            <div class="drive-topic-head">
+              <div>
+                <p class="kicker">Topic Methodology</p>
+                <h2 data-topic-title></h2>
+                <p data-topic-meta></p>
+              </div>
+              <button class="drive-button drive-button-primary" type="button" data-save-topic>保存专题设置</button>
+            </div>
+
+            <div class="drive-topic-grid">
+              <label class="field-group">
+                <span>专题说明</span>
+                <textarea data-topic-description rows="4"></textarea>
+              </label>
+              <label class="field-group">
+                <span>读取资料提示词</span>
+                <textarea data-read-prompt rows="12"></textarea>
+              </label>
+              <label class="field-group">
+                <span>方法论生成与回传提示词</span>
+                <textarea data-generate-prompt rows="12"></textarea>
+              </label>
+            </div>
+
+            <div class="drive-topic-tools">
+              <button class="drive-button" type="button" data-copy-prompt="read">复制读取提示词</button>
+              <button class="drive-button" type="button" data-copy-prompt="generate">复制生成提示词</button>
+            </div>
+
+            <section class="drive-output-section">
+              <div class="drive-section-heading">
+                <h3>专题成果</h3>
+                <p>聚合 outputs/ 下的 Markdown、HTML 和 PDF，可直接预览。</p>
+              </div>
+              <div class="drive-list drive-output-list" data-output-list></div>
+            </section>
+          </section>
+
           <div class="drive-list" data-drive-list aria-live="polite"></div>
         </section>
       </section>
+
+      <div class="drive-danger-modal" data-delete-modal hidden>
+        <div class="drive-danger-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+          <p class="kicker">Danger Zone</p>
+          <h2 id="delete-title">确认删除文件</h2>
+          <p data-delete-message></p>
+          <label class="field-group">
+            <span>请输入完整文件名以确认删除</span>
+            <input data-delete-confirm-input type="text" autocomplete="off" />
+          </label>
+          <div class="drive-danger-actions">
+            <button class="drive-button" type="button" data-delete-cancel>取消</button>
+            <button class="drive-button drive-button-danger" type="button" data-delete-confirm disabled>永久删除</button>
+          </div>
+        </div>
+      </div>
     </main>
     <script src="./assets/drive.js"></script>
   </body>

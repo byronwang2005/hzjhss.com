@@ -1,35 +1,60 @@
 (() => {
   const apiBase = "/api/drive";
+  const promptFiles = new Set(["01-读取专题资料.prompt.md", "02-方法论生成与回传.prompt.md"]);
+  const previewExtensions = new Set(["html", "htm", "pdf", "md", "markdown", "txt"]);
   const state = {
     prefix: "",
     files: [],
     folders: [],
-    loading: false,
+    topic: null,
+    readPrompt: "",
+    generatePrompt: "",
+    outputs: [],
+    displayName: "",
   };
 
   const loginPanel = document.querySelector("[data-drive-login]");
   const appPanel = document.querySelector("[data-drive-app]");
   const loginForm = document.querySelector("[data-login-form]");
-  const folderForm = document.querySelector("[data-folder-form]");
+  const topicForm = document.querySelector("[data-topic-form]");
   const fileInput = document.querySelector("[data-file-input]");
+  const uploadWrap = document.querySelector("[data-upload-wrap]");
   const logoutButton = document.querySelector("[data-logout]");
   const breadcrumbs = document.querySelector("[data-breadcrumbs]");
   const list = document.querySelector("[data-drive-list]");
+  const outputList = document.querySelector("[data-output-list]");
   const status = document.querySelector("[data-status]");
   const progressWrap = document.querySelector("[data-upload-progress]");
   const progressName = document.querySelector("[data-progress-name]");
   const progressPercent = document.querySelector("[data-progress-percent]");
   const progressBar = document.querySelector("[data-progress-bar]");
+  const topicPanel = document.querySelector("[data-topic-panel]");
+  const topicTitle = document.querySelector("[data-topic-title]");
+  const topicMeta = document.querySelector("[data-topic-meta]");
+  const topicDescription = document.querySelector("[data-topic-description]");
+  const readPrompt = document.querySelector("[data-read-prompt]");
+  const generatePrompt = document.querySelector("[data-generate-prompt]");
+  const saveTopicButton = document.querySelector("[data-save-topic]");
+  const deleteModal = document.querySelector("[data-delete-modal]");
+  const deleteMessage = document.querySelector("[data-delete-message]");
+  const deleteInput = document.querySelector("[data-delete-confirm-input]");
+  const deleteCancel = document.querySelector("[data-delete-cancel]");
+  const deleteConfirm = document.querySelector("[data-delete-confirm]");
+  let pendingDelete = null;
 
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(loginForm);
-    setStatus("正在校验访问码...");
+    setStatus("正在校验身份...");
     try {
-      await api("/login", {
+      const data = await api("/login", {
         method: "POST",
-        body: { accessCode: form.get("accessCode") },
+        body: {
+          displayName: form.get("displayName"),
+          accessCode: form.get("accessCode"),
+        },
       });
+      state.displayName = data.displayName || "";
       loginForm.reset();
       showApp();
       await loadList("");
@@ -38,22 +63,26 @@
     }
   });
 
-  folderForm.addEventListener("submit", async (event) => {
+  topicForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const form = new FormData(folderForm);
-    const name = String(form.get("folderName") || "").trim();
+    const form = new FormData(topicForm);
+    const name = String(form.get("topicName") || "").trim();
     if (!name) {
-      setStatus("请输入文件夹名称。", true);
+      setStatus("请输入专题名称。", true);
       return;
     }
     try {
-      await api("/folder", {
+      setStatus("正在创建专题...");
+      const detail = await api("/topic", {
         method: "POST",
-        body: { prefix: state.prefix, name },
+        body: {
+          name,
+          description: form.get("topicDescription"),
+        },
       });
-      folderForm.reset();
-      setStatus("文件夹已创建。");
-      await loadList(state.prefix);
+      topicForm.reset();
+      setStatus("专题已创建，默认提示词已生成。");
+      await loadList(detail.topic.prefix);
     } catch (error) {
       setStatus(error.message, true);
     }
@@ -65,11 +94,15 @@
       return;
     }
     try {
-      if (state.files.some((item) => item.name === file.name) && !window.confirm("当前目录已有同名文件，是否覆盖？")) {
+      if (!state.prefix || !state.topic) {
+        setStatus("请先进入一个专题再上传资料。", true);
         return;
       }
-      await uploadFile(file);
-      setStatus("上传完成。");
+      if (state.files.some((item) => item.name === file.name) && !(await confirmDeleteLikeOverwrite(file.name))) {
+        return;
+      }
+      await uploadFile(file, state.prefix, "material");
+      setStatus("上传完成，上传者已登记。");
       await loadList(state.prefix);
     } catch (error) {
       setStatus(error.message, true);
@@ -81,11 +114,84 @@
 
   logoutButton.addEventListener("click", async () => {
     await api("/logout", { method: "POST" }).catch(() => null);
+    state.displayName = "";
     showLogin();
-    setStatus("已退出云盘。");
+    setStatus("已退出资料库。");
   });
 
-  list.addEventListener("click", async (event) => {
+  list.addEventListener("click", handleListAction);
+  outputList.addEventListener("click", handleListAction);
+
+  breadcrumbs.addEventListener("click", async (event) => {
+    const target = event.target.closest("[data-prefix]");
+    if (target) {
+      await loadList(target.dataset.prefix || "");
+    }
+  });
+
+  saveTopicButton.addEventListener("click", async () => {
+    if (!state.topic) {
+      return;
+    }
+    try {
+      setStatus("正在保存专题设置...");
+      const detail = await api("/topic", {
+        method: "PUT",
+        body: {
+          prefix: state.topic.prefix,
+          description: topicDescription.value,
+          readPrompt: readPrompt.value,
+          generatePrompt: generatePrompt.value,
+        },
+      });
+      applyTopicDetail(detail);
+      renderTopicPanel();
+      setStatus("专题设置已保存。");
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+
+  topicPanel.addEventListener("click", async (event) => {
+    const target = event.target.closest("[data-copy-prompt]");
+    if (!target) {
+      return;
+    }
+    const value = target.dataset.copyPrompt === "read" ? readPrompt.value : generatePrompt.value;
+    try {
+      await navigator.clipboard.writeText(value);
+      setStatus("提示词已复制。");
+    } catch {
+      setStatus("复制失败，请手动选中文本复制。", true);
+    }
+  });
+
+  deleteInput.addEventListener("input", () => {
+    deleteConfirm.disabled = !pendingDelete || deleteInput.value !== pendingDelete.name;
+  });
+
+  deleteCancel.addEventListener("click", closeDeleteModal);
+
+  deleteConfirm.addEventListener("click", async () => {
+    if (!pendingDelete || deleteInput.value !== pendingDelete.name) {
+      return;
+    }
+    const target = pendingDelete;
+    closeDeleteModal();
+    await removeObject(target.path);
+  });
+
+  loadList("").catch((error) => {
+    if (error.status === 401) {
+      showLogin();
+      setStatus("请输入姓名和访问码后继续。");
+      return;
+    }
+    showLogin();
+    setStatus(error.message, true);
+  });
+
+  async function handleListAction(event) {
     const target = event.target.closest("[data-action]");
     if (!target) {
       return;
@@ -96,62 +202,75 @@
       await loadList(path);
       return;
     }
+    if (action === "preview") {
+      await openFile(path);
+      return;
+    }
     if (action === "download") {
       await downloadFile(path);
       return;
     }
     if (action === "delete-file") {
-      await removeObject(path, "确定删除这个文件吗？");
-      return;
+      openDeleteModal(path, target.dataset.name || path.split("/").pop() || path);
     }
-    if (action === "delete-folder") {
-      await removeObject(path, "确定删除这个文件夹标记吗？目录内文件不会被递归删除。");
-    }
-  });
-
-  breadcrumbs.addEventListener("click", async (event) => {
-    const target = event.target.closest("[data-prefix]");
-    if (target) {
-      await loadList(target.dataset.prefix || "");
-    }
-  });
-
-  loadList("").catch((error) => {
-    if (error.status === 401) {
-      showLogin();
-      setStatus("请输入访问码后继续。");
-      return;
-    }
-    showLogin();
-    setStatus(error.message, true);
-  });
+  }
 
   async function loadList(prefix) {
-    state.loading = true;
     showApp();
-    renderSkeleton();
+    renderSkeleton(list);
     const params = new URLSearchParams({ prefix });
     const data = await api(`/list?${params.toString()}`);
     state.prefix = data.prefix || "";
     state.files = Array.isArray(data.files) ? data.files : [];
     state.folders = Array.isArray(data.folders) ? data.folders : [];
-    state.loading = false;
+    state.topic = null;
+    state.readPrompt = "";
+    state.generatePrompt = "";
+    state.outputs = [];
+
+    if (isTopicRoot(state.prefix)) {
+      try {
+        const detail = await api(`/topic?${new URLSearchParams({ prefix: state.prefix }).toString()}`);
+        applyTopicDetail(detail);
+      } catch (error) {
+        setStatus(`这个文件夹还不是标准专题：${error.message}`, true);
+      }
+    }
+
+    renderControls();
     renderBreadcrumbs();
+    renderTopicPanel();
     renderList();
-    setStatus(state.files.length || state.folders.length ? "目录已更新。" : "当前目录为空。");
+    setStatus(statusText());
   }
 
-  async function uploadFile(file) {
+  function applyTopicDetail(detail) {
+    state.topic = detail.topic || null;
+    state.readPrompt = detail.readPrompt || "";
+    state.generatePrompt = detail.generatePrompt || "";
+    state.outputs = Array.isArray(detail.outputs) ? detail.outputs : [];
+  }
+
+  async function uploadFile(file, prefix, kind) {
     const data = await api("/upload-url", {
       method: "POST",
       body: {
-        prefix: state.prefix,
+        prefix,
         filename: file.name,
         size: file.size,
         contentType: file.type || "application/octet-stream",
       },
     });
     await uploadWithProgress(data.url, file, data.contentType);
+    await api("/upload-complete", {
+      method: "POST",
+      body: {
+        path: data.path,
+        size: file.size,
+        contentType: data.contentType,
+        kind,
+      },
+    });
   }
 
   function uploadWithProgress(url, file, contentType) {
@@ -178,6 +297,18 @@
     });
   }
 
+  async function openFile(path) {
+    try {
+      const data = await api("/download-url", {
+        method: "POST",
+        body: { path },
+      });
+      window.open(data.url, "_blank", "noopener");
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  }
+
   async function downloadFile(path) {
     try {
       const data = await api("/download-url", {
@@ -190,10 +321,7 @@
     }
   }
 
-  async function removeObject(path, message) {
-    if (!window.confirm(message)) {
-      return;
-    }
+  async function removeObject(path) {
     try {
       await api("/object", {
         method: "DELETE",
@@ -225,6 +353,146 @@
     return data;
   }
 
+  function renderControls() {
+    topicForm.hidden = state.prefix !== "";
+    uploadWrap.hidden = !state.topic;
+  }
+
+  function renderBreadcrumbs() {
+    const segments = state.prefix.split("/").filter(Boolean);
+    const parts = [`<button type="button" data-prefix="">专题库</button>`];
+    let prefix = "";
+    for (const segment of segments) {
+      prefix += `${segment}/`;
+      parts.push(`<button type="button" data-prefix="${escapeAttr(prefix)}">${escapeHtml(segment)}</button>`);
+    }
+    breadcrumbs.innerHTML = parts.join("<span>/</span>");
+  }
+
+  function renderTopicPanel() {
+    if (!state.topic) {
+      topicPanel.hidden = true;
+      return;
+    }
+    topicPanel.hidden = false;
+    topicTitle.textContent = state.topic.name;
+    topicMeta.textContent = `创建人：${state.topic.createdBy || "-"} · 最近更新：${formatDateTime(state.topic.updatedAt)} · 路径：${state.topic.prefix}`;
+    topicDescription.value = state.topic.description || "";
+    readPrompt.value = state.readPrompt;
+    generatePrompt.value = state.generatePrompt;
+    renderFileRows(outputList, state.outputs, {
+      empty: "outputs/ 目录还没有成果。请让本地 AI agent 按提示词生成并回传。",
+      includePreview: true,
+      title: "成果名称",
+    });
+  }
+
+  function renderSkeleton(target) {
+    target.innerHTML = `
+      <div class="drive-row drive-row-head">
+        <span>名称</span><span>类型</span><span>上传者</span><span>更新</span><span>操作</span>
+      </div>
+      ${Array.from({ length: 4 }).map(() => '<div class="drive-row drive-skeleton"><span></span><span></span><span></span><span></span><span></span></div>').join("")}
+    `;
+  }
+
+  function renderList() {
+    if (!state.prefix) {
+      renderRootTopics();
+      return;
+    }
+    const visibleFolders = state.folders.filter((folder) => folder.name !== "outputs");
+    const visibleFiles = state.files.filter((file) => !promptFiles.has(file.name));
+    const rows = [];
+    rows.push('<div class="drive-row drive-row-head"><span>资料名称</span><span>类型</span><span>上传者</span><span>更新</span><span>操作</span></div>');
+    for (const folder of visibleFolders) {
+      rows.push(renderFolderRow(folder, "文件夹"));
+    }
+    rows.push(...visibleFiles.map((file) => renderFileRow(file, { includePreview: true })));
+    if (!visibleFolders.length && !visibleFiles.length) {
+      rows.push('<div class="drive-empty">这个专题还没有资料。上传研报、周报或补充材料开始沉淀。</div>');
+    }
+    list.innerHTML = rows.join("");
+  }
+
+  function renderRootTopics() {
+    const rows = [];
+    rows.push('<div class="drive-row drive-row-head"><span>专题名称</span><span>类型</span><span>上传者</span><span>更新</span><span>操作</span></div>');
+    for (const folder of state.folders) {
+      rows.push(renderFolderRow(folder, "专题"));
+    }
+    for (const file of state.files) {
+      rows.push(renderFileRow(file, { includePreview: false }));
+    }
+    if (!state.folders.length && !state.files.length) {
+      rows.push('<div class="drive-empty">还没有专题。创建一个专题后，会自动生成方法论提示词和成果目录。</div>');
+    }
+    list.innerHTML = rows.join("");
+  }
+
+  function renderFileRows(target, files, options) {
+    const rows = [];
+    rows.push(`<div class="drive-row drive-row-head"><span>${escapeHtml(options.title || "名称")}</span><span>类型</span><span>上传者</span><span>更新</span><span>操作</span></div>`);
+    rows.push(...files.map((file) => renderFileRow(file, { includePreview: options.includePreview })));
+    if (!files.length) {
+      rows.push(`<div class="drive-empty">${escapeHtml(options.empty)}</div>`);
+    }
+    target.innerHTML = rows.join("");
+  }
+
+  function renderFolderRow(folder, label) {
+    return `
+      <div class="drive-row">
+        <button class="drive-name drive-folder-name" type="button" data-action="open-folder" data-path="${escapeAttr(folder.path)}">${escapeHtml(folder.name)}</button>
+        <span>${escapeHtml(label)}</span>
+        <span>-</span>
+        <span>-</span>
+        <span class="drive-row-actions">
+          <button type="button" data-action="open-folder" data-path="${escapeAttr(folder.path)}">打开</button>
+        </span>
+      </div>
+    `;
+  }
+
+  function renderFileRow(file, options) {
+    const preview = options.includePreview && isPreviewable(file.name)
+      ? `<button type="button" data-action="preview" data-path="${escapeAttr(file.path)}">预览</button>`
+      : "";
+    return `
+      <div class="drive-row">
+        <span class="drive-name">${escapeHtml(file.name)}</span>
+        <span>${escapeHtml(fileLabel(file))}</span>
+        <span>${escapeHtml(file.uploadedBy || "-")}</span>
+        <span>${formatDate(file.uploadedAt || file.lastModified)}</span>
+        <span class="drive-row-actions">
+          ${preview}
+          <button type="button" data-action="download" data-path="${escapeAttr(file.path)}">下载</button>
+          <button type="button" data-action="delete-file" data-path="${escapeAttr(file.path)}" data-name="${escapeAttr(file.name)}">删除</button>
+        </span>
+      </div>
+    `;
+  }
+
+  function openDeleteModal(path, name) {
+    pendingDelete = { path, name };
+    deleteMessage.textContent = `将永久删除「${name}」。此操作不会删除其他文件，但无法从资料库恢复。`;
+    deleteInput.value = "";
+    deleteConfirm.disabled = true;
+    deleteModal.hidden = false;
+    window.setTimeout(() => deleteInput.focus(), 0);
+  }
+
+  function closeDeleteModal() {
+    pendingDelete = null;
+    deleteModal.hidden = true;
+    deleteInput.value = "";
+    deleteConfirm.disabled = true;
+  }
+
+  async function confirmDeleteLikeOverwrite(name) {
+    return window.confirm(`当前专题已有同名文件「${name}」，继续上传会覆盖原文件。是否继续？`);
+  }
+
   function showLogin() {
     loginPanel.hidden = false;
     appPanel.hidden = true;
@@ -235,63 +503,19 @@
     appPanel.hidden = false;
   }
 
-  function renderBreadcrumbs() {
-    const segments = state.prefix.split("/").filter(Boolean);
-    const parts = [`<button type="button" data-prefix="">根目录</button>`];
-    let prefix = "";
-    for (const segment of segments) {
-      prefix += `${segment}/`;
-      parts.push(`<button type="button" data-prefix="${escapeAttr(prefix)}">${escapeHtml(segment)}</button>`);
-    }
-    breadcrumbs.innerHTML = parts.join("<span>/</span>");
-  }
-
-  function renderSkeleton() {
-    list.innerHTML = `
-      <div class="drive-row drive-row-head">
-        <span>名称</span><span>大小</span><span>更新</span><span>操作</span>
-      </div>
-      ${Array.from({ length: 4 }).map(() => '<div class="drive-row drive-skeleton"><span></span><span></span><span></span><span></span></div>').join("")}
-    `;
-  }
-
-  function renderList() {
-    const rows = [];
-    rows.push('<div class="drive-row drive-row-head"><span>名称</span><span>大小</span><span>更新</span><span>操作</span></div>');
-    for (const folder of state.folders) {
-      rows.push(`
-        <div class="drive-row">
-          <button class="drive-name drive-folder-name" type="button" data-action="open-folder" data-path="${escapeAttr(folder.path)}">${escapeHtml(folder.name)}</button>
-          <span>文件夹</span>
-          <span>-</span>
-          <span class="drive-row-actions">
-            <button type="button" data-action="delete-folder" data-path="${escapeAttr(folder.path)}">删除标记</button>
-          </span>
-        </div>
-      `);
-    }
-    for (const file of state.files) {
-      rows.push(`
-        <div class="drive-row">
-          <span class="drive-name">${escapeHtml(file.name)}</span>
-          <span>${formatBytes(file.size)}</span>
-          <span>${formatDate(file.lastModified)}</span>
-          <span class="drive-row-actions">
-            <button type="button" data-action="download" data-path="${escapeAttr(file.path)}">下载</button>
-            <button type="button" data-action="delete-file" data-path="${escapeAttr(file.path)}">删除</button>
-          </span>
-        </div>
-      `);
-    }
-    if (!state.folders.length && !state.files.length) {
-      rows.push('<div class="drive-empty">这个目录还没有文件。上传一个文件，或先新建文件夹。</div>');
-    }
-    list.innerHTML = rows.join("");
-  }
-
   function setStatus(message, isError = false) {
     status.textContent = message;
     status.classList.toggle("is-error", isError);
+  }
+
+  function statusText() {
+    if (!state.prefix) {
+      return state.folders.length ? "专题列表已更新。" : "当前还没有专题。";
+    }
+    if (state.topic) {
+      return "专题资料和成果已更新。";
+    }
+    return state.files.length || state.folders.length ? "目录已更新。" : "当前目录为空。";
   }
 
   function showProgress(name, percent) {
@@ -304,6 +528,30 @@
   function hideProgress() {
     progressWrap.hidden = true;
     progressBar.value = 0;
+  }
+
+  function isTopicRoot(prefix) {
+    return prefix.split("/").filter(Boolean).length === 1;
+  }
+
+  function isPreviewable(name) {
+    return previewExtensions.has(extension(name));
+  }
+
+  function extension(name) {
+    const index = name.lastIndexOf(".");
+    return index === -1 ? "" : name.slice(index + 1).toLowerCase();
+  }
+
+  function fileLabel(file) {
+    if (file.kind === "output") {
+      return "成果";
+    }
+    if (file.kind === "prompt") {
+      return "提示词";
+    }
+    const ext = extension(file.name);
+    return ext ? ext.toUpperCase() : formatBytes(file.size);
   }
 
   function formatBytes(bytes) {
@@ -320,6 +568,19 @@
       return "-";
     }
     return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  }
+
+  function formatDateTime(value) {
+    if (!value) {
+      return "-";
+    }
+    return new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",

@@ -3,6 +3,7 @@ import { getDriveConfig } from "../../../src/drive/config";
 import { deleteObject } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody, requireDriveSession } from "../../../src/drive/http";
 import { normalizeObjectPath } from "../../../src/drive/paths";
+import { isSystemFileName, removeFileMetadata } from "../../../src/drive/topic";
 
 export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -13,7 +14,14 @@ export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env })
 
     const body = await readJsonBody(request);
     const path = normalizeObjectPath(body.path, { allowTrailingSlash: true });
-    await deleteObject(getDriveConfig(env), path);
+    const config = getDriveConfig(env);
+    if (!path.endsWith("/") && isSystemFileName(path.split("/").pop() || "")) {
+      return jsonResponse({ error: "不能删除系统文件" }, 400);
+    }
+    await deleteObject(config, path);
+    if (!path.endsWith("/")) {
+      await removeFileMetadata(config, path);
+    }
     return jsonResponse({ ok: true, path });
   } catch (error) {
     return errorResponse(error);

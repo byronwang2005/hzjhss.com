@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { normalizeFileName, normalizeObjectPath, normalizePrefix } from "../src/drive/paths";
 import { parseListObjectsXml } from "../src/drive/cos";
-import { createSessionCookie, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
+import { createSessionCookie, getDriveSession, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
+import { createDefaultPrompts, mergeListMetadata, normalizeTopicPrefix } from "../src/drive/topic";
 import type { DriveEnv } from "../src/drive/config";
 
 const env: DriveEnv = {
   DRIVE_ACCESS_CODE: "open-sesame",
   DRIVE_SESSION_SECRET: "test-secret",
+  DRIVE_SESSION_MAX_AGE_SECONDS: "60",
 };
 
 describe("drive path validation", () => {
@@ -25,6 +27,12 @@ describe("drive path validation", () => {
     expect(() => normalizeObjectPath("reports/")).toThrow();
     expect(normalizeObjectPath("reports/", { allowTrailingSlash: true })).toBe("reports/");
   });
+
+  it("accepts only root-level topic prefixes", () => {
+    expect(normalizeTopicPrefix("新能源汽车/")).toBe("新能源汽车/");
+    expect(() => normalizeTopicPrefix("行业/新能源/")).toThrow();
+    expect(() => normalizeTopicPrefix("")).toThrow();
+  });
 });
 
 describe("COS list XML parser", () => {
@@ -41,6 +49,11 @@ describe("COS list XML parser", () => {
           <Key>cloud-drive/reports/</Key>
           <LastModified>2026-07-08T08:00:00.000Z</LastModified>
           <Size>0</Size>
+        </Contents>
+        <Contents>
+          <Key>cloud-drive/reports/._drive-meta.json</Key>
+          <LastModified>2026-07-08T08:00:00.000Z</LastModified>
+          <Size>100</Size>
         </Contents>
         <CommonPrefixes>
           <Prefix>cloud-drive/reports/archive/</Prefix>
@@ -62,20 +75,74 @@ describe("COS list XML parser", () => {
     ]);
     expect(result.nextCursor).toBe("next-page");
   });
+
+  it("merges directory metadata into listed files", () => {
+    const result = mergeListMetadata(
+      {
+        prefix: "reports/",
+        folders: [],
+        files: [
+          {
+            name: "current.pdf",
+            path: "reports/current.pdf",
+            size: 2048,
+            lastModified: "2026-07-08T08:00:00.000Z",
+            etag: "abc",
+          },
+        ],
+        nextCursor: null,
+      },
+      {
+        version: 1,
+        files: {
+          "current.pdf": {
+            uploadedBy: "王小明",
+            uploadedAt: "2026-07-08T08:01:00.000Z",
+            contentType: "application/pdf",
+            size: 2048,
+            kind: "output",
+          },
+        },
+      },
+    );
+
+    expect(result.files[0]).toMatchObject({
+      uploadedBy: "王小明",
+      contentType: "application/pdf",
+      kind: "output",
+    });
+  });
 });
 
 describe("drive sessions", () => {
   it("creates and verifies a signed session cookie", async () => {
-    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/drive.html");
+    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/drive.html", "王小明");
     expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("Max-Age=60");
     await expect(verifySessionCookie(env, cookie)).resolves.toBe(true);
+    await expect(getDriveSession(env, cookie)).resolves.toMatchObject({ displayName: "王小明" });
   });
 
   it("rejects tampered cookies and wrong access codes", async () => {
-    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/drive.html");
+    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/drive.html", "王小明");
     const tampered = cookie.replace(/jhss_drive_session=([^.;]+)\./, "jhss_drive_session=$1x.");
     await expect(verifySessionCookie(env, tampered)).resolves.toBe(false);
     await expect(verifyAccessCode(env, "wrong")).resolves.toBe(false);
     await expect(verifyAccessCode(env, "open-sesame")).resolves.toBe(true);
+  });
+});
+
+describe("topic prompts", () => {
+  it("creates default prompts with topic paths and upload callback", () => {
+    const prompts = createDefaultPrompts({
+      origin: "https://example.com",
+      name: "新能源",
+      prefix: "新能源/",
+      description: "跟踪新能源行业。",
+    });
+
+    expect(prompts.readPrompt).toContain("新能源/");
+    expect(prompts.generatePrompt).toContain("新能源/outputs/");
+    expect(prompts.generatePrompt).toContain("/api/drive/upload-complete");
   });
 });

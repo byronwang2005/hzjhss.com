@@ -14,6 +14,10 @@ export interface DriveFile {
   size: number;
   lastModified: string;
   etag: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  contentType?: string;
+  kind?: string;
 }
 
 export interface DriveListResult {
@@ -60,6 +64,37 @@ export async function createFolder(config: DriveConfig, relativeFolderPath: stri
   if (!response.ok) {
     throw new Error(`COS 文件夹创建失败: ${response.status}`);
   }
+}
+
+export async function putObjectText(
+  config: DriveConfig,
+  relativePath: string,
+  text: string,
+  contentType = "text/plain; charset=utf-8",
+): Promise<void> {
+  const key = makeObjectKey(config.rootPrefix, relativePath);
+  const response = await signedFetch(config, objectUrl(config, key), {
+    method: "PUT",
+    headers: {
+      "content-type": contentType,
+    },
+    body: text,
+  });
+  if (!response.ok) {
+    throw new Error(`COS 写入请求失败: ${response.status}`);
+  }
+}
+
+export async function getObjectText(config: DriveConfig, relativePath: string): Promise<string | null> {
+  const key = makeObjectKey(config.rootPrefix, relativePath);
+  const response = await signedFetch(config, objectUrl(config, key), { method: "GET" });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`COS 读取请求失败: ${response.status}`);
+  }
+  return response.text();
 }
 
 export async function deleteObject(config: DriveConfig, relativePath: string): Promise<void> {
@@ -123,10 +158,14 @@ export function parseListObjectsXml(xml: string, rootPrefix: string, currentPref
         etag: entry.etag,
       };
     })
-    .filter((file) => file.name && !file.name.includes("/"));
+    .filter((file) => file.name && !file.name.includes("/") && !isSystemFile(file.name));
 
   const nextCursor = result.NextContinuationToken ? String(result.NextContinuationToken) : null;
   return { prefix: currentPrefix, folders, files, nextCursor };
+}
+
+function isSystemFile(name: string): boolean {
+  return name.startsWith("._");
 }
 
 function createClient(config: DriveConfig): AwsClient {

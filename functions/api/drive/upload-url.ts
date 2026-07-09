@@ -3,6 +3,7 @@ import { getDriveConfig } from "../../../src/drive/config";
 import { presignObjectUrl } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody, requireDriveSession } from "../../../src/drive/http";
 import { normalizeFileName, normalizePrefix } from "../../../src/drive/paths";
+import { isSystemFileName } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -15,6 +16,9 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     const config = getDriveConfig(env);
     const prefix = normalizePrefix(body.prefix ?? "");
     const filename = normalizeFileName(body.filename);
+    if (isSystemFileName(filename)) {
+      return jsonResponse({ error: "不能上传系统文件名" }, 400);
+    }
     const size = typeof body.size === "number" ? body.size : Number(body.size ?? 0);
     if (!Number.isFinite(size) || size <= 0) {
       return jsonResponse({ error: "文件大小无效" }, 400);

@@ -2,23 +2,33 @@ import type { DriveEnv } from "./config";
 import { getRequiredEnv } from "./config";
 
 const COOKIE_NAME = "jhss_drive_session";
-const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+const MAX_DISPLAY_NAME_LENGTH = 40;
+const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
-interface SessionPayload {
+export interface DriveSession {
   iat: number;
   exp: number;
+  displayName: string;
 }
 
-export async function createSessionCookie(env: DriveEnv, requestUrl: string): Promise<string> {
+export async function createSessionCookie(env: DriveEnv, requestUrl: string, displayName: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload: SessionPayload = {
+  const maxAge = getSessionMaxAgeSeconds(env);
+  const payload: DriveSession = {
     iat: now,
-    exp: now + SESSION_MAX_AGE_SECONDS,
+    exp: now + maxAge,
+    displayName: normalizeDisplayName(displayName),
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = await sign(encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
   const secure = new URL(requestUrl).protocol === "https:" ? "; Secure" : "";
-  return `${COOKIE_NAME}=${encodedPayload}.${signature}; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}; HttpOnly; SameSite=Lax${secure}`;
+  return `${COOKIE_NAME}=${encodedPayload}.${signature}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`;
+}
+
+function getSessionMaxAgeSeconds(env: DriveEnv): number {
+  const parsed = Number.parseInt(env.DRIVE_SESSION_MAX_AGE_SECONDS || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_SESSION_MAX_AGE_SECONDS;
 }
 
 export function clearSessionCookie(requestUrl: string): string {
@@ -27,25 +37,39 @@ export function clearSessionCookie(requestUrl: string): string {
 }
 
 export async function verifySessionCookie(env: DriveEnv, cookieHeader: string | null): Promise<boolean> {
+  return (await getDriveSession(env, cookieHeader)) !== null;
+}
+
+export async function getDriveSession(env: DriveEnv, cookieHeader: string | null): Promise<DriveSession | null> {
   const value = parseCookie(cookieHeader, COOKIE_NAME);
   if (!value) {
-    return false;
+    return null;
   }
   const [encodedPayload, providedSignature] = value.split(".");
   if (!encodedPayload || !providedSignature) {
-    return false;
+    return null;
   }
 
   const expectedSignature = await sign(encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
   if (!constantTimeEqual(providedSignature, expectedSignature)) {
-    return false;
+    return null;
   }
 
   try {
-    const payload = JSON.parse(base64UrlDecode(encodedPayload)) as SessionPayload;
-    return Number.isFinite(payload.exp) && payload.exp > Math.floor(Date.now() / 1000);
+    const payload = JSON.parse(base64UrlDecode(encodedPayload)) as DriveSession;
+    if (!Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    if (typeof payload.displayName !== "string" || !payload.displayName.trim()) {
+      return null;
+    }
+    return {
+      iat: Number(payload.iat) || 0,
+      exp: payload.exp,
+      displayName: normalizeDisplayName(payload.displayName),
+    };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -57,6 +81,23 @@ export async function verifyAccessCode(env: DriveEnv, provided: unknown): Promis
   const expectedDigest = await digest(expected);
   const providedDigest = await digest(provided);
   return constantTimeEqual(expectedDigest, providedDigest);
+}
+
+export function normalizeDisplayName(input: unknown): string {
+  if (typeof input !== "string") {
+    throw new Error("请输入登录姓名");
+  }
+  const displayName = input.trim().replace(/\s+/g, " ");
+  if (!displayName) {
+    throw new Error("请输入登录姓名");
+  }
+  if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
+    throw new Error("登录姓名过长");
+  }
+  if (CONTROL_CHARS.test(displayName)) {
+    throw new Error("登录姓名包含非法字符");
+  }
+  return displayName;
 }
 
 function parseCookie(cookieHeader: string | null, name: string): string | null {

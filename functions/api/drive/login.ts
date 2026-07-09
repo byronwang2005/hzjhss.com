@@ -1,6 +1,6 @@
 import type { DriveEnv } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readJsonBody } from "../../../src/drive/http";
-import { createSessionCookie, verifyAccessCode } from "../../../src/drive/session";
+import { createSessionCookie, normalizeDisplayName, verifyAccessCode } from "../../../src/drive/session";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -10,8 +10,9 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       return jsonResponse({ error: "访问码不正确" }, 401);
     }
 
-    const cookie = await createSessionCookie(env, request.url);
-    return jsonResponse({ ok: true }, 200, { "set-cookie": cookie });
+    const displayName = normalizeDisplayName(body.displayName);
+    const cookie = await createSessionCookie(env, request.url, displayName);
+    return jsonResponse({ ok: true, displayName }, 200, { "set-cookie": cookie });
   } catch (error) {
     return errorResponse(error);
   }
