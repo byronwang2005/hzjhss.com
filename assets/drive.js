@@ -135,7 +135,7 @@
     await api("/logout", { method: "POST" }).catch(() => null);
     state.displayName = "";
     showLogin();
-    setStatus("已退出资料库。");
+    setStatus("已退出登录。");
   });
 
   list.addEventListener("click", handleListAction);
@@ -644,11 +644,13 @@
   function showLogin() {
     loginPanel.hidden = false;
     appPanel.hidden = true;
+    logoutButton.hidden = true;
   }
 
   function showApp() {
     loginPanel.hidden = true;
     appPanel.hidden = false;
+    logoutButton.hidden = false;
   }
 
   function setStatus(message, isError = false) {

@@ -291,9 +291,9 @@ button.brand-lockup:focus-visible {
 
 .drive-title-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
-  align-items: end;
+  align-items: center;
   padding-bottom: 28px;
   border-bottom: 1px solid var(--line);
   animation: page-rise var(--motion-ios-duration-page) var(--motion-ios-standard) both;
@@ -301,6 +301,10 @@ button.brand-lockup:focus-visible {
 
 .drive-title-row h1 {
   font-size: clamp(42px, 6vw, 72px);
+}
+
+.drive-title-row .drive-button {
+  justify-self: end;
 }
 
 .drive-login,
@@ -1953,8 +1957,12 @@ pre code {
   }
 
   .drive-title-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 14px;
+  }
+
+  .drive-title-row .drive-button {
+    width: auto;
   }
 
   .drive-actions {
