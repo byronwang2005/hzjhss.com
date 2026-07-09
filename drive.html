@@ -9,7 +9,7 @@
     />
     <title>嘉合杉升专题资料库</title>
     <link rel="icon" type="image/png" href="./assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-agent" />
+    <link rel="stylesheet" href="./styles.css?v=topic-drive-20260709-agent-copy" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">跳到正文</a>
@@ -111,7 +111,10 @@
                 <h2 data-topic-title></h2>
                 <p data-topic-meta></p>
               </div>
-              <button class="drive-button drive-button-primary" type="button" data-save-topic>保存专题设置</button>
+              <div class="drive-topic-actions">
+                <button class="drive-button drive-button-primary" type="button" data-save-topic>保存专题设置</button>
+                <button class="drive-button drive-button-danger" type="button" data-delete-topic>删除专题</button>
+              </div>
             </div>
 
             <div class="drive-topic-grid">
@@ -131,7 +134,6 @@
 
             <div class="drive-topic-tools">
               <button class="drive-button drive-button-primary" type="button" data-agent-manifest>获取 agent 分析提示词</button>
-              <button class="drive-button" type="button" data-copy-prompt="read">复制读取提示词</button>
               <button class="drive-button" type="button" data-copy-prompt="generate">复制生成提示词</button>
             </div>
 
@@ -151,10 +153,10 @@
       <div class="drive-danger-modal" data-delete-modal hidden>
         <div class="drive-danger-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
           <p class="kicker">Danger Zone</p>
-          <h2 id="delete-title">确认删除文件</h2>
+          <h2 id="delete-title" data-delete-title>确认删除文件</h2>
           <p data-delete-message></p>
           <label class="field-group">
-            <span>请输入完整文件名以确认删除</span>
+            <span data-delete-input-label>请输入完整文件名以确认删除</span>
             <input data-delete-confirm-input type="text" autocomplete="off" />
           </label>
           <div class="drive-danger-actions">
@@ -164,6 +166,6 @@
         </div>
       </div>
     </main>
-    <script src="./assets/drive.js?v=topic-drive-20260709-agent"></script>
+    <script src="./assets/drive.js?v=topic-drive-20260709-agent-copy"></script>
   </body>
 </html>

@@ -1,5 +1,15 @@
 import type { DriveConfig } from "./config";
-import { type DriveFile, type DriveListResult, createFolder, getObjectText, listObjects, presignObjectUrl, putObjectText } from "./cos";
+import {
+  type DriveFile,
+  type DriveListResult,
+  createFolder,
+  deleteObjects,
+  getObjectText,
+  listObjectPaths,
+  listObjects,
+  presignObjectUrl,
+  putObjectText,
+} from "./cos";
 import { normalizeFolderName, normalizeObjectPath, normalizePrefix } from "./paths";
 
 export const DRIVE_META_FILENAME = "._drive-meta.json";
@@ -38,6 +48,13 @@ export interface TopicDetail {
   readPrompt: string;
   generatePrompt: string;
   outputs: DriveFile[];
+}
+
+export interface DeleteTopicResult {
+  ok: true;
+  prefix: string;
+  name: string;
+  deletedCount: number;
 }
 
 export interface AgentManifestFile {
@@ -196,6 +213,25 @@ export async function updateTopic(
 
   const outputs = await listDirectoryWithMetadata(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
   return { topic: updatedTopic, readPrompt, generatePrompt, outputs: outputs.files };
+}
+
+export async function deleteTopic(
+  config: DriveConfig,
+  input: { prefix: unknown; confirmName: unknown },
+): Promise<DeleteTopicResult> {
+  const prefix = normalizeTopicPrefix(input.prefix);
+  const topic = await readTopicMetadata(config, prefix);
+  if (typeof input.confirmName !== "string" || input.confirmName.trim() !== topic.name) {
+    throw new Error("专题名称确认不一致");
+  }
+  const paths = await listAllObjectPaths(config, prefix);
+  await deleteObjects(config, paths);
+  return {
+    ok: true,
+    prefix,
+    name: topic.name,
+    deletedCount: paths.length,
+  };
 }
 
 export async function listDirectoryWithMetadata(
@@ -388,6 +424,17 @@ async function listAllDirectoryWithMetadata(config: DriveConfig, prefix: string)
     files,
     nextCursor: null,
   };
+}
+
+async function listAllObjectPaths(config: DriveConfig, prefix: string): Promise<string[]> {
+  const paths: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const result = await listObjectPaths(config, prefix, cursor);
+    paths.push(...result.paths);
+    cursor = result.nextCursor;
+  } while (cursor);
+  return paths;
 }
 
 export function isAgentReadableFolder(topicPrefix: string, folderPath: string): boolean {

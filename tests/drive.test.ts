@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelativeFilePath } from "../src/drive/paths";
-import { parseListObjectsXml } from "../src/drive/cos";
+import { parseListObjectsXml, parseObjectPathsXml } from "../src/drive/cos";
 import { createSessionCookie, getDriveSession, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
 import {
   GENERATE_PROMPT_FILENAME,
@@ -101,6 +101,21 @@ describe("COS list XML parser", () => {
       },
     ]);
     expect(result.nextCursor).toBe("next-page");
+  });
+
+  it("parses raw object paths for recursive topic deletion", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+      <ListBucketResult>
+        <Contents><Key>cloud-drive/topic/</Key><Size>0</Size></Contents>
+        <Contents><Key>cloud-drive/topic/report.pdf</Key><Size>10</Size></Contents>
+        <Contents><Key>cloud-drive/topic/._agent-manifests/current.json</Key><Size>20</Size></Contents>
+        <NextContinuationToken>next-page</NextContinuationToken>
+      </ListBucketResult>`;
+
+    expect(parseObjectPathsXml(xml, "cloud-drive/")).toEqual({
+      paths: ["topic/", "topic/report.pdf", "topic/._agent-manifests/current.json"],
+      nextCursor: "next-page",
+    });
   });
 
   it("merges directory metadata into listed files", () => {

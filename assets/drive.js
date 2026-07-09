@@ -37,7 +37,9 @@
   const generatePrompt = document.querySelector("[data-generate-prompt]");
   const saveTopicButton = document.querySelector("[data-save-topic]");
   const deleteModal = document.querySelector("[data-delete-modal]");
+  const deleteTitle = document.querySelector("[data-delete-title]");
   const deleteMessage = document.querySelector("[data-delete-message]");
+  const deleteInputLabel = document.querySelector("[data-delete-input-label]");
   const deleteInput = document.querySelector("[data-delete-confirm-input]");
   const deleteCancel = document.querySelector("[data-delete-cancel]");
   const deleteConfirm = document.querySelector("[data-delete-confirm]");
@@ -172,9 +174,15 @@
   });
 
   topicPanel.addEventListener("click", async (event) => {
+    const deleteTopicTarget = event.target.closest("[data-delete-topic]");
+    if (deleteTopicTarget) {
+      openTopicDeleteModal();
+      return;
+    }
+
     const agentTarget = event.target.closest("[data-agent-manifest]");
     if (agentTarget) {
-      await copyAgentManifestPrompt();
+      await copyAgentManifestPrompt(agentTarget);
       return;
     }
 
@@ -182,10 +190,10 @@
     if (!target) {
       return;
     }
-    const value = target.dataset.copyPrompt === "read" ? readPrompt.value : generatePrompt.value;
+    const value = generatePrompt.value;
     const copied = await copyText(value);
     if (copied) {
-      setStatus("提示词已复制。");
+      setStatus("生成与回传提示词已复制。");
     } else {
       setStatus("复制失败，请手动选中文本复制。", true);
     }
@@ -203,7 +211,11 @@
     }
     const target = pendingDelete;
     closeDeleteModal();
-    await removeObject(target.path);
+    if (target.type === "topic") {
+      await removeTopic(target.prefix, target.name);
+    } else {
+      await removeObject(target.path);
+    }
   });
 
   loadList("").catch((error) => {
@@ -240,11 +252,14 @@
     }
   }
 
-  async function copyAgentManifestPrompt() {
+  async function copyAgentManifestPrompt(button) {
     if (!state.topic) {
       return;
     }
+    const originalText = button.textContent;
     try {
+      button.disabled = true;
+      button.textContent = "正在生成...";
       setStatus("正在生成 agent 分析提示词...");
       const data = await api("/agent-manifest", {
         method: "POST",
@@ -252,15 +267,24 @@
       });
       const copied = await copyText(data.prompt || "");
       if (copied) {
+        button.textContent = "已复制";
         setStatus(`agent 分析提示词已复制。资料 ${data.fileCount || 0} 个，链接 ${data.expiresIn || 0} 秒内有效。`);
+        window.setTimeout(() => {
+          button.textContent = originalText;
+          button.disabled = false;
+        }, 1600);
       } else {
         readPrompt.value = data.prompt || "";
         readPrompt.focus();
         readPrompt.select();
         setStatus("浏览器未允许自动复制，已把 agent 分析提示词放入读取提示词框，请手动复制。", true);
+        button.textContent = originalText;
+        button.disabled = false;
       }
     } catch (error) {
       setStatus(error.message, true);
+      button.textContent = originalText;
+      button.disabled = false;
     }
   }
 
@@ -425,6 +449,20 @@
     }
   }
 
+  async function removeTopic(prefix, confirmName) {
+    try {
+      setStatus("正在删除专题...");
+      const result = await api("/topic", {
+        method: "DELETE",
+        body: { prefix, confirmName },
+      });
+      setStatus(`专题已删除，共删除 ${result.deletedCount || 0} 个对象。`);
+      await loadList("");
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  }
+
   async function api(path, options = {}) {
     const init = {
       method: options.method || "GET",
@@ -577,8 +615,26 @@
   }
 
   function openDeleteModal(path, name) {
-    pendingDelete = { path, name };
+    pendingDelete = { type: "file", path, name };
+    deleteTitle.textContent = "确认删除文件";
+    deleteInputLabel.textContent = "请输入完整文件名以确认删除";
+    deleteConfirm.textContent = "永久删除";
     deleteMessage.textContent = `将永久删除「${name}」。此操作不会删除其他文件，但无法从资料库恢复。`;
+    deleteInput.value = "";
+    deleteConfirm.disabled = true;
+    deleteModal.hidden = false;
+    window.setTimeout(() => deleteInput.focus(), 0);
+  }
+
+  function openTopicDeleteModal() {
+    if (!state.topic) {
+      return;
+    }
+    pendingDelete = { type: "topic", prefix: state.topic.prefix, name: state.topic.name };
+    deleteTitle.textContent = "确认删除专题";
+    deleteInputLabel.textContent = "请输入完整专题名以确认删除";
+    deleteConfirm.textContent = "永久删除专题";
+    deleteMessage.textContent = `将永久删除专题「${state.topic.name}」及其全部资料、提示词、成果和临时 manifest。此操作不可恢复。`;
     deleteInput.value = "";
     deleteConfirm.disabled = true;
     deleteModal.hidden = false;
@@ -590,6 +646,7 @@
     deleteModal.hidden = true;
     deleteInput.value = "";
     deleteConfirm.disabled = true;
+    deleteConfirm.textContent = "永久删除";
   }
 
   function showLogin() {

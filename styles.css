@@ -646,6 +646,13 @@ button.brand-lockup:focus-visible {
   gap: 10px;
 }
 
+.drive-topic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .drive-output-section {
   display: grid;
   gap: 12px;
@@ -1967,6 +1974,11 @@ pre code {
 
   .drive-topic-head {
     grid-template-columns: 1fr;
+  }
+
+  .drive-topic-actions {
+    display: grid;
+    justify-content: stretch;
   }
 
   .drive-button,

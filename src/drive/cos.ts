@@ -27,6 +27,11 @@ export interface DriveListResult {
   nextCursor: string | null;
 }
 
+export interface DriveObjectPathList {
+  paths: string[];
+  nextCursor: string | null;
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   parseTagValue: true,
@@ -50,6 +55,24 @@ export async function listObjects(config: DriveConfig, prefix: string, cursor?: 
     throw new Error(`COS 列表请求失败: ${response.status}`);
   }
   return parseListObjectsXml(text, config.rootPrefix, prefix);
+}
+
+export async function listObjectPaths(config: DriveConfig, prefix: string, cursor?: string | null): Promise<DriveObjectPathList> {
+  const cosPrefix = makeObjectKey(config.rootPrefix, prefix);
+  const url = new URL(config.endpoint);
+  url.searchParams.set("list-type", "2");
+  url.searchParams.set("prefix", cosPrefix);
+  url.searchParams.set("max-keys", "1000");
+  if (cursor) {
+    url.searchParams.set("continuation-token", cursor);
+  }
+
+  const response = await signedFetch(config, url.toString(), { method: "GET" });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`COS 列表请求失败: ${response.status}`);
+  }
+  return parseObjectPathsXml(text, config.rootPrefix);
 }
 
 export async function createFolder(config: DriveConfig, relativeFolderPath: string): Promise<void> {
@@ -102,6 +125,13 @@ export async function deleteObject(config: DriveConfig, relativePath: string): P
   const response = await signedFetch(config, objectUrl(config, key), { method: "DELETE" });
   if (!response.ok && response.status !== 404) {
     throw new Error(`COS 删除请求失败: ${response.status}`);
+  }
+}
+
+export async function deleteObjects(config: DriveConfig, relativePaths: string[]): Promise<void> {
+  const chunkSize = 20;
+  for (let index = 0; index < relativePaths.length; index += chunkSize) {
+    await Promise.all(relativePaths.slice(index, index + chunkSize).map((path) => deleteObject(config, path)));
   }
 }
 
@@ -162,6 +192,17 @@ export function parseListObjectsXml(xml: string, rootPrefix: string, currentPref
 
   const nextCursor = result.NextContinuationToken ? String(result.NextContinuationToken) : null;
   return { prefix: currentPrefix, folders, files, nextCursor };
+}
+
+export function parseObjectPathsXml(xml: string, rootPrefix: string): DriveObjectPathList {
+  const parsed = parser.parse(xml) as { ListBucketResult?: Record<string, unknown> };
+  const result = parsed.ListBucketResult ?? {};
+  const paths = toArray<Record<string, unknown>>(result.Contents)
+    .map((entry) => String(entry.Key ?? ""))
+    .filter(Boolean)
+    .map((key) => trimRootPrefix(rootPrefix, key));
+  const nextCursor = result.NextContinuationToken ? String(result.NextContinuationToken) : null;
+  return { paths, nextCursor };
 }
 
 function isSystemFile(name: string): boolean {

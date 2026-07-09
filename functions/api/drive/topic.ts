@@ -1,7 +1,7 @@
 import type { DriveEnv } from "../../../src/drive/config";
 import { getDriveConfig } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createTopic, readTopic, updateTopic } from "../../../src/drive/topic";
+import { createTopic, deleteTopic, readTopic, updateTopic } from "../../../src/drive/topic";
 
 export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -54,6 +54,24 @@ export const onRequestPut: PagesFunction<DriveEnv> = async ({ request, env }) =>
       displayName: session.displayName,
     });
     return jsonResponse(detail);
+  } catch (error) {
+    return errorResponse(error);
+  }
+};
+
+export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env }) => {
+  try {
+    const session = await readDriveSession({ request, env });
+    if (session instanceof Response) {
+      return session;
+    }
+
+    const body = await readJsonBody(request);
+    const result = await deleteTopic(getDriveConfig(env), {
+      prefix: body.prefix,
+      confirmName: body.confirmName,
+    });
+    return jsonResponse(result);
   } catch (error) {
     return errorResponse(error);
   }
