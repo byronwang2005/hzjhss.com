@@ -79,7 +79,7 @@ export async function verifyAccessCode(env: DriveEnv, provided: unknown): Promis
   }
   const expected = getRequiredEnv(env, "DRIVE_ACCESS_CODE");
   const expectedDigest = await digest(expected);
-  const providedDigest = await digest(provided);
+  const providedDigest = await digest(provided.trim());
   return constantTimeEqual(expectedDigest, providedDigest);
 }
 

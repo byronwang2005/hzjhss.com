@@ -129,6 +129,7 @@ describe("drive sessions", () => {
     await expect(verifySessionCookie(env, tampered)).resolves.toBe(false);
     await expect(verifyAccessCode(env, "wrong")).resolves.toBe(false);
     await expect(verifyAccessCode(env, "open-sesame")).resolves.toBe(true);
+    await expect(verifyAccessCode(env, " open-sesame\n")).resolves.toBe(true);
   });
 });
 
