@@ -11,7 +11,10 @@ export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) =>
     }
 
     const url = new URL(request.url);
-    const detail = await readTopic(getDriveConfig(env), url.searchParams.get("prefix"));
+    const detail = await readTopic(getDriveConfig(env), url.searchParams.get("prefix"), {
+      displayName: session.displayName,
+      origin: url.origin,
+    });
     return jsonResponse(detail);
   } catch (error) {
     return errorResponse(error);
@@ -49,9 +52,9 @@ export const onRequestPut: PagesFunction<DriveEnv> = async ({ request, env }) =>
     const detail = await updateTopic(getDriveConfig(env), {
       prefix: body.prefix,
       description: body.description,
-      readPrompt: body.readPrompt,
       generatePrompt: body.generatePrompt,
       displayName: session.displayName,
+      origin: new URL(request.url).origin,
     });
     return jsonResponse(detail);
   } catch (error) {
@@ -70,6 +73,8 @@ export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env })
     const result = await deleteTopic(getDriveConfig(env), {
       prefix: body.prefix,
       confirmName: body.confirmName,
+      displayName: session.displayName,
+      origin: new URL(request.url).origin,
     });
     return jsonResponse(result);
   } catch (error) {

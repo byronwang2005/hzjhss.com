@@ -13,6 +13,8 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     const body = await readJsonBody(request);
     const result = await createAgentManifest(getDriveConfig(env), {
       prefix: body.prefix,
+      displayName: session.displayName,
+      origin: new URL(request.url).origin,
     });
     return jsonResponse(result);
   } catch (error) {

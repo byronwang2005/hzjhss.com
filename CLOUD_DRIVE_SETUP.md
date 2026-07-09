@@ -29,14 +29,13 @@ Variables:
 
 根目录下的每个文件夹视为一个专题。创建专题会自动写入：
 
-- `01-读取专题资料.prompt.md`
-- `02-方法论生成与回传.prompt.md`
+- `成果生成与回传.prompt.md`
 - `outputs/`
 - `._topic.json`
 
 每个目录还会维护 `._drive-meta.json`，用于记录文件上传者、上传时间、类型和 content type。系统隐藏文件不会在资料列表中展示，也不能通过页面删除。
 
-用户点击“获取 agent 分析提示词”时，会在专题下生成 `._agent-manifests/` 临时 manifest JSON。页面返回一个短时下载链接，agent 先下载 manifest，再按 manifest 内的短时文件链接读取资料。
+读取专题资料时，用户点击“获取 agent 分析提示词”，系统会在专题下生成 `._agent-manifests/` 临时 manifest JSON。页面返回一个短时下载链接，agent 先下载 manifest，再按 manifest 内的短时文件链接读取资料。
 
 ## 腾讯云 COS 配置
 

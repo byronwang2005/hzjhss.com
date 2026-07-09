@@ -14,8 +14,7 @@ import { normalizeFolderName, normalizeObjectPath, normalizePrefix } from "./pat
 
 export const DRIVE_META_FILENAME = "._drive-meta.json";
 export const TOPIC_META_FILENAME = "._topic.json";
-export const READ_PROMPT_FILENAME = "01-读取专题资料.prompt.md";
-export const GENERATE_PROMPT_FILENAME = "02-方法论生成与回传.prompt.md";
+export const GENERATE_PROMPT_FILENAME = "成果生成与回传.prompt.md";
 export const OUTPUTS_FOLDER_NAME = "outputs";
 export const AGENT_MANIFEST_FOLDER_NAME = "._agent-manifests";
 
@@ -45,7 +44,6 @@ export interface TopicMetadata {
 
 export interface TopicDetail {
   topic: TopicMetadata;
-  readPrompt: string;
   generatePrompt: string;
   outputs: DriveFile[];
 }
@@ -84,6 +82,11 @@ export interface AgentManifestResult {
   expiresIn: number;
   generatedAt: string;
   fileCount: number;
+}
+
+export interface TopicScaffoldOptions {
+  displayName: string;
+  origin: string;
 }
 
 export function normalizeTopicName(input: unknown): string {
@@ -138,12 +141,10 @@ export async function createTopic(
   await createFolder(config, prefix);
   await createFolder(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
   await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
-  await putObjectText(config, `${prefix}${READ_PROMPT_FILENAME}`, prompts.readPrompt, "text/markdown; charset=utf-8");
   await putObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, prompts.generatePrompt, "text/markdown; charset=utf-8");
   await writeDriveMeta(config, prefix, {
     version: 1,
     files: {
-      [READ_PROMPT_FILENAME]: fileMetadata(input.displayName, prompts.readPrompt, "text/markdown; charset=utf-8", "prompt", now),
       [GENERATE_PROMPT_FILENAME]: fileMetadata(input.displayName, prompts.generatePrompt, "text/markdown; charset=utf-8", "prompt", now),
       [TOPIC_META_FILENAME]: fileMetadata(input.displayName, JSON.stringify(topic), "application/json; charset=utf-8", "topic", now),
     },
@@ -152,19 +153,16 @@ export async function createTopic(
 
   return {
     topic,
-    readPrompt: prompts.readPrompt,
     generatePrompt: prompts.generatePrompt,
     outputs: [],
   };
 }
 
-export async function readTopic(config: DriveConfig, rawPrefix: unknown): Promise<TopicDetail> {
+export async function readTopic(config: DriveConfig, rawPrefix: unknown, options: TopicScaffoldOptions): Promise<TopicDetail> {
   const prefix = normalizeTopicPrefix(rawPrefix);
-  const topic = await readTopicMetadata(config, prefix);
-  const readPrompt = (await getObjectText(config, `${prefix}${READ_PROMPT_FILENAME}`)) ?? "";
-  const generatePrompt = (await getObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`)) ?? "";
+  const { topic, generatePrompt } = await ensureTopicScaffold(config, prefix, options);
   const outputs = await listDirectoryWithMetadata(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
-  return { topic, readPrompt, generatePrompt, outputs: outputs.files };
+  return { topic, generatePrompt, outputs: outputs.files };
 }
 
 export async function updateTopic(
@@ -172,19 +170,18 @@ export async function updateTopic(
   input: {
     prefix: unknown;
     description?: unknown;
-    readPrompt?: unknown;
     generatePrompt?: unknown;
     displayName: string;
+    origin: string;
   },
 ): Promise<TopicDetail> {
   const prefix = normalizeTopicPrefix(input.prefix);
-  const topic = await readTopicMetadata(config, prefix);
+  const { topic, generatePrompt: existingGeneratePrompt } = await ensureTopicScaffold(config, prefix, {
+    displayName: input.displayName,
+    origin: input.origin,
+  });
   const description = input.description == null ? topic.description : normalizeDescription(input.description);
-  const readPrompt = input.readPrompt == null ? ((await getObjectText(config, `${prefix}${READ_PROMPT_FILENAME}`)) ?? "") : normalizePrompt(input.readPrompt);
-  const generatePrompt =
-    input.generatePrompt == null
-      ? ((await getObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`)) ?? "")
-      : normalizePrompt(input.generatePrompt);
+  const generatePrompt = input.generatePrompt == null ? existingGeneratePrompt : normalizePrompt(input.generatePrompt);
   const now = new Date().toISOString();
   const updatedTopic: TopicMetadata = {
     ...topic,
@@ -194,15 +191,12 @@ export async function updateTopic(
   };
 
   await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(updatedTopic, null, 2), "application/json; charset=utf-8");
-  await putObjectText(config, `${prefix}${READ_PROMPT_FILENAME}`, readPrompt, "text/markdown; charset=utf-8");
   await putObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, generatePrompt, "text/markdown; charset=utf-8");
-  await recordFileMetadata(config, `${prefix}${READ_PROMPT_FILENAME}`, {
-    uploadedBy: input.displayName,
-    uploadedAt: now,
-    contentType: "text/markdown; charset=utf-8",
-    size: byteLength(readPrompt),
-    kind: "prompt",
-  });
+  await recordFileMetadata(
+    config,
+    `${prefix}${TOPIC_META_FILENAME}`,
+    fileMetadata(input.displayName, JSON.stringify(updatedTopic), "application/json; charset=utf-8", "topic", now),
+  );
   await recordFileMetadata(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, {
     uploadedBy: input.displayName,
     uploadedAt: now,
@@ -212,15 +206,18 @@ export async function updateTopic(
   });
 
   const outputs = await listDirectoryWithMetadata(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
-  return { topic: updatedTopic, readPrompt, generatePrompt, outputs: outputs.files };
+  return { topic: updatedTopic, generatePrompt, outputs: outputs.files };
 }
 
 export async function deleteTopic(
   config: DriveConfig,
-  input: { prefix: unknown; confirmName: unknown },
+  input: { prefix: unknown; confirmName: unknown; displayName: string; origin: string },
 ): Promise<DeleteTopicResult> {
   const prefix = normalizeTopicPrefix(input.prefix);
-  const topic = await readTopicMetadata(config, prefix);
+  const { topic } = await ensureTopicScaffold(config, prefix, {
+    displayName: input.displayName,
+    origin: input.origin,
+  });
   if (typeof input.confirmName !== "string" || input.confirmName.trim() !== topic.name) {
     throw new Error("专题名称确认不一致");
   }
@@ -296,10 +293,13 @@ export async function removeFileMetadata(config: DriveConfig, rawPath: unknown):
 
 export async function createAgentManifest(
   config: DriveConfig,
-  input: { prefix: unknown },
+  input: { prefix: unknown; displayName: string; origin: string },
 ): Promise<AgentManifestResult> {
   const prefix = normalizeTopicPrefix(input.prefix);
-  const topic = await readTopicMetadata(config, prefix);
+  const { topic } = await ensureTopicScaffold(config, prefix, {
+    displayName: input.displayName,
+    origin: input.origin,
+  });
   const generatedAt = new Date();
   const expiresAt = new Date(generatedAt.getTime() + config.signExpiresSeconds * 1000);
   const materialFiles = await listTopicMaterialFiles(config, prefix);
@@ -445,7 +445,6 @@ export function isAgentReadableFile(topicPrefix: string, file: Pick<DriveFile, "
   return (
     !file.path.startsWith(`${topicPrefix}${OUTPUTS_FOLDER_NAME}/`) &&
     !hasSystemPathSegment(file.path) &&
-    file.name !== READ_PROMPT_FILENAME &&
     file.name !== GENERATE_PROMPT_FILENAME
   );
 }
@@ -455,40 +454,19 @@ export function createDefaultPrompts(input: {
   name: string;
   prefix: string;
   description: string;
-}): { readPrompt: string; generatePrompt: string } {
+}): { generatePrompt: string } {
   const description = input.description || "暂无专题说明。";
-  const readPrompt = `# ${input.name}：读取专题资料
+  const generatePrompt = `# ${input.name}：成果生成与回传
 
-你是本地 AI agent。请读取云盘专题 \`${input.prefix}\` 下除系统隐藏文件和 \`outputs/\` 外的研报、周报和补充资料。
-
-专题说明：
-${description}
-
-从网盘读取资料的方法：
-1. 在专题资料库页面点击“获取 agent 分析提示词”。
-2. 页面会生成一份只包含一个 manifest 下载链接的短时提示词。
-3. 将该提示词交给本地 AI agent；agent 不需要登录，不需要 cookie。
-4. agent 先下载 manifest JSON，再按 manifest.files 中的 signedUrl 下载资料。
-5. manifest 和其中的资料链接会过期，过期后回到页面重新生成。
-6. 解析资料：按文件类型解析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件名。
-
-工作规则：
-1. 保留来源路径、文件名、作者或机构、发布日期、核心观点和关键数据。
-2. 不要改写原始资料，不要删除文件，不要把临时过程文件回传到专题。
-3. 输出给下一步 agent 的材料索引，至少包含：文件路径、资料类型、主题标签、核心结论、可引用数据、待核验问题。
-`;
-
-  const generatePrompt = `# ${input.name}：方法论生成与成果回传
-
-你是本地 AI agent。请基于专题 \`${input.prefix}\` 的资料，按固定方法论生成结构化文本，并回传 HTML/PDF/Markdown 到 \`${input.prefix}${OUTPUTS_FOLDER_NAME}/\`。
+你是本地 AI agent。请基于专题 \`${input.prefix}\` 的资料生成结构化成果，并回传 HTML/PDF/Markdown 到 \`${input.prefix}${OUTPUTS_FOLDER_NAME}/\`。
 
 专题说明：
 ${description}
 
-推荐方法论：
+推荐流程：
 1. 资料分层：区分事实、观点、预测、数据、风险提示。
 2. 证据归纳：每个重要判断必须标注来源文件名；冲突观点并列呈现。
-3. 结构化输出：先给摘要，再给方法论框架、关键发现、数据表、风险与待办。
+3. 结构化输出：先给摘要，再给分析框架、关键发现、数据表、风险与待办。
 4. 固定产物：生成 Markdown 原稿、可直接预览的 HTML，以及需要归档时的 PDF。
 5. 命名规则：\`outputs/YYYY-MM-DD-${input.name}-专题总结.md\`、\`outputs/YYYY-MM-DD-${input.name}-专题总结.html\`、\`outputs/YYYY-MM-DD-${input.name}-专题总结.pdf\`。
 
@@ -499,13 +477,88 @@ ${description}
 4. 回传完成后，确认专题成果区能预览 HTML/PDF/Markdown。
 `;
 
-  return { readPrompt, generatePrompt };
+  return { generatePrompt };
 }
 
-async function readTopicMetadata(config: DriveConfig, prefix: string): Promise<TopicMetadata> {
+async function ensureTopicScaffold(
+  config: DriveConfig,
+  prefix: string,
+  options: TopicScaffoldOptions,
+): Promise<{ topic: TopicMetadata; generatePrompt: string }> {
+  const now = new Date().toISOString();
+  let topic = await readTopicMetadataIfExists(config, prefix);
+  if (!topic) {
+    const name = topicNameFromPrefix(prefix);
+    topic = {
+      version: 1,
+      name,
+      prefix,
+      description: "",
+      createdBy: options.displayName,
+      createdAt: now,
+      updatedBy: options.displayName,
+      updatedAt: now,
+    };
+    await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
+  }
+
+  const defaultPrompts = createDefaultPrompts({
+    origin: options.origin,
+    name: topic.name,
+    prefix,
+    description: topic.description,
+  });
+  let generatePrompt = await getObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`);
+  if (generatePrompt === null) {
+    generatePrompt = defaultPrompts.generatePrompt;
+    await putObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, generatePrompt, "text/markdown; charset=utf-8");
+  }
+
+  const outputsPrefix = `${prefix}${OUTPUTS_FOLDER_NAME}/`;
+  const outputsMarker = await getObjectText(config, outputsPrefix);
+  if (outputsMarker === null) {
+    await createFolder(config, outputsPrefix);
+  }
+
+  const rootMeta = await readDriveMeta(config, prefix);
+  let rootMetaChanged = false;
+  if (!rootMeta.files[TOPIC_META_FILENAME]) {
+    rootMeta.files[TOPIC_META_FILENAME] = fileMetadata(
+      options.displayName,
+      JSON.stringify(topic),
+      "application/json; charset=utf-8",
+      "topic",
+      now,
+    );
+    rootMetaChanged = true;
+  }
+  if (!rootMeta.files[GENERATE_PROMPT_FILENAME]) {
+    rootMeta.files[GENERATE_PROMPT_FILENAME] = fileMetadata(
+      options.displayName,
+      generatePrompt,
+      "text/markdown; charset=utf-8",
+      "prompt",
+      now,
+    );
+    rootMetaChanged = true;
+  }
+  if (rootMetaChanged) {
+    await writeDriveMeta(config, prefix, rootMeta);
+  }
+
+  const outputsMetaPath = `${outputsPrefix}${DRIVE_META_FILENAME}`;
+  const outputsMeta = await getObjectText(config, outputsMetaPath);
+  if (outputsMeta === null) {
+    await writeDriveMeta(config, outputsPrefix, { version: 1, files: {} });
+  }
+
+  return { topic, generatePrompt };
+}
+
+async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): Promise<TopicMetadata | null> {
   const text = await getObjectText(config, `${prefix}${TOPIC_META_FILENAME}`);
   if (!text) {
-    throw new Error("专题元数据不存在");
+    return null;
   }
   const parsed = JSON.parse(text) as Partial<TopicMetadata>;
   if (parsed.version !== 1 || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
@@ -521,6 +574,10 @@ async function readTopicMetadata(config: DriveConfig, prefix: string): Promise<T
     updatedBy: typeof parsed.updatedBy === "string" ? parsed.updatedBy : "-",
     updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
   };
+}
+
+function topicNameFromPrefix(prefix: string): string {
+  return prefix.replace(/\/$/, "");
 }
 
 async function recordFileMetadata(config: DriveConfig, path: string, fileMeta: DriveFileMetadata): Promise<void> {

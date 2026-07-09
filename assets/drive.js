@@ -1,6 +1,6 @@
 (() => {
   const apiBase = "/api/drive";
-  const promptFiles = new Set(["01-读取专题资料.prompt.md", "02-方法论生成与回传.prompt.md"]);
+  const promptFiles = new Set(["成果生成与回传.prompt.md"]);
   const previewExtensions = new Set(["html", "htm", "pdf", "md", "markdown", "txt"]);
   const state = {
     prefix: "",

@@ -3,22 +3,39 @@ import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelat
 import { parseListObjectsXml, parseObjectPathsXml } from "../src/drive/cos";
 import { createSessionCookie, getDriveSession, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
 import {
+  DRIVE_META_FILENAME,
   GENERATE_PROMPT_FILENAME,
-  READ_PROMPT_FILENAME,
+  OUTPUTS_FOLDER_NAME,
+  TOPIC_META_FILENAME,
   createAgentManifestPrompt,
+  createTopic,
   createDefaultPrompts,
   hasSystemPathSegment,
   isAgentReadableFile,
   isAgentReadableFolder,
   mergeListMetadata,
   normalizeTopicPrefix,
+  readTopic,
 } from "../src/drive/topic";
+import type { DriveConfig } from "../src/drive/config";
 import type { DriveEnv } from "../src/drive/config";
 
 const env: DriveEnv = {
   DRIVE_ACCESS_CODE: "open-sesame",
   DRIVE_SESSION_SECRET: "test-secret",
   DRIVE_SESSION_MAX_AGE_SECONDS: "60",
+};
+
+const testConfig: DriveConfig = {
+  cosSecretId: "test-id",
+  cosSecretKey: "test-key",
+  bucket: "test-bucket",
+  region: "ap-guangzhou",
+  endpoint: "https://cos.example.com",
+  rootPrefix: "cloud-drive/",
+  maxFileBytes: 1024 * 1024,
+  signExpiresSeconds: 900,
+  sessionMaxAgeSeconds: 3600,
 };
 
 describe("drive path validation", () => {
@@ -176,7 +193,7 @@ describe("drive sessions", () => {
 });
 
 describe("topic prompts", () => {
-  it("creates default prompts with topic paths and upload callback", () => {
+  it("creates default output prompts with topic paths and upload callback", () => {
     const prompts = createDefaultPrompts({
       origin: "https://example.com",
       name: "新能源",
@@ -184,10 +201,8 @@ describe("topic prompts", () => {
       description: "跟踪新能源行业。",
     });
 
-    expect(prompts.readPrompt).toContain("新能源/");
-    expect(prompts.readPrompt).toContain("获取 agent 分析提示词");
-    expect(prompts.readPrompt).toContain("不需要登录");
-    expect(prompts.readPrompt).toContain("manifest JSON");
+    expect(GENERATE_PROMPT_FILENAME).toBe("成果生成与回传.prompt.md");
+    expect(prompts.generatePrompt).toContain("新能源：成果生成与回传");
     expect(prompts.generatePrompt).toContain("新能源/outputs/");
     expect(prompts.generatePrompt).toContain("/api/drive/upload-complete");
   });
@@ -217,9 +232,155 @@ describe("topic prompts", () => {
     expect(isAgentReadableFolder("新能源/", "新能源/outputs/")).toBe(false);
     expect(isAgentReadableFolder("新能源/", "新能源/._agent-manifests/")).toBe(false);
     expect(isAgentReadableFile("新能源/", { name: "report.pdf", path: "新能源/reports/report.pdf" })).toBe(true);
-    expect(isAgentReadableFile("新能源/", { name: READ_PROMPT_FILENAME, path: `新能源/${READ_PROMPT_FILENAME}` })).toBe(false);
     expect(isAgentReadableFile("新能源/", { name: GENERATE_PROMPT_FILENAME, path: `新能源/${GENERATE_PROMPT_FILENAME}` })).toBe(false);
     expect(isAgentReadableFile("新能源/", { name: "summary.pdf", path: "新能源/outputs/summary.pdf" })).toBe(false);
     expect(isAgentReadableFile("新能源/", { name: "manifest.json", path: "新能源/._agent-manifests/manifest.json" })).toBe(false);
   });
 });
+
+describe("topic scaffolding", () => {
+  it("creates a topic with only the output prompt file", async () => {
+    await withMockCos([], async (storage) => {
+      const detail = await createTopic(testConfig, {
+        name: "新能源",
+        description: "跟踪新能源行业。",
+        displayName: "王小明",
+        origin: "https://example.com",
+      });
+
+      expect(detail.generatePrompt).toContain("新能源/outputs/");
+      expect(storage.has(`新能源/${GENERATE_PROMPT_FILENAME}`)).toBe(true);
+      expect(storage.has(`新能源/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
+
+      const rootMeta = JSON.parse(storage.get(`新能源/${DRIVE_META_FILENAME}`) || "{}");
+      expect(rootMeta.files[GENERATE_PROMPT_FILENAME]).toMatchObject({ kind: "prompt", uploadedBy: "王小明" });
+      expect(rootMeta.files[TOPIC_META_FILENAME]).toMatchObject({ kind: "topic", uploadedBy: "王小明" });
+    });
+  });
+
+  it("repairs an incomplete topic with the output prompt file", async () => {
+    await withMockCos([["半成品/report.pdf", "material"]], async (storage) => {
+      const detail = await readTopic(testConfig, "半成品/", {
+        displayName: "李小明",
+        origin: "https://example.com",
+      });
+
+      expect(detail.topic).toMatchObject({
+        name: "半成品",
+        prefix: "半成品/",
+        createdBy: "李小明",
+      });
+      expect(detail.generatePrompt).toContain("半成品/outputs/");
+      expect(storage.get("半成品/report.pdf")).toBe("material");
+      expect(storage.has(`半成品/${TOPIC_META_FILENAME}`)).toBe(true);
+      expect(storage.has(`半成品/${GENERATE_PROMPT_FILENAME}`)).toBe(true);
+      expect(storage.has(`半成品/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
+      expect(storage.has(`半成品/${OUTPUTS_FOLDER_NAME}/${DRIVE_META_FILENAME}`)).toBe(true);
+    });
+  });
+
+  it("preserves existing generate prompts while repairing missing topic pieces", async () => {
+    const topic = {
+      version: 1,
+      name: "旧专题",
+      prefix: "旧专题/",
+      description: "已有说明",
+      createdBy: "张三",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedBy: "张三",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    };
+
+    await withMockCos(
+      [
+        [`旧专题/${TOPIC_META_FILENAME}`, JSON.stringify(topic)],
+        [`旧专题/${GENERATE_PROMPT_FILENAME}`, "自定义生成提示词"],
+      ],
+      async (storage) => {
+        const detail = await readTopic(testConfig, "旧专题/", {
+          displayName: "李小明",
+          origin: "https://example.com",
+        });
+
+        expect(detail.topic.description).toBe("已有说明");
+        expect(detail.generatePrompt).toBe("自定义生成提示词");
+        expect(storage.get(`旧专题/${GENERATE_PROMPT_FILENAME}`)).toBe("自定义生成提示词");
+        expect(storage.has(`旧专题/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
+      },
+    );
+  });
+});
+
+async function withMockCos(
+  initialObjects: Array<[string, string]>,
+  callback: (storage: Map<string, string>) => Promise<void>,
+): Promise<void> {
+  const storage = new Map(initialObjects);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    const url = new URL(request.url);
+
+    if (request.method === "GET" && url.searchParams.get("list-type") === "2") {
+      return new Response(createListObjectsXml(storage, url.searchParams.get("prefix") || "", url.searchParams.get("delimiter")), {
+        status: 200,
+        headers: { "content-type": "application/xml" },
+      });
+    }
+
+    const path = objectPathFromUrl(url);
+    if (request.method === "GET") {
+      return storage.has(path) ? new Response(storage.get(path), { status: 200 }) : new Response("", { status: 404 });
+    }
+    if (request.method === "PUT") {
+      storage.set(path, await request.text());
+      return new Response("", { status: 200 });
+    }
+    if (request.method === "DELETE") {
+      storage.delete(path);
+      return new Response("", { status: 204 });
+    }
+
+    return new Response("", { status: 405 });
+  };
+
+  try {
+    await callback(storage);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function objectPathFromUrl(url: URL): string {
+  const key = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+  return key.startsWith(testConfig.rootPrefix) ? key.slice(testConfig.rootPrefix.length) : key;
+}
+
+function createListObjectsXml(storage: Map<string, string>, fullPrefix: string, delimiter: string | null): string {
+  const contents: string[] = [];
+  const commonPrefixes = new Set<string>();
+
+  for (const path of storage.keys()) {
+    const key = `${testConfig.rootPrefix}${path}`;
+    if (!key.startsWith(fullPrefix)) {
+      continue;
+    }
+
+    const rest = key.slice(fullPrefix.length);
+    if (delimiter === "/" && rest.includes("/")) {
+      commonPrefixes.add(`${fullPrefix}${rest.slice(0, rest.indexOf("/") + 1)}`);
+    } else {
+      contents.push(key);
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+    <ListBucketResult>
+      ${contents.map((key) => `<Contents><Key>${escapeXml(key)}</Key><LastModified>2026-07-09T00:00:00.000Z</LastModified><ETag>"etag"</ETag><Size>${storage.get(key.slice(testConfig.rootPrefix.length))?.length || 0}</Size></Contents>`).join("")}
+      ${Array.from(commonPrefixes).map((key) => `<CommonPrefixes><Prefix>${escapeXml(key)}</Prefix></CommonPrefixes>`).join("")}
+    </ListBucketResult>`;
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
