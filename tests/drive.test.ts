@@ -288,6 +288,8 @@ describe("topic prompts", () => {
     });
 
     expect(prompt).toContain("用户最终确认的口径");
+    expect(prompt).toContain("禁止使用 `web_fetch`");
+    expect(prompt).toContain("curl -fL --retry 3 --retry-all-errors");
     expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.md");
     expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.pdf");
     expect(prompt).toContain("/api/drive/agent-output-upload-url");
@@ -315,6 +317,8 @@ describe("topic prompts", () => {
     expect(prompt).toContain("资料数量：3");
     expect(prompt).toContain("装机量、价格、竞争格局");
     expect(prompt).toContain("此阶段只完成分析，不生成或上传成果文件");
+    expect(prompt).toContain("禁止使用 `web_fetch`");
+    expect(prompt).toContain("终端 curl 下载 manifest JSON");
     expect(prompt).not.toContain("agent-output-upload-url");
     expect(prompt).not.toContain("/api/drive/download-url");
   });

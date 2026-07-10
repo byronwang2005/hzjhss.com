@@ -40,6 +40,8 @@ Agent 流程分为两步：
 1. “复制第一阶段提示词”会在专题下生成 `._agent-manifests/` 临时 manifest JSON。Agent 按短时链接读取资料，并以 `._topic.json` 中的分析关键词为依据完成分析。
 2. 用户在同一会话中校正判断并确认最终口径后，“复制第二阶段提示词”会签发 1 小时有效、仅允许写入本次 Markdown/PDF 两个指定路径的 Bearer 令牌。Agent 通过专用的 `agent-output-upload-*` 接口回传，不使用浏览器 Cookie。
 
+两阶段提示词都要求 Agent 使用终端 `curl` 访问 manifest、签名资料、回传 API 和 COS PUT，不使用 `web_fetch` 或浏览器抓取工具，避免非浏览器客户端被 Cloudflare 识别为 Error 1010。
+
 每个 v2 专题带有不可复用的 `instanceId`。Agent 成果路径绑定该实例，专题删除后签发过的旧 URL 不会被新建的同名专题聚合。没有 `._topic.json` 的残留对象前缀不会出现在专题概览。
 
 旧专题中的 `成果生成与回传.prompt.md` 会继续隐藏并原样保留，但系统不再读取、创建或修改该文件。旧版 `description` 字段会在读取时映射为 `analysisKeywords`，下次保存后写成 v2 专题元数据。此次升级为 Cookie 和 Agent 令牌增加了用途隔离，部署时已有登录会话需要重新登录一次。

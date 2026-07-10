@@ -426,6 +426,8 @@ export function createAgentManifestPrompt(input: {
 
 你是本地 AI agent。你不需要登录网盘，也不需要携带 cookie。
 
+传输要求：所有 manifest 和资料链接必须使用终端 HTTP 客户端（优先 \`curl -fL --retry 3 --retry-all-errors\`）下载；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具访问这些链接。若浏览器类工具返回 HTTP 403 / Error 1010，直接改用终端 curl，不要重试浏览器工具。
+
 请先下载这一个 manifest JSON：
 ${input.manifestUrl}
 
@@ -440,8 +442,8 @@ ${input.manifestUrl}
 ${input.topic.analysisKeywords}
 
 读取方法：
-1. 下载 manifest JSON。
-2. 遍历 manifest.files，使用每个文件的 signedUrl 下载资料。
+1. 使用终端 curl 下载 manifest JSON。
+2. 遍历 manifest.files，使用终端 curl 下载每个文件的 signedUrl。
 3. 分析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件 path。
 4. 围绕分析关键词输出资料索引和结构化分析，至少包含：来源 path、资料类型、作者或机构、发布日期、核心观点、关键数据、冲突观点、风险和待核验问题。
 5. 每个重要判断必须标注来源 path。此阶段只完成分析，不生成或上传成果文件。
@@ -477,6 +479,8 @@ export function createAgentOutputPrompt(input: {
 
 你是本地 AI agent。本阶段不再重新分析资料，也不要重新套用第一阶段的分析关键词。
 
+传输要求：回传 API 和 COS PUT 必须使用终端 HTTP 客户端（优先 \`curl -fL --retry 3 --retry-all-errors\`）；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具。HTTP 403 / Error 1010 通常来自浏览器型抓取出口，遇到后直接改用终端 curl。
+
 先检查当前会话：必须已经完成第一阶段资料分析，并且用户已经对判断进行调整、明确确认最终口径。若尚未形成用户确认的最终口径，立即停止，要求用户先确认；不得擅自生成成果。
 
 成果要求：
@@ -494,9 +498,9 @@ export function createAgentOutputPrompt(input: {
 - 令牌和短时 PUT URL 只用于请求鉴权，禁止写入成果正文、日志或最终回复。
 
 回传流程（两个文件分别执行）：
-1. POST \`${input.origin}/api/drive/agent-output-upload-url\`，请求头带 \`Authorization: Bearer <token>\` 和 \`Content-Type: application/json\`；body 包含上方对应的完整 \`path\`、实际 \`size\` 与 \`contentType\`。该接口不使用 Cookie。
+1. 使用终端 curl POST \`${input.origin}/api/drive/agent-output-upload-url\`，请求头带 \`Authorization: Bearer <token>\` 和 \`Content-Type: application/json\`；body 包含上方对应的完整 \`path\`、实际字节数 \`size\` 与 \`contentType\`。该接口不使用 Cookie。
 2. Markdown 使用 \`${AGENT_OUTPUT_FORMATS[0].contentType}\`，PDF 使用 \`${AGENT_OUTPUT_FORMATS[1].contentType}\`。用返回的短时 PUT URL 上传，并原样携带返回的全部 \`requiredHeaders\`；其中 \`content-length\` 必须等于申请时的实际字节数。
-3. PUT 成功后 POST \`${input.origin}/api/drive/agent-output-upload-complete\`，同样只携带 Bearer token、不携带 Cookie；body 包含返回的 \`path\`、实际 \`size\` 与 \`contentType\`。
+3. PUT 成功后使用终端 curl POST \`${input.origin}/api/drive/agent-output-upload-complete\`，同样只携带 Bearer token、不携带 Cookie；body 包含返回的 \`path\`、实际 \`size\` 与 \`contentType\`。
 4. 两个文件都成功登记后，报告各自 path。授权过期、专题已删除或任一步失败时停止并报告具体错误，提示用户重新复制第二阶段提示词。
 `;
 }
