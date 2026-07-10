@@ -18614,7 +18614,7 @@ function render() {
 }
 function renderTopbar() {
   return `
-    <header class="drive-topbar">
+    <header class="drive-topbar ${state.mode !== "login" ? "is-authenticated" : ""}">
       <div class="drive-brand-actions">
         <a class="drive-brand" href="/drive" aria-label="\u8FD4\u56DE\u5609\u5408\u6749\u5347\u4E13\u9898\u8D44\u6599\u5E93">
           <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />

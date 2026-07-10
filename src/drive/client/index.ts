@@ -710,7 +710,7 @@ function render(): void {
 
 function renderTopbar(): string {
   return `
-    <header class="drive-topbar">
+    <header class="drive-topbar ${state.mode !== "login" ? "is-authenticated" : ""}">
       <div class="drive-brand-actions">
         <a class="drive-brand" href="/drive" aria-label="返回嘉合杉升专题资料库">
           <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />

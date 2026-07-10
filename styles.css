@@ -933,12 +933,35 @@
     padding: 0 14px;
   }
 
-  .drive-brand-actions {
-    gap: 8px;
+  .drive-topbar.is-authenticated {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+    min-height: 0;
+    padding-block: 10px;
+  }
+
+  .drive-topbar.is-authenticated .drive-brand-actions {
+    display: contents;
+  }
+
+  .drive-topbar.is-authenticated .drive-brand {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .drive-topbar.is-authenticated .drive-logout-button {
+    grid-column: 2;
+  }
+
+  .drive-topbar.is-authenticated .drive-nav {
+    grid-column: 1 / -1;
+    justify-self: end;
+    margin-left: 0;
   }
 
   .drive-brand span {
-    max-width: 7em;
+    max-width: 9em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -960,7 +983,6 @@
 
   .drive-logout-button {
     width: auto;
-    padding-inline: 10px;
   }
 
   .drive-head-actions,
