@@ -176,8 +176,8 @@ async function handleClick(event: MouseEvent): Promise<void> {
     closeDeleteDialog();
   } else if (action === "agent-manifest") {
     await copyAgentManifest(target);
-  } else if (action === "copy-generate-prompt") {
-    await copyGeneratePrompt();
+  } else if (action === "agent-output-task") {
+    await copyAgentOutputTask(target);
   } else if (action === "refresh") {
     await refreshCurrent();
   }
@@ -243,11 +243,11 @@ async function submitCreateTopic(form: HTMLFormElement): Promise<void> {
       method: "POST",
       body: {
         name,
-        description: data.get("topicDescription"),
+        analysisKeywords: data.get("analysisKeywords"),
       },
     });
     form.reset();
-    setStatus("专题已创建，成果目录和提示词已准备好。", "success");
+    setStatus("专题已创建，成果目录和分析关键词已准备好。", "success");
     await openTopic(detail.topic.prefix, "agent");
   } catch (error) {
     showError(error);
@@ -268,8 +268,7 @@ async function submitTopicSettings(form: HTMLFormElement): Promise<void> {
       method: "PUT",
       body: {
         prefix: state.topic.topic.prefix,
-        description: data.get("topicDescription"),
-        generatePrompt: data.get("generatePrompt"),
+        analysisKeywords: data.get("analysisKeywords"),
       },
     });
     setStatus("专题设置已保存。", "success");
@@ -378,7 +377,7 @@ function showCreateTopic(): void {
   state.mode = "create";
   state.topic = null;
   state.materialList = null;
-  setStatus("填写专题名称和说明，系统会创建成果目录和默认提示词。");
+  setStatus("填写专题名称和分析关键词，系统会创建成果目录。");
   render();
 }
 
@@ -406,18 +405,26 @@ async function copyAgentManifest(button: HTMLElement): Promise<void> {
   }
 }
 
-async function copyGeneratePrompt(): Promise<void> {
-  if (!state.topic?.generatePrompt) {
-    setStatus("当前专题还没有生成提示词。", "danger");
-    render();
+async function copyAgentOutputTask(button: HTMLElement): Promise<void> {
+  if (!state.topic) {
     return;
   }
+  const original = button.textContent || "";
   try {
-    await writeClipboard(state.topic.generatePrompt);
-    setStatus("成果生成与回传提示词已复制。", "success");
-    render();
-  } catch {
-    setStatus("复制失败，请手动选中文本复制。", "danger");
+    button.setAttribute("disabled", "");
+    button.textContent = "正在生成...";
+    setStatus("正在生成成果回传授权...");
+    const data = await api<{ prompt: string; expiresIn: number; paths: string[] }>("/agent-output-task", {
+      method: "POST",
+      body: { prefix: state.topic.topic.prefix },
+    });
+    await writeClipboard(data.prompt);
+    setStatus(`成果生成与回传提示词已复制。授权 ${data.expiresIn || 0} 秒内有效。`, "success");
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.removeAttribute("disabled");
+    button.textContent = original;
     render();
   }
 }
@@ -808,7 +815,7 @@ function renderOverview(): string {
             <h2>专题队列</h2>
             <span>${topics.length ? "按最近交付排序" : "等待创建"}</span>
           </div>
-          ${topics.length ? topics.map(renderTopicCard).join("") : renderEmpty("ph-folder-plus", "还没有专题", "创建第一个专题后，系统会准备成果目录和默认提示词。")}
+          ${topics.length ? topics.map(renderTopicCard).join("") : renderEmpty("ph-folder-plus", "还没有专题", "创建第一个专题后，系统会准备成果目录。")}
         </section>
       </div>
     </section>
@@ -822,7 +829,7 @@ function renderCreateTopic(): string {
         <div>
           <p class="drive-kicker">New topic</p>
           <h1>创建专题</h1>
-          <p>专题创建后会自动准备 outputs 目录和成果生成提示词。</p>
+          <p>专题创建后会自动准备 outputs 目录，并以分析关键词指导第一阶段分析。</p>
         </div>
         ${controlButton("返回", "ph-arrow-left", "back-overview")}
       </div>
@@ -832,8 +839,8 @@ function renderCreateTopic(): string {
           <input name="topicName" type="text" autocomplete="off" required />
         </label>
         <label class="drive-field">
-          <span>专题说明</span>
-          <textarea name="topicDescription" rows="6" placeholder="可选：记录研究范围、资料口径或成果要求。"></textarea>
+          <span>分析关键词</span>
+          <textarea name="analysisKeywords" rows="6" placeholder="填写关注主题、分析维度、资料口径等，可使用多行文本。" required></textarea>
         </label>
         <div class="drive-form-actions">
           <button class="drive-control" type="button" data-action="cancel-create">取消</button>
@@ -862,7 +869,7 @@ function renderTopic(): string {
         <div class="drive-topic-title-row">
           <div>
             <h1>${escapeHtml(topic.name)}</h1>
-            <p>${escapeHtml(topic.description || "暂无专题说明。")}</p>
+            <p>${escapeHtml(topic.analysisKeywords || "尚未填写分析关键词。")}</p>
           </div>
           <div class="drive-topic-meta">
             <span>创建人 ${escapeHtml(topic.createdBy || "-")}</span>
@@ -895,7 +902,7 @@ function renderOutputsTab(): string {
         <h2>专题成果</h2>
         <span>${outputs.length} 个文件</span>
       </div>
-      ${outputs.length ? renderFileTable(outputs, { outputMode: true, empty: "" }) : renderEmpty("ph-package", "这个专题还没有成果", "复制 agent 提示词生成成果，并把 Markdown、HTML 或 PDF 回传到 outputs/。")}
+      ${outputs.length ? renderFileTable(outputs, { outputMode: true, empty: "" }) : renderEmpty("ph-package", "这个专题还没有成果", "依次执行 Agent 两个阶段，确认最终口径后回传 Markdown 和 PDF。")}
     </section>
   `;
 }
@@ -931,30 +938,29 @@ function renderMaterialsTab(): string {
 }
 
 function renderAgentTab(): string {
-  const prompt = state.topic?.generatePrompt || "";
-  const outputPrefix = `${state.topic?.topic.prefix || ""}outputs/`;
+  const hasKeywords = Boolean(state.topic?.topic.analysisKeywords.trim());
+  const disabled = hasKeywords ? "" : " disabled";
   return `
-    <section class="drive-agent-grid">
-      <div class="drive-agent-card">
-        <h2>交给本地 agent 分析</h2>
-        <p>系统会生成一个短时 manifest 链接，agent 不需要登录即可读取资料。链接过期后重新生成即可。</p>
-        <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest">
-          <i class="ph ph-clipboard-text" aria-hidden="true"></i>
-          复制分析提示词
-        </button>
-      </div>
-      <div class="drive-agent-card">
-        <h2>成果回传路径</h2>
-        <p><code>${escapeHtml(outputPrefix)}</code></p>
-        <p>生成 Markdown、HTML 或 PDF 后回传到该目录，成果页会自动聚合展示。</p>
-      </div>
-      <section class="drive-prompt-panel">
-        <div class="drive-panel-head">
-          <h2>成果生成与回传提示词</h2>
-          ${controlButton("复制", "ph-copy", "copy-generate-prompt")}
+    <section class="drive-tab-panel">
+      ${hasKeywords ? "" : '<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>请先在设置中填写分析关键词，再执行 Agent 流程。</wa-callout>'}
+      <div class="drive-agent-grid">
+        <div class="drive-agent-card">
+          <h2>1. 获取资料并分析</h2>
+          <p>复制后交给本地 Agent。它会读取短时资料链接，并只按分析关键词完成结构化分析，不生成文件。</p>
+          <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest"${disabled}>
+            <i class="ph ph-clipboard-text" aria-hidden="true"></i>
+            复制第一阶段提示词
+          </button>
         </div>
-        <textarea readonly>${escapeHtml(prompt)}</textarea>
-      </section>
+        <div class="drive-agent-card">
+          <h2>2. 转换格式并回传</h2>
+          <p>请先在同一会话中校正判断并确认最终口径。第二阶段只转换为 Markdown/PDF，并使用无 Cookie 的短时授权回传。</p>
+          <button class="drive-control drive-control-primary" type="button" data-action="agent-output-task"${disabled}>
+            <i class="ph ph-file-arrow-up" aria-hidden="true"></i>
+            复制第二阶段提示词
+          </button>
+        </div>
+      </div>
     </section>
   `;
 }
@@ -967,12 +973,8 @@ function renderSettingsTab(): string {
     <section class="drive-tab-panel">
       <form class="drive-form drive-settings-form" data-settings-form>
         <label class="drive-field">
-          <span>专题说明</span>
-          <textarea name="topicDescription" rows="5">${escapeHtml(state.topic.topic.description || "")}</textarea>
-        </label>
-        <label class="drive-field">
-          <span>成果生成与回传提示词</span>
-          <textarea name="generatePrompt" rows="14">${escapeHtml(state.topic.generatePrompt || "")}</textarea>
+          <span>分析关键词</span>
+          <textarea name="analysisKeywords" rows="6" required>${escapeHtml(state.topic.topic.analysisKeywords || "")}</textarea>
         </label>
         <div class="drive-form-actions">
           <button class="drive-control drive-control-primary" type="submit">
@@ -1011,7 +1013,7 @@ function renderTopicCard(topic: DriveOverviewTopic): string {
     <article class="drive-topic-card">
       <div>
         <button class="drive-title-button" type="button" data-action="open-topic" data-prefix="${escapeAttr(topic.prefix)}">${escapeHtml(topic.name)}</button>
-        <p>${escapeHtml(topic.description || "暂无专题说明。")}</p>
+        <p>${escapeHtml(topic.analysisKeywords || "尚未填写分析关键词。")}</p>
       </div>
       <div class="drive-topic-card-meta">
         <span>${topic.outputCount} 个成果</span>

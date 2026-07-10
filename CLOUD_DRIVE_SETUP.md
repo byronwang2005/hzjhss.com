@@ -1,6 +1,6 @@
 # 嘉合杉升专题资料库部署说明
 
-专题资料库页面是 `drive.html`，API 使用 Cloudflare Pages Functions，文件、专题提示词和成果元数据存储在腾讯云 COS 私有 Bucket。
+专题资料库页面是 `drive.html`，API 使用 Cloudflare Pages Functions，专题资料和成果元数据存储在腾讯云 COS 私有 Bucket。
 
 ## Cloudflare 配置
 
@@ -29,13 +29,19 @@ Variables:
 
 根目录下的每个文件夹视为一个专题。创建专题会自动写入：
 
-- `成果生成与回传.prompt.md`
 - `outputs/`
 - `._topic.json`
 
 每个目录还会维护 `._drive-meta.json`，用于记录文件上传者、上传时间、类型和 content type。系统隐藏文件不会在资料列表中展示，也不能通过页面删除。
 
-读取专题资料时，用户点击“获取 agent 分析提示词”，系统会在专题下生成 `._agent-manifests/` 临时 manifest JSON。页面返回一个短时下载链接，agent 先下载 manifest，再按 manifest 内的短时文件链接读取资料。
+Agent 流程分为两步：
+
+1. “复制第一阶段提示词”会在专题下生成 `._agent-manifests/` 临时 manifest JSON。Agent 按短时链接读取资料，并以 `._topic.json` 中的分析关键词为依据完成分析。
+2. 用户在同一会话中校正判断并确认最终口径后，“复制第二阶段提示词”会签发 1 小时有效、仅允许写入本次 Markdown/PDF 两个指定路径的 Bearer 令牌。Agent 通过专用的 `agent-output-upload-*` 接口回传，不使用浏览器 Cookie。
+
+每个 v2 专题带有不可复用的 `instanceId`。Agent 成果路径绑定该实例，专题删除后签发过的旧 URL 不会被新建的同名专题聚合。没有 `._topic.json` 的残留对象前缀不会出现在专题概览。
+
+旧专题中的 `成果生成与回传.prompt.md` 会继续隐藏并原样保留，但系统不再读取、创建或修改该文件。旧版 `description` 字段会在读取时映射为 `analysisKeywords`，下次保存后写成 v2 专题元数据。此次升级为 Cookie 和 Agent 令牌增加了用途隔离，部署时已有登录会话需要重新登录一次。
 
 ## 腾讯云 COS 配置
 

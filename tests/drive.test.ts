@@ -1,15 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelativeFilePath } from "../src/drive/paths";
 import { parseListObjectsXml, parseObjectPathsXml } from "../src/drive/cos";
-import { createSessionCookie, getDriveSession, verifyAccessCode, verifySessionCookie } from "../src/drive/session";
+import { toDriveOverviewApiResponse, toTopicDetailApiResponse } from "../src/drive/api-responses";
+import {
+  createAgentOutputToken,
+  createSessionCookie,
+  getAgentOutputCapability,
+  getDriveSession,
+  allowsAgentOutputPath,
+  verifyAccessCode,
+  verifySessionCookie,
+} from "../src/drive/session";
 import {
   DRIVE_META_FILENAME,
   GENERATE_PROMPT_FILENAME,
   OUTPUTS_FOLDER_NAME,
   TOPIC_META_FILENAME,
   createAgentManifestPrompt,
+  createAgentOutputPaths,
+  createAgentOutputPrompt,
   createTopic,
-  createDefaultPrompts,
   hasSystemPathSegment,
   isAgentReadableFile,
   isAgentReadableFolder,
@@ -17,14 +27,29 @@ import {
   normalizeTopicPrefix,
   readDriveOverview,
   readTopic,
+  updateTopic,
 } from "../src/drive/topic";
 import type { DriveConfig } from "../src/drive/config";
 import type { DriveEnv } from "../src/drive/config";
+import { onRequestPost as createAgentUploadUrl } from "../functions/api/drive/agent-output-upload-url";
+import { onRequestPost as completeAgentUpload } from "../functions/api/drive/agent-output-upload-complete";
 
 const env: DriveEnv = {
   DRIVE_ACCESS_CODE: "open-sesame",
   DRIVE_SESSION_SECRET: "test-secret",
   DRIVE_SESSION_MAX_AGE_SECONDS: "60",
+};
+
+const apiEnv: DriveEnv = {
+  ...env,
+  COS_SECRET_ID: "test-id",
+  COS_SECRET_KEY: "test-key",
+  COS_BUCKET: "test-bucket",
+  COS_REGION: "ap-guangzhou",
+  COS_ENDPOINT: "https://cos.example.com",
+  DRIVE_ROOT_PREFIX: "cloud-drive/",
+  DRIVE_MAX_FILE_MB: "1",
+  DRIVE_SIGN_EXPIRES_SECONDS: "900",
 };
 
 const testConfig: DriveConfig = {
@@ -191,21 +216,69 @@ describe("drive sessions", () => {
     await expect(verifyAccessCode(env, "open-sesame")).resolves.toBe(true);
     await expect(verifyAccessCode(env, " open-sesame\n")).resolves.toBe(true);
   });
+
+  it("creates a path-scoped agent output capability", async () => {
+    const allowedPaths = ["新能源/outputs/report.md", "新能源/outputs/report.pdf"];
+    const result = await createAgentOutputToken(env, {
+      displayName: "王小明",
+      topicPrefix: "新能源/",
+      topicInstanceId: "topicinstance1",
+      allowedPaths,
+    });
+    const capability = await getAgentOutputCapability(env, `Bearer ${result.token}`);
+
+    expect(result.expiresIn).toBe(3600);
+    expect(capability).toMatchObject({ displayName: "王小明", topicPrefix: "新能源/", allowedPaths });
+    expect(allowsAgentOutputPath(capability!, allowedPaths[0])).toBe(true);
+    expect(allowsAgentOutputPath(capability!, "新能源/outputs/report.html")).toBe(false);
+    expect(allowsAgentOutputPath(capability!, "其他/outputs/report.md")).toBe(false);
+    await expect(getAgentOutputCapability(env, `Bearer ${result.token}x`)).resolves.toBeNull();
+    await expect(getAgentOutputCapability(env, null)).resolves.toBeNull();
+    await expect(getDriveSession(env, `jhss_drive_session=${result.token}`)).resolves.toBeNull();
+  });
+
+  it("rejects expired agent output capabilities", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-10T00:00:00.000Z"));
+      const result = await createAgentOutputToken(env, {
+        displayName: "王小明",
+        topicPrefix: "新能源/",
+        topicInstanceId: "topicinstance1",
+        allowedPaths: ["新能源/outputs/report.md"],
+      });
+      vi.setSystemTime(new Date("2026-07-10T01:00:01.000Z"));
+      await expect(getAgentOutputCapability(env, `Bearer ${result.token}`)).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("topic prompts", () => {
-  it("creates default output prompts with topic paths and upload callback", () => {
-    const prompts = createDefaultPrompts({
+  it("creates a format-only output prompt with dedicated cookie-free callbacks", () => {
+    const [markdownPath, pdfPath] = createAgentOutputPaths(
+      { name: "新能源", prefix: "新能源/", instanceId: "topicinstance1" },
+      new Date("2026-07-09T01:23:00.000Z"),
+      "a1b2c3d4",
+    );
+    const prompt = createAgentOutputPrompt({
+      topic: { name: "新能源", prefix: "新能源/", instanceId: "topicinstance1" },
       origin: "https://example.com",
-      name: "新能源",
-      prefix: "新能源/",
-      description: "跟踪新能源行业。",
+      token: "signed-capability",
+      expiresAt: "2026-07-09T02:23:00.000Z",
+      expiresIn: 3600,
+      markdownPath,
+      pdfPath,
     });
 
-    expect(GENERATE_PROMPT_FILENAME).toBe("成果生成与回传.prompt.md");
-    expect(prompts.generatePrompt).toContain("新能源：成果生成与回传");
-    expect(prompts.generatePrompt).toContain("新能源/outputs/");
-    expect(prompts.generatePrompt).toContain("/api/drive/upload-complete");
+    expect(prompt).toContain("用户最终确认的口径");
+    expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.md");
+    expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.pdf");
+    expect(prompt).toContain("/api/drive/agent-output-upload-url");
+    expect(prompt).toContain("/api/drive/agent-output-upload-complete");
+    expect(prompt).toContain("该接口不使用 Cookie");
+    expect(prompt).not.toContain("分析关键词（本阶段的分析依据）");
   });
 
   it("creates an agent prompt with one manifest link", () => {
@@ -213,7 +286,7 @@ describe("topic prompts", () => {
       topic: {
         name: "新能源",
         prefix: "新能源/",
-        description: "跟踪新能源行业。",
+        analysisKeywords: "装机量、价格、竞争格局",
       },
       generatedAt: "2026-07-09T01:00:00.000Z",
       expiresAt: "2026-07-09T01:15:00.000Z",
@@ -225,6 +298,9 @@ describe("topic prompts", () => {
     expect(prompt).toContain("https://cos.example.com/manifest.json?X-Amz-Signature=abc");
     expect(prompt).toContain("不需要登录");
     expect(prompt).toContain("资料数量：3");
+    expect(prompt).toContain("装机量、价格、竞争格局");
+    expect(prompt).toContain("此阶段只完成分析，不生成或上传成果文件");
+    expect(prompt).not.toContain("agent-output-upload-url");
     expect(prompt).not.toContain("/api/drive/download-url");
   });
 
@@ -239,27 +315,180 @@ describe("topic prompts", () => {
   });
 });
 
+describe("agent output upload API", () => {
+  it("accepts a valid Bearer capability without a cookie and records output metadata", async () => {
+    await withMockCos(
+      [
+        [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())],
+        ["新能源/outputs/", ""],
+      ],
+      async (storage) => {
+      const path = "新能源/outputs/report.md";
+      const { token } = await createAgentOutputToken(apiEnv, {
+        displayName: "王小明",
+        topicPrefix: "新能源/",
+        topicInstanceId: "topicinstance1",
+        allowedPaths: [path],
+      });
+      const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+      const uploadResponse = await createAgentUploadUrl({
+        request: new Request("https://example.com/api/drive/agent-output-upload-url", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ path, size: 12, contentType: "text/markdown; charset=utf-8" }),
+        }),
+        env: apiEnv,
+      } as any);
+      expect(uploadResponse.status).toBe(200);
+      const upload = (await uploadResponse.json()) as { url: string; path: string; contentType: string; requiredHeaders: Record<string, string> };
+      expect(upload).toMatchObject({
+        path,
+        contentType: "text/markdown; charset=utf-8",
+        requiredHeaders: { "content-length": "12", "content-type": "text/markdown; charset=utf-8" },
+      });
+      expect(new URL(upload.url).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
+
+      const completeResponse = await completeAgentUpload({
+        request: new Request("https://example.com/api/drive/agent-output-upload-complete", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ path, size: 12, contentType: "text/markdown; charset=utf-8" }),
+        }),
+        env: apiEnv,
+      } as any);
+      expect(completeResponse.status).toBe(200);
+      expect(JSON.parse(storage.get(`新能源/outputs/${DRIVE_META_FILENAME}`) || "{}").files["report.md"]).toMatchObject({
+        uploadedBy: "王小明",
+        kind: "output",
+      });
+      },
+    );
+  });
+
+  it("rejects missing credentials, unlisted paths, and mismatched formats", async () => {
+    await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async () => {
+      const allowedPath = "新能源/outputs/report.md";
+      const { token } = await createAgentOutputToken(apiEnv, {
+        displayName: "王小明",
+        topicPrefix: "新能源/",
+        topicInstanceId: "topicinstance1",
+        allowedPaths: [allowedPath],
+      });
+      const callUploadUrl = (path: string, contentType: string, authorization?: string) =>
+        createAgentUploadUrl({
+          request: new Request("https://example.com/api/drive/agent-output-upload-url", {
+            method: "POST",
+            headers: { ...(authorization ? { authorization } : {}), "content-type": "application/json" },
+            body: JSON.stringify({ path, size: 12, contentType }),
+          }),
+          env: apiEnv,
+        } as any);
+
+      expect((await callUploadUrl(allowedPath, "text/markdown; charset=utf-8")).status).toBe(401);
+      const cookieOnlyResponse = await createAgentUploadUrl({
+        request: new Request("https://example.com/api/drive/agent-output-upload-url", {
+          method: "POST",
+          headers: { cookie: "jhss_drive_session=ignored", "content-type": "application/json" },
+          body: JSON.stringify({ path: allowedPath, size: 12, contentType: "text/markdown; charset=utf-8" }),
+        }),
+        env: apiEnv,
+      } as any);
+      expect(cookieOnlyResponse.status).toBe(401);
+      expect((await callUploadUrl("新能源/outputs/report.html", "text/html", `Bearer ${token}`)).status).toBe(401);
+      expect((await callUploadUrl(allowedPath, "application/pdf", `Bearer ${token}`)).status).toBe(400);
+    });
+  });
+
+  it("does not issue a PUT URL beyond the capability expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-10T00:00:00.000Z"));
+      const path = "新能源/outputs/report.pdf";
+      const { token } = await createAgentOutputToken(apiEnv, {
+        displayName: "王小明",
+        topicPrefix: "新能源/",
+        topicInstanceId: "topicinstance1",
+        allowedPaths: [path],
+      });
+      vi.setSystemTime(new Date("2026-07-10T00:59:50.000Z"));
+      await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async () => {
+        const response = await createAgentUploadUrl({
+          request: new Request("https://example.com/api/drive/agent-output-upload-url", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
+          }),
+          env: apiEnv,
+        } as any);
+        const upload = (await response.json()) as { url: string; expiresIn: number };
+        expect(upload.expiresIn).toBe(10);
+        expect(new URL(upload.url).searchParams.get("X-Amz-Expires")).toBe("10");
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a capability after the topic is deleted and recreated", async () => {
+    const path = "新能源/outputs/report.md";
+    const { token } = await createAgentOutputToken(apiEnv, {
+      displayName: "王小明",
+      topicPrefix: "新能源/",
+      topicInstanceId: "topicinstance1",
+      allowedPaths: [path],
+    });
+    await withMockCos(
+      [[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify({ ...testTopicMetadata(), instanceId: "topicinstance2" })]],
+      async () => {
+        const response = await createAgentUploadUrl({
+          request: new Request("https://example.com/api/drive/agent-output-upload-url", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ path, size: 12, contentType: "text/markdown; charset=utf-8" }),
+          }),
+          env: apiEnv,
+        } as any);
+        expect(response.status).toBe(401);
+      },
+    );
+  });
+});
+
 describe("topic scaffolding", () => {
-  it("creates a topic with only the output prompt file", async () => {
+  it("requires analysis keywords when creating a topic", async () => {
+    await withMockCos([], async () => {
+      await expect(
+        createTopic(testConfig, {
+          name: "新能源",
+          analysisKeywords: "   ",
+          displayName: "王小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("请填写分析关键词");
+    });
+  });
+
+  it("creates a topic without a static output prompt file", async () => {
     await withMockCos([], async (storage) => {
       const detail = await createTopic(testConfig, {
         name: "新能源",
-        description: "跟踪新能源行业。",
+        analysisKeywords: "装机量、价格、竞争格局",
         displayName: "王小明",
         origin: "https://example.com",
       });
 
-      expect(detail.generatePrompt).toContain("新能源/outputs/");
-      expect(storage.has(`新能源/${GENERATE_PROMPT_FILENAME}`)).toBe(true);
+      expect(detail.topic).toMatchObject({ version: 2, analysisKeywords: "装机量、价格、竞争格局" });
+      expect(toTopicDetailApiResponse(detail).topic.description).toBe("装机量、价格、竞争格局");
+      expect(storage.has(`新能源/${GENERATE_PROMPT_FILENAME}`)).toBe(false);
       expect(storage.has(`新能源/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
 
       const rootMeta = JSON.parse(storage.get(`新能源/${DRIVE_META_FILENAME}`) || "{}");
-      expect(rootMeta.files[GENERATE_PROMPT_FILENAME]).toMatchObject({ kind: "prompt", uploadedBy: "王小明" });
+      expect(rootMeta.files[GENERATE_PROMPT_FILENAME]).toBeUndefined();
       expect(rootMeta.files[TOPIC_META_FILENAME]).toMatchObject({ kind: "topic", uploadedBy: "王小明" });
     });
   });
 
-  it("repairs an incomplete topic with the output prompt file", async () => {
+  it("repairs an incomplete topic without creating a static prompt", async () => {
     await withMockCos([["半成品/report.pdf", "material"]], async (storage) => {
       const detail = await readTopic(testConfig, "半成品/", {
         displayName: "李小明",
@@ -271,16 +500,16 @@ describe("topic scaffolding", () => {
         prefix: "半成品/",
         createdBy: "李小明",
       });
-      expect(detail.generatePrompt).toContain("半成品/outputs/");
+      expect(detail.topic.analysisKeywords).toBe("");
       expect(storage.get("半成品/report.pdf")).toBe("material");
       expect(storage.has(`半成品/${TOPIC_META_FILENAME}`)).toBe(true);
-      expect(storage.has(`半成品/${GENERATE_PROMPT_FILENAME}`)).toBe(true);
+      expect(storage.has(`半成品/${GENERATE_PROMPT_FILENAME}`)).toBe(false);
       expect(storage.has(`半成品/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
       expect(storage.has(`半成品/${OUTPUTS_FOLDER_NAME}/${DRIVE_META_FILENAME}`)).toBe(true);
     });
   });
 
-  it("preserves existing generate prompts while repairing missing topic pieces", async () => {
+  it("maps v1 descriptions to analysis keywords and preserves legacy prompt files", async () => {
     const topic = {
       version: 1,
       name: "旧专题",
@@ -303,10 +532,46 @@ describe("topic scaffolding", () => {
           origin: "https://example.com",
         });
 
-        expect(detail.topic.description).toBe("已有说明");
-        expect(detail.generatePrompt).toBe("自定义生成提示词");
+        expect(detail.topic).toMatchObject({ version: 2, analysisKeywords: "已有说明" });
         expect(storage.get(`旧专题/${GENERATE_PROMPT_FILENAME}`)).toBe("自定义生成提示词");
         expect(storage.has(`旧专题/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
+
+        await updateTopic(testConfig, {
+          prefix: "旧专题/",
+          analysisKeywords: "更新后的关键词",
+          displayName: "李小明",
+          origin: "https://example.com",
+        });
+        expect(JSON.parse(storage.get(`旧专题/${TOPIC_META_FILENAME}`) || "{}")).toMatchObject({
+          version: 2,
+          analysisKeywords: "更新后的关键词",
+        });
+      },
+    );
+  });
+
+  it("hides Agent outputs that belong to a deleted topic instance", async () => {
+    await withMockCos(
+      [
+        [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())],
+        ["新能源/outputs/agent-topicinstance1-2026-07-10-1000-task0001-新能源-专题总结.md", "current"],
+        ["新能源/outputs/agent-topicinstance2-2026-07-10-1000-task0002-新能源-专题总结.md", "stale"],
+        ["新能源/outputs/legacy-report.pdf", "legacy"],
+      ],
+      async () => {
+        const detail = await readTopic(testConfig, "新能源/", { displayName: "王小明", origin: "https://example.com" });
+        const expectedNames = [
+          "agent-topicinstance1-2026-07-10-1000-task0001-新能源-专题总结.md",
+          "legacy-report.pdf",
+        ];
+        expect(detail.outputs.map((file) => file.name).sort()).toEqual(expectedNames);
+        const updated = await updateTopic(testConfig, {
+          prefix: "新能源/",
+          analysisKeywords: "更新后的分析关键词",
+          displayName: "王小明",
+          origin: "https://example.com",
+        });
+        expect(updated.outputs.map((file) => file.name).sort()).toEqual(expectedNames);
       },
     );
   });
@@ -376,6 +641,7 @@ describe("drive overview", () => {
         });
 
         expect(overview.topics).toHaveLength(2);
+        expect(toDriveOverviewApiResponse(overview).topics[0].description).toBe("跟踪新能源行业。");
         expect(overview.topics[0]).toMatchObject({
           name: "新能源",
           outputCount: 2,
@@ -392,6 +658,13 @@ describe("drive overview", () => {
         });
       },
     );
+  });
+
+  it("ignores object prefixes that have no topic metadata", async () => {
+    await withMockCos([["已删除专题/outputs/agent-oldinstance-2026-07-10-1000-task0001-report.md", "stale"]], async () => {
+      const overview = await readDriveOverview(testConfig, { displayName: "管理员", origin: "https://example.com" });
+      expect(overview.topics).toEqual([]);
+    });
   });
 });
 
@@ -433,6 +706,20 @@ async function withMockCos(
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+function testTopicMetadata() {
+  return {
+    version: 2,
+    instanceId: "topicinstance1",
+    name: "新能源",
+    prefix: "新能源/",
+    analysisKeywords: "装机量、价格、竞争格局",
+    createdBy: "王小明",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedBy: "王小明",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+  };
 }
 
 function objectPathFromUrl(url: URL): string {

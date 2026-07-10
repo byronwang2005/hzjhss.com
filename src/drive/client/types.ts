@@ -23,10 +23,11 @@ export interface DriveListResult {
 }
 
 export interface TopicMetadata {
-  version: 1;
+  version: 2;
+  instanceId: string;
   name: string;
   prefix: string;
-  description: string;
+  analysisKeywords: string;
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -35,7 +36,6 @@ export interface TopicMetadata {
 
 export interface TopicDetail {
   topic: TopicMetadata;
-  generatePrompt: string;
   outputs: DriveFile[];
 }
 
@@ -51,7 +51,7 @@ export interface DriveOverviewOutput {
 export interface DriveOverviewTopic {
   prefix: string;
   name: string;
-  description: string;
+  analysisKeywords: string;
   createdBy: string;
   updatedAt: string;
   outputCount: number;

@@ -17,6 +17,10 @@ export const TOPIC_META_FILENAME = "._topic.json";
 export const GENERATE_PROMPT_FILENAME = "成果生成与回传.prompt.md";
 export const OUTPUTS_FOLDER_NAME = "outputs";
 export const AGENT_MANIFEST_FOLDER_NAME = "._agent-manifests";
+export const AGENT_OUTPUT_FORMATS = [
+  { extension: ".md", contentType: "text/markdown; charset=utf-8" },
+  { extension: ".pdf", contentType: "application/pdf" },
+] as const;
 
 export interface DriveFileMetadata {
   uploadedBy: string;
@@ -32,10 +36,11 @@ export interface DriveDirectoryMetadata {
 }
 
 export interface TopicMetadata {
-  version: 1;
+  version: 2;
+  instanceId: string;
   name: string;
   prefix: string;
-  description: string;
+  analysisKeywords: string;
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -44,7 +49,6 @@ export interface TopicMetadata {
 
 export interface TopicDetail {
   topic: TopicMetadata;
-  generatePrompt: string;
   outputs: DriveFile[];
 }
 
@@ -67,7 +71,7 @@ export interface AgentManifestFile {
 
 export interface AgentManifest {
   version: 1;
-  topic: Pick<TopicMetadata, "name" | "prefix" | "description">;
+  topic: Pick<TopicMetadata, "name" | "prefix" | "analysisKeywords">;
   generatedAt: string;
   expiresAt: string;
   expiresIn: number;
@@ -96,7 +100,7 @@ export interface DriveOverviewOutput {
 export interface DriveOverviewTopic {
   prefix: string;
   name: string;
-  description: string;
+  analysisKeywords: string;
   createdBy: string;
   updatedAt: string;
   outputCount: number;
@@ -139,23 +143,23 @@ export function hasSystemPathSegment(path: string): boolean {
 
 export async function createTopic(
   config: DriveConfig,
-  input: { name: unknown; description?: unknown; displayName: string; origin: string },
+  input: { name: unknown; analysisKeywords?: unknown; description?: unknown; displayName: string; origin: string },
 ): Promise<TopicDetail> {
   const name = normalizeTopicName(input.name);
   const prefix = topicPrefixFromName(name);
-  const description = normalizeDescription(input.description);
+  const analysisKeywords = normalizeAnalysisKeywords(input.analysisKeywords ?? input.description, true);
   const now = new Date().toISOString();
   const topic: TopicMetadata = {
-    version: 1,
+    version: 2,
+    instanceId: createNonce(),
     name,
     prefix,
-    description,
+    analysisKeywords,
     createdBy: input.displayName,
     createdAt: now,
     updatedBy: input.displayName,
     updatedAt: now,
   };
-  const prompts = createDefaultPrompts({ origin: input.origin, name, prefix, description });
   const existing = await getObjectText(config, `${prefix}${TOPIC_META_FILENAME}`);
   if (existing) {
     throw new Error("同名专题已存在");
@@ -164,11 +168,9 @@ export async function createTopic(
   await createFolder(config, prefix);
   await createFolder(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
   await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
-  await putObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, prompts.generatePrompt, "text/markdown; charset=utf-8");
   await writeDriveMeta(config, prefix, {
     version: 1,
     files: {
-      [GENERATE_PROMPT_FILENAME]: fileMetadata(input.displayName, prompts.generatePrompt, "text/markdown; charset=utf-8", "prompt", now),
       [TOPIC_META_FILENAME]: fileMetadata(input.displayName, JSON.stringify(topic), "application/json; charset=utf-8", "topic", now),
     },
   });
@@ -176,60 +178,53 @@ export async function createTopic(
 
   return {
     topic,
-    generatePrompt: prompts.generatePrompt,
     outputs: [],
   };
 }
 
 export async function readTopic(config: DriveConfig, rawPrefix: unknown, options: TopicScaffoldOptions): Promise<TopicDetail> {
   const prefix = normalizeTopicPrefix(rawPrefix);
-  const { topic, generatePrompt } = await ensureTopicScaffold(config, prefix, options);
-  const outputs = await listDirectoryWithMetadata(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
-  return { topic, generatePrompt, outputs: outputs.files };
+  const { topic } = await ensureTopicScaffold(config, prefix, options);
+  return { topic, outputs: await listOutputsForTopicInstance(config, topic) };
+}
+
+export async function readExistingTopicMetadata(config: DriveConfig, rawPrefix: unknown): Promise<TopicMetadata | null> {
+  return readTopicMetadataIfExists(config, normalizeTopicPrefix(rawPrefix));
 }
 
 export async function updateTopic(
   config: DriveConfig,
   input: {
     prefix: unknown;
+    analysisKeywords?: unknown;
     description?: unknown;
-    generatePrompt?: unknown;
     displayName: string;
     origin: string;
   },
 ): Promise<TopicDetail> {
   const prefix = normalizeTopicPrefix(input.prefix);
-  const { topic, generatePrompt: existingGeneratePrompt } = await ensureTopicScaffold(config, prefix, {
+  const { topic } = await ensureTopicScaffold(config, prefix, {
     displayName: input.displayName,
     origin: input.origin,
   });
-  const description = input.description == null ? topic.description : normalizeDescription(input.description);
-  const generatePrompt = input.generatePrompt == null ? existingGeneratePrompt : normalizePrompt(input.generatePrompt);
+  const rawKeywords = input.analysisKeywords ?? input.description;
+  const analysisKeywords = rawKeywords == null ? topic.analysisKeywords : normalizeAnalysisKeywords(rawKeywords, true);
   const now = new Date().toISOString();
   const updatedTopic: TopicMetadata = {
     ...topic,
-    description,
+    version: 2,
+    analysisKeywords,
     updatedBy: input.displayName,
     updatedAt: now,
   };
 
   await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(updatedTopic, null, 2), "application/json; charset=utf-8");
-  await putObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, generatePrompt, "text/markdown; charset=utf-8");
   await recordFileMetadata(
     config,
     `${prefix}${TOPIC_META_FILENAME}`,
     fileMetadata(input.displayName, JSON.stringify(updatedTopic), "application/json; charset=utf-8", "topic", now),
   );
-  await recordFileMetadata(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, {
-    uploadedBy: input.displayName,
-    uploadedAt: now,
-    contentType: "text/markdown; charset=utf-8",
-    size: byteLength(generatePrompt),
-    kind: "prompt",
-  });
-
-  const outputs = await listDirectoryWithMetadata(config, `${prefix}${OUTPUTS_FOLDER_NAME}/`);
-  return { topic: updatedTopic, generatePrompt, outputs: outputs.files };
+  return { topic: updatedTopic, outputs: await listOutputsForTopicInstance(config, updatedTopic) };
 }
 
 export async function deleteTopic(
@@ -259,15 +254,18 @@ export async function readDriveOverview(config: DriveConfig, options: TopicScaff
   const topics = await Promise.all(
     root.folders.map(async (folder): Promise<DriveOverviewTopic | null> => {
       try {
-        const detail = await readTopic(config, folder.path, options);
-        const outputs = [...detail.outputs].sort((a, b) => timestampForFile(b) - timestampForFile(a));
+        const topic = await readTopicMetadataIfExists(config, folder.path);
+        if (!topic) {
+          return null;
+        }
+        const outputs = (await listOutputsForTopicInstance(config, topic)).sort((a, b) => timestampForFile(b) - timestampForFile(a));
         const latest = outputs[0];
         return {
-          prefix: detail.topic.prefix,
-          name: detail.topic.name,
-          description: detail.topic.description,
-          createdBy: detail.topic.createdBy,
-          updatedAt: detail.topic.updatedAt,
+          prefix: topic.prefix,
+          name: topic.name,
+          analysisKeywords: topic.analysisKeywords,
+          createdBy: topic.createdBy,
+          updatedAt: topic.updatedAt,
           outputCount: outputs.length,
           latestOutput: latest
             ? {
@@ -362,6 +360,7 @@ export async function createAgentManifest(
     displayName: input.displayName,
     origin: input.origin,
   });
+  requireAnalysisKeywords(topic.analysisKeywords);
   const generatedAt = new Date();
   const expiresAt = new Date(generatedAt.getTime() + config.signExpiresSeconds * 1000);
   const materialFiles = await listTopicMaterialFiles(config, prefix);
@@ -381,7 +380,7 @@ export async function createAgentManifest(
     topic: {
       name: topic.name,
       prefix: topic.prefix,
-      description: topic.description,
+      analysisKeywords: topic.analysisKeywords,
     },
     generatedAt: generatedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -416,14 +415,14 @@ export async function createAgentManifest(
 }
 
 export function createAgentManifestPrompt(input: {
-  topic: Pick<TopicMetadata, "name" | "prefix" | "description">;
+  topic: Pick<TopicMetadata, "name" | "prefix" | "analysisKeywords">;
   generatedAt: string;
   expiresAt: string;
   expiresIn: number;
   fileCount: number;
   manifestUrl: string;
 }): string {
-  return `# ${input.topic.name}：Agent 资料分析任务
+  return `# ${input.topic.name}：第一阶段 · 资料分析任务
 
 你是本地 AI agent。你不需要登录网盘，也不需要携带 cookie。
 
@@ -432,18 +431,73 @@ ${input.manifestUrl}
 
 链接信息：
 - 专题路径：${input.topic.prefix}
-- 专题说明：${input.topic.description || "暂无专题说明。"}
 - 生成时间：${input.generatedAt}
 - 过期时间：${input.expiresAt}
 - 有效期：${input.expiresIn} 秒
 - 资料数量：${input.fileCount}
 
+分析关键词（本阶段的分析依据）：
+${input.topic.analysisKeywords}
+
 读取方法：
 1. 下载 manifest JSON。
 2. 遍历 manifest.files，使用每个文件的 signedUrl 下载资料。
 3. 分析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件 path。
-4. 输出资料索引和结构化分析，至少包含：来源 path、资料类型、作者或机构、发布日期、核心观点、关键数据、待核验问题。
-5. 每个重要判断必须标注来源 path。链接过期后停止读取，并提示用户重新生成 agent 分析提示词。
+4. 围绕分析关键词输出资料索引和结构化分析，至少包含：来源 path、资料类型、作者或机构、发布日期、核心观点、关键数据、冲突观点、风险和待核验问题。
+5. 每个重要判断必须标注来源 path。此阶段只完成分析，不生成或上传成果文件。
+6. 分析完成后等待用户校正判断和确认最终口径；链接过期后停止读取，并提示用户重新复制第一阶段提示词。
+`;
+}
+
+export function createAgentOutputPaths(
+  topic: Pick<TopicMetadata, "name" | "prefix" | "instanceId">,
+  generatedAt = new Date(),
+  taskId = createNonce().slice(0, 8),
+): [string, string] {
+  const timestamp = generatedAt.toISOString().slice(0, 16).replace("T", "-").replace(":", "");
+  const safeTopicName = topic.name.slice(0, 110);
+  const basePath = `${topic.prefix}${OUTPUTS_FOLDER_NAME}/agent-${topic.instanceId}-${timestamp}-${taskId}-${safeTopicName}-专题总结`;
+  return [`${basePath}${AGENT_OUTPUT_FORMATS[0].extension}`, `${basePath}${AGENT_OUTPUT_FORMATS[1].extension}`];
+}
+
+export function isExpectedAgentOutputContentType(path: string, contentType: string): boolean {
+  return AGENT_OUTPUT_FORMATS.some((format) => path.endsWith(format.extension) && contentType === format.contentType);
+}
+
+export function createAgentOutputPrompt(input: {
+  topic: Pick<TopicMetadata, "name" | "prefix" | "instanceId">;
+  origin: string;
+  token: string;
+  expiresAt: string;
+  expiresIn: number;
+  markdownPath: string;
+  pdfPath: string;
+}): string {
+  return `# ${input.topic.name}：第二阶段 · 成果生成与回传
+
+你是本地 AI agent。本阶段不再重新分析资料，也不要重新套用第一阶段的分析关键词。
+
+先检查当前会话：必须已经完成第一阶段资料分析，并且用户已经对判断进行调整、明确确认最终口径。若尚未形成用户确认的最终口径，立即停止，要求用户先确认；不得擅自生成成果。
+
+成果要求：
+1. 仅把当前会话中用户最终确认的口径整理为正式成果，不自行增加、删除或改变结论。
+2. 成果至少包含：摘要、分析框架、关键发现、证据引用、风险、待核验事项。
+3. 每个重要判断保留第一阶段提供的来源 path；不要虚构引用。
+4. 必须生成内容一致的 Markdown 和 PDF 两个文件：
+   - ${input.markdownPath}
+   - ${input.pdfPath}
+
+回传授权：
+- 有效期：${input.expiresIn} 秒
+- 过期时间：${input.expiresAt}
+- Bearer token：${input.token}
+- 令牌和短时 PUT URL 只用于请求鉴权，禁止写入成果正文、日志或最终回复。
+
+回传流程（两个文件分别执行）：
+1. POST \`${input.origin}/api/drive/agent-output-upload-url\`，请求头带 \`Authorization: Bearer <token>\` 和 \`Content-Type: application/json\`；body 包含上方对应的完整 \`path\`、实际 \`size\` 与 \`contentType\`。该接口不使用 Cookie。
+2. Markdown 使用 \`${AGENT_OUTPUT_FORMATS[0].contentType}\`，PDF 使用 \`${AGENT_OUTPUT_FORMATS[1].contentType}\`。用返回的短时 PUT URL 上传，并原样携带返回的全部 \`requiredHeaders\`；其中 \`content-length\` 必须等于申请时的实际字节数。
+3. PUT 成功后 POST \`${input.origin}/api/drive/agent-output-upload-complete\`，同样只携带 Bearer token、不携带 Cookie；body 包含返回的 \`path\`、实际 \`size\` 与 \`contentType\`。
+4. 两个文件都成功登记后，报告各自 path。授权过期、专题已删除或任一步失败时停止并报告具体错误，提示用户重新复制第二阶段提示词。
 `;
 }
 
@@ -511,69 +565,27 @@ export function isAgentReadableFile(topicPrefix: string, file: Pick<DriveFile, "
   );
 }
 
-export function createDefaultPrompts(input: {
-  origin: string;
-  name: string;
-  prefix: string;
-  description: string;
-}): { generatePrompt: string } {
-  const description = input.description || "暂无专题说明。";
-  const generatePrompt = `# ${input.name}：成果生成与回传
-
-你是本地 AI agent。请基于专题 \`${input.prefix}\` 的资料生成结构化成果，并回传 HTML/PDF/Markdown 到 \`${input.prefix}${OUTPUTS_FOLDER_NAME}/\`。
-
-专题说明：
-${description}
-
-推荐流程：
-1. 资料分层：区分事实、观点、预测、数据、风险提示。
-2. 证据归纳：每个重要判断必须标注来源文件名；冲突观点并列呈现。
-3. 结构化输出：先给摘要，再给分析框架、关键发现、数据表、风险与待办。
-4. 固定产物：生成 Markdown 原稿、可直接预览的 HTML，以及需要归档时的 PDF。
-5. 命名规则：\`outputs/YYYY-MM-DD-${input.name}-专题总结.md\`、\`outputs/YYYY-MM-DD-${input.name}-专题总结.html\`、\`outputs/YYYY-MM-DD-${input.name}-专题总结.pdf\`。
-
-回传流程：
-1. 调用 \`${input.origin}/api/drive/upload-url\`，body 包含 \`prefix: "${input.prefix}${OUTPUTS_FOLDER_NAME}/"\`、\`filename\`、\`size\`、\`contentType\`。
-2. 用返回的短时 PUT URL 上传文件。
-3. 上传成功后调用 \`${input.origin}/api/drive/upload-complete\`，body 包含 \`path\`、\`size\`、\`contentType\`、\`kind: "output"\`。
-4. 回传完成后，确认专题成果区能预览 HTML/PDF/Markdown。
-`;
-
-  return { generatePrompt };
-}
-
 async function ensureTopicScaffold(
   config: DriveConfig,
   prefix: string,
   options: TopicScaffoldOptions,
-): Promise<{ topic: TopicMetadata; generatePrompt: string }> {
+): Promise<{ topic: TopicMetadata }> {
   const now = new Date().toISOString();
   let topic = await readTopicMetadataIfExists(config, prefix);
   if (!topic) {
     const name = topicNameFromPrefix(prefix);
     topic = {
-      version: 1,
+      version: 2,
+      instanceId: createNonce(),
       name,
       prefix,
-      description: "",
+      analysisKeywords: "",
       createdBy: options.displayName,
       createdAt: now,
       updatedBy: options.displayName,
       updatedAt: now,
     };
     await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
-  }
-
-  const defaultPrompts = createDefaultPrompts({
-    origin: options.origin,
-    name: topic.name,
-    prefix,
-    description: topic.description,
-  });
-  let generatePrompt = await getObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`);
-  if (generatePrompt === null) {
-    generatePrompt = defaultPrompts.generatePrompt;
-    await putObjectText(config, `${prefix}${GENERATE_PROMPT_FILENAME}`, generatePrompt, "text/markdown; charset=utf-8");
   }
 
   const outputsPrefix = `${prefix}${OUTPUTS_FOLDER_NAME}/`;
@@ -594,16 +606,6 @@ async function ensureTopicScaffold(
     );
     rootMetaChanged = true;
   }
-  if (!rootMeta.files[GENERATE_PROMPT_FILENAME]) {
-    rootMeta.files[GENERATE_PROMPT_FILENAME] = fileMetadata(
-      options.displayName,
-      generatePrompt,
-      "text/markdown; charset=utf-8",
-      "prompt",
-      now,
-    );
-    rootMetaChanged = true;
-  }
   if (rootMetaChanged) {
     await writeDriveMeta(config, prefix, rootMeta);
   }
@@ -614,7 +616,7 @@ async function ensureTopicScaffold(
     await writeDriveMeta(config, outputsPrefix, { version: 1, files: {} });
   }
 
-  return { topic, generatePrompt };
+  return { topic };
 }
 
 async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): Promise<TopicMetadata | null> {
@@ -622,15 +624,24 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
   if (!text) {
     return null;
   }
-  const parsed = JSON.parse(text) as Partial<TopicMetadata>;
-  if (parsed.version !== 1 || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
+  const parsed = JSON.parse(text) as Omit<Partial<TopicMetadata>, "version"> & { version?: number; description?: unknown };
+  if ((parsed.version !== 1 && parsed.version !== 2) || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
     throw new Error("专题元数据无效");
   }
   return {
-    version: 1,
+    version: 2,
+    instanceId:
+      typeof parsed.instanceId === "string" && /^[a-z0-9]{8,32}$/.test(parsed.instanceId)
+        ? parsed.instanceId
+        : legacyTopicInstanceId(prefix, typeof parsed.createdAt === "string" ? parsed.createdAt : ""),
     name: parsed.name,
     prefix,
-    description: typeof parsed.description === "string" ? parsed.description : "",
+    analysisKeywords:
+      typeof parsed.analysisKeywords === "string"
+        ? parsed.analysisKeywords
+        : typeof parsed.description === "string"
+          ? parsed.description
+          : "",
     createdBy: typeof parsed.createdBy === "string" ? parsed.createdBy : "-",
     createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : "",
     updatedBy: typeof parsed.updatedBy === "string" ? parsed.updatedBy : "-",
@@ -640,6 +651,25 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
 
 function topicNameFromPrefix(prefix: string): string {
   return prefix.replace(/\/$/, "");
+}
+
+function isOutputForTopicInstance(fileName: string, instanceId: string): boolean {
+  const match = /^agent-([a-z0-9]+)-/.exec(fileName);
+  return !match || match[1] === instanceId;
+}
+
+async function listOutputsForTopicInstance(config: DriveConfig, topic: Pick<TopicMetadata, "prefix" | "instanceId">): Promise<DriveFile[]> {
+  const outputList = await listDirectoryWithMetadata(config, `${topic.prefix}${OUTPUTS_FOLDER_NAME}/`);
+  return outputList.files.filter((file) => isOutputForTopicInstance(file.name, topic.instanceId));
+}
+
+function legacyTopicInstanceId(prefix: string, createdAt: string): string {
+  let hash = 2166136261;
+  for (const character of `${prefix}:${createdAt}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `legacy${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function timestampForTopic(topic: Pick<DriveOverviewTopic, "updatedAt" | "latestOutput">): number {
@@ -693,27 +723,24 @@ function fileMetadata(
   };
 }
 
-function normalizeDescription(input: unknown): string {
-  if (input == null) {
-    return "";
-  }
+function normalizeAnalysisKeywords(input: unknown, required = false): string {
   if (typeof input !== "string") {
-    throw new Error("专题说明无效");
+    throw new Error("分析关键词无效");
   }
   if (input.length > 3000) {
-    throw new Error("专题说明过长");
+    throw new Error("分析关键词过长");
   }
-  return input.trim();
+  const value = input.trim();
+  if (required) {
+    requireAnalysisKeywords(value);
+  }
+  return value;
 }
 
-function normalizePrompt(input: unknown): string {
-  if (typeof input !== "string") {
-    throw new Error("提示词内容无效");
+function requireAnalysisKeywords(value: string): void {
+  if (!value.trim()) {
+    throw new Error("请填写分析关键词");
   }
-  if (input.length > 120000) {
-    throw new Error("提示词内容过长");
-  }
-  return input;
 }
 
 function normalizeContentType(input: unknown): string {

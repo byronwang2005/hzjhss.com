@@ -18111,8 +18111,8 @@ async function handleClick(event) {
     closeDeleteDialog();
   } else if (action === "agent-manifest") {
     await copyAgentManifest(target);
-  } else if (action === "copy-generate-prompt") {
-    await copyGeneratePrompt();
+  } else if (action === "agent-output-task") {
+    await copyAgentOutputTask(target);
   } else if (action === "refresh") {
     await refreshCurrent();
   }
@@ -18174,11 +18174,11 @@ async function submitCreateTopic(form) {
       method: "POST",
       body: {
         name,
-        description: data.get("topicDescription")
+        analysisKeywords: data.get("analysisKeywords")
       }
     });
     form.reset();
-    setStatus("\u4E13\u9898\u5DF2\u521B\u5EFA\uFF0C\u6210\u679C\u76EE\u5F55\u548C\u63D0\u793A\u8BCD\u5DF2\u51C6\u5907\u597D\u3002", "success");
+    setStatus("\u4E13\u9898\u5DF2\u521B\u5EFA\uFF0C\u6210\u679C\u76EE\u5F55\u548C\u5206\u6790\u5173\u952E\u8BCD\u5DF2\u51C6\u5907\u597D\u3002", "success");
     await openTopic(detail.topic.prefix, "agent");
   } catch (error2) {
     showError(error2);
@@ -18198,8 +18198,7 @@ async function submitTopicSettings(form) {
       method: "PUT",
       body: {
         prefix: state.topic.topic.prefix,
-        description: data.get("topicDescription"),
-        generatePrompt: data.get("generatePrompt")
+        analysisKeywords: data.get("analysisKeywords")
       }
     });
     setStatus("\u4E13\u9898\u8BBE\u7F6E\u5DF2\u4FDD\u5B58\u3002", "success");
@@ -18301,7 +18300,7 @@ function showCreateTopic() {
   state.mode = "create";
   state.topic = null;
   state.materialList = null;
-  setStatus("\u586B\u5199\u4E13\u9898\u540D\u79F0\u548C\u8BF4\u660E\uFF0C\u7CFB\u7EDF\u4F1A\u521B\u5EFA\u6210\u679C\u76EE\u5F55\u548C\u9ED8\u8BA4\u63D0\u793A\u8BCD\u3002");
+  setStatus("\u586B\u5199\u4E13\u9898\u540D\u79F0\u548C\u5206\u6790\u5173\u952E\u8BCD\uFF0C\u7CFB\u7EDF\u4F1A\u521B\u5EFA\u6210\u679C\u76EE\u5F55\u3002");
   render();
 }
 async function copyAgentManifest(button) {
@@ -18327,18 +18326,26 @@ async function copyAgentManifest(button) {
     render();
   }
 }
-async function copyGeneratePrompt() {
-  if (!state.topic?.generatePrompt) {
-    setStatus("\u5F53\u524D\u4E13\u9898\u8FD8\u6CA1\u6709\u751F\u6210\u63D0\u793A\u8BCD\u3002", "danger");
-    render();
+async function copyAgentOutputTask(button) {
+  if (!state.topic) {
     return;
   }
+  const original = button.textContent || "";
   try {
-    await writeClipboard(state.topic.generatePrompt);
-    setStatus("\u6210\u679C\u751F\u6210\u4E0E\u56DE\u4F20\u63D0\u793A\u8BCD\u5DF2\u590D\u5236\u3002", "success");
-    render();
-  } catch {
-    setStatus("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u4E2D\u6587\u672C\u590D\u5236\u3002", "danger");
+    button.setAttribute("disabled", "");
+    button.textContent = "\u6B63\u5728\u751F\u6210...";
+    setStatus("\u6B63\u5728\u751F\u6210\u6210\u679C\u56DE\u4F20\u6388\u6743...");
+    const data = await api("/agent-output-task", {
+      method: "POST",
+      body: { prefix: state.topic.topic.prefix }
+    });
+    await writeClipboard(data.prompt);
+    setStatus(`\u6210\u679C\u751F\u6210\u4E0E\u56DE\u4F20\u63D0\u793A\u8BCD\u5DF2\u590D\u5236\u3002\u6388\u6743 ${data.expiresIn || 0} \u79D2\u5185\u6709\u6548\u3002`, "success");
+  } catch (error2) {
+    showError(error2);
+  } finally {
+    button.removeAttribute("disabled");
+    button.textContent = original;
     render();
   }
 }
@@ -18708,7 +18715,7 @@ function renderOverview() {
             <h2>\u4E13\u9898\u961F\u5217</h2>
             <span>${topics.length ? "\u6309\u6700\u8FD1\u4EA4\u4ED8\u6392\u5E8F" : "\u7B49\u5F85\u521B\u5EFA"}</span>
           </div>
-          ${topics.length ? topics.map(renderTopicCard).join("") : renderEmpty("ph-folder-plus", "\u8FD8\u6CA1\u6709\u4E13\u9898", "\u521B\u5EFA\u7B2C\u4E00\u4E2A\u4E13\u9898\u540E\uFF0C\u7CFB\u7EDF\u4F1A\u51C6\u5907\u6210\u679C\u76EE\u5F55\u548C\u9ED8\u8BA4\u63D0\u793A\u8BCD\u3002")}
+          ${topics.length ? topics.map(renderTopicCard).join("") : renderEmpty("ph-folder-plus", "\u8FD8\u6CA1\u6709\u4E13\u9898", "\u521B\u5EFA\u7B2C\u4E00\u4E2A\u4E13\u9898\u540E\uFF0C\u7CFB\u7EDF\u4F1A\u51C6\u5907\u6210\u679C\u76EE\u5F55\u3002")}
         </section>
       </div>
     </section>
@@ -18721,7 +18728,7 @@ function renderCreateTopic() {
         <div>
           <p class="drive-kicker">New topic</p>
           <h1>\u521B\u5EFA\u4E13\u9898</h1>
-          <p>\u4E13\u9898\u521B\u5EFA\u540E\u4F1A\u81EA\u52A8\u51C6\u5907 outputs \u76EE\u5F55\u548C\u6210\u679C\u751F\u6210\u63D0\u793A\u8BCD\u3002</p>
+          <p>\u4E13\u9898\u521B\u5EFA\u540E\u4F1A\u81EA\u52A8\u51C6\u5907 outputs \u76EE\u5F55\uFF0C\u5E76\u4EE5\u5206\u6790\u5173\u952E\u8BCD\u6307\u5BFC\u7B2C\u4E00\u9636\u6BB5\u5206\u6790\u3002</p>
         </div>
         ${controlButton("\u8FD4\u56DE", "ph-arrow-left", "back-overview")}
       </div>
@@ -18731,8 +18738,8 @@ function renderCreateTopic() {
           <input name="topicName" type="text" autocomplete="off" required />
         </label>
         <label class="drive-field">
-          <span>\u4E13\u9898\u8BF4\u660E</span>
-          <textarea name="topicDescription" rows="6" placeholder="\u53EF\u9009\uFF1A\u8BB0\u5F55\u7814\u7A76\u8303\u56F4\u3001\u8D44\u6599\u53E3\u5F84\u6216\u6210\u679C\u8981\u6C42\u3002"></textarea>
+          <span>\u5206\u6790\u5173\u952E\u8BCD</span>
+          <textarea name="analysisKeywords" rows="6" placeholder="\u586B\u5199\u5173\u6CE8\u4E3B\u9898\u3001\u5206\u6790\u7EF4\u5EA6\u3001\u8D44\u6599\u53E3\u5F84\u7B49\uFF0C\u53EF\u4F7F\u7528\u591A\u884C\u6587\u672C\u3002" required></textarea>
         </label>
         <div class="drive-form-actions">
           <button class="drive-control" type="button" data-action="cancel-create">\u53D6\u6D88</button>
@@ -18760,7 +18767,7 @@ function renderTopic() {
         <div class="drive-topic-title-row">
           <div>
             <h1>${escapeHtml2(topic.name)}</h1>
-            <p>${escapeHtml2(topic.description || "\u6682\u65E0\u4E13\u9898\u8BF4\u660E\u3002")}</p>
+            <p>${escapeHtml2(topic.analysisKeywords || "\u5C1A\u672A\u586B\u5199\u5206\u6790\u5173\u952E\u8BCD\u3002")}</p>
           </div>
           <div class="drive-topic-meta">
             <span>\u521B\u5EFA\u4EBA ${escapeHtml2(topic.createdBy || "-")}</span>
@@ -18792,7 +18799,7 @@ function renderOutputsTab() {
         <h2>\u4E13\u9898\u6210\u679C</h2>
         <span>${outputs.length} \u4E2A\u6587\u4EF6</span>
       </div>
-      ${outputs.length ? renderFileTable(outputs, { outputMode: true, empty: "" }) : renderEmpty("ph-package", "\u8FD9\u4E2A\u4E13\u9898\u8FD8\u6CA1\u6709\u6210\u679C", "\u590D\u5236 agent \u63D0\u793A\u8BCD\u751F\u6210\u6210\u679C\uFF0C\u5E76\u628A Markdown\u3001HTML \u6216 PDF \u56DE\u4F20\u5230 outputs/\u3002")}
+      ${outputs.length ? renderFileTable(outputs, { outputMode: true, empty: "" }) : renderEmpty("ph-package", "\u8FD9\u4E2A\u4E13\u9898\u8FD8\u6CA1\u6709\u6210\u679C", "\u4F9D\u6B21\u6267\u884C Agent \u4E24\u4E2A\u9636\u6BB5\uFF0C\u786E\u8BA4\u6700\u7EC8\u53E3\u5F84\u540E\u56DE\u4F20 Markdown \u548C PDF\u3002")}
     </section>
   `;
 }
@@ -18826,30 +18833,29 @@ function renderMaterialsTab() {
   `;
 }
 function renderAgentTab() {
-  const prompt = state.topic?.generatePrompt || "";
-  const outputPrefix = `${state.topic?.topic.prefix || ""}outputs/`;
+  const hasKeywords = Boolean(state.topic?.topic.analysisKeywords.trim());
+  const disabled = hasKeywords ? "" : " disabled";
   return `
-    <section class="drive-agent-grid">
-      <div class="drive-agent-card">
-        <h2>\u4EA4\u7ED9\u672C\u5730 agent \u5206\u6790</h2>
-        <p>\u7CFB\u7EDF\u4F1A\u751F\u6210\u4E00\u4E2A\u77ED\u65F6 manifest \u94FE\u63A5\uFF0Cagent \u4E0D\u9700\u8981\u767B\u5F55\u5373\u53EF\u8BFB\u53D6\u8D44\u6599\u3002\u94FE\u63A5\u8FC7\u671F\u540E\u91CD\u65B0\u751F\u6210\u5373\u53EF\u3002</p>
-        <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest">
-          <i class="ph ph-clipboard-text" aria-hidden="true"></i>
-          \u590D\u5236\u5206\u6790\u63D0\u793A\u8BCD
-        </button>
-      </div>
-      <div class="drive-agent-card">
-        <h2>\u6210\u679C\u56DE\u4F20\u8DEF\u5F84</h2>
-        <p><code>${escapeHtml2(outputPrefix)}</code></p>
-        <p>\u751F\u6210 Markdown\u3001HTML \u6216 PDF \u540E\u56DE\u4F20\u5230\u8BE5\u76EE\u5F55\uFF0C\u6210\u679C\u9875\u4F1A\u81EA\u52A8\u805A\u5408\u5C55\u793A\u3002</p>
-      </div>
-      <section class="drive-prompt-panel">
-        <div class="drive-panel-head">
-          <h2>\u6210\u679C\u751F\u6210\u4E0E\u56DE\u4F20\u63D0\u793A\u8BCD</h2>
-          ${controlButton("\u590D\u5236", "ph-copy", "copy-generate-prompt")}
+    <section class="drive-tab-panel">
+      ${hasKeywords ? "" : '<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199\u5206\u6790\u5173\u952E\u8BCD\uFF0C\u518D\u6267\u884C Agent \u6D41\u7A0B\u3002</wa-callout>'}
+      <div class="drive-agent-grid">
+        <div class="drive-agent-card">
+          <h2>1. \u83B7\u53D6\u8D44\u6599\u5E76\u5206\u6790</h2>
+          <p>\u590D\u5236\u540E\u4EA4\u7ED9\u672C\u5730 Agent\u3002\u5B83\u4F1A\u8BFB\u53D6\u77ED\u65F6\u8D44\u6599\u94FE\u63A5\uFF0C\u5E76\u53EA\u6309\u5206\u6790\u5173\u952E\u8BCD\u5B8C\u6210\u7ED3\u6784\u5316\u5206\u6790\uFF0C\u4E0D\u751F\u6210\u6587\u4EF6\u3002</p>
+          <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest"${disabled}>
+            <i class="ph ph-clipboard-text" aria-hidden="true"></i>
+            \u590D\u5236\u7B2C\u4E00\u9636\u6BB5\u63D0\u793A\u8BCD
+          </button>
         </div>
-        <textarea readonly>${escapeHtml2(prompt)}</textarea>
-      </section>
+        <div class="drive-agent-card">
+          <h2>2. \u8F6C\u6362\u683C\u5F0F\u5E76\u56DE\u4F20</h2>
+          <p>\u8BF7\u5148\u5728\u540C\u4E00\u4F1A\u8BDD\u4E2D\u6821\u6B63\u5224\u65AD\u5E76\u786E\u8BA4\u6700\u7EC8\u53E3\u5F84\u3002\u7B2C\u4E8C\u9636\u6BB5\u53EA\u8F6C\u6362\u4E3A Markdown/PDF\uFF0C\u5E76\u4F7F\u7528\u65E0 Cookie \u7684\u77ED\u65F6\u6388\u6743\u56DE\u4F20\u3002</p>
+          <button class="drive-control drive-control-primary" type="button" data-action="agent-output-task"${disabled}>
+            <i class="ph ph-file-arrow-up" aria-hidden="true"></i>
+            \u590D\u5236\u7B2C\u4E8C\u9636\u6BB5\u63D0\u793A\u8BCD
+          </button>
+        </div>
+      </div>
     </section>
   `;
 }
@@ -18861,12 +18867,8 @@ function renderSettingsTab() {
     <section class="drive-tab-panel">
       <form class="drive-form drive-settings-form" data-settings-form>
         <label class="drive-field">
-          <span>\u4E13\u9898\u8BF4\u660E</span>
-          <textarea name="topicDescription" rows="5">${escapeHtml2(state.topic.topic.description || "")}</textarea>
-        </label>
-        <label class="drive-field">
-          <span>\u6210\u679C\u751F\u6210\u4E0E\u56DE\u4F20\u63D0\u793A\u8BCD</span>
-          <textarea name="generatePrompt" rows="14">${escapeHtml2(state.topic.generatePrompt || "")}</textarea>
+          <span>\u5206\u6790\u5173\u952E\u8BCD</span>
+          <textarea name="analysisKeywords" rows="6" required>${escapeHtml2(state.topic.topic.analysisKeywords || "")}</textarea>
         </label>
         <div class="drive-form-actions">
           <button class="drive-control drive-control-primary" type="submit">
@@ -18903,7 +18905,7 @@ function renderTopicCard(topic) {
     <article class="drive-topic-card">
       <div>
         <button class="drive-title-button" type="button" data-action="open-topic" data-prefix="${escapeAttr(topic.prefix)}">${escapeHtml2(topic.name)}</button>
-        <p>${escapeHtml2(topic.description || "\u6682\u65E0\u4E13\u9898\u8BF4\u660E\u3002")}</p>
+        <p>${escapeHtml2(topic.analysisKeywords || "\u5C1A\u672A\u586B\u5199\u5206\u6790\u5173\u952E\u8BCD\u3002")}</p>
       </div>
       <div class="drive-topic-card-meta">
         <span>${topic.outputCount} \u4E2A\u6210\u679C</span>
