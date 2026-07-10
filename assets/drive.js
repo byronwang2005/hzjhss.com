@@ -18653,9 +18653,7 @@ function renderLogin() {
   return `
     <section class="drive-login-panel" aria-labelledby="drive-login-title">
       <div>
-        <p class="drive-kicker">\u4E13\u9898\u8D44\u6599\u5E93</p>
         <h1 id="drive-login-title">\u4E13\u9898\u8D44\u6599\u5E93</h1>
-        <p>\u767B\u5F55\u540E\u67E5\u770B\u4E13\u9898\u6210\u679C\u3001\u7AD9\u5185\u9884\u89C8\u3001\u590D\u5236\u77ED\u65F6\u94FE\u63A5\uFF0C\u5E76\u628A\u8D44\u6599\u4EA4\u7ED9\u672C\u5730 agent \u7EE7\u7EED\u5206\u6790\u3002</p>
       </div>
       <form class="drive-form drive-login-card" data-login-form>
         <label class="drive-field">

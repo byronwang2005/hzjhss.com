@@ -751,9 +751,7 @@ function renderLogin(): string {
   return `
     <section class="drive-login-panel" aria-labelledby="drive-login-title">
       <div>
-        <p class="drive-kicker">专题资料库</p>
         <h1 id="drive-login-title">专题资料库</h1>
-        <p>登录后查看专题成果、站内预览、复制短时链接，并把资料交给本地 agent 继续分析。</p>
       </div>
       <form class="drive-form drive-login-card" data-login-form>
         <label class="drive-field">

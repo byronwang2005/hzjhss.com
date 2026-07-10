@@ -3018,6 +3018,9 @@
 .ph.ph-file:before {
   content: "\e230";
 }
+.ph.ph-file-arrow-up:before {
+  content: "\e61e";
+}
 .ph.ph-file-doc:before {
   content: "\eb1e";
 }

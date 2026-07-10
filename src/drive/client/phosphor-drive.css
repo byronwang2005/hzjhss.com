@@ -37,6 +37,7 @@
 .ph.ph-eye-slash:before { content: "\e224"; }
 .ph.ph-files:before { content: "\e710"; }
 .ph.ph-file:before { content: "\e230"; }
+.ph.ph-file-arrow-up:before { content: "\e61e"; }
 .ph.ph-file-doc:before { content: "\eb1e"; }
 .ph.ph-file-html:before { content: "\eb38"; }
 .ph.ph-file-image:before { content: "\ea24"; }
