@@ -18621,7 +18621,7 @@ function renderTopbar() {
       </a>
       <nav class="drive-nav" aria-label="\u4E13\u9898\u8D44\u6599\u5E93\u5BFC\u822A">
         <a href="./index.html">\u8FD4\u56DE\u9996\u9875</a>
-        ${state.mode !== "login" ? iconButton("\u9000\u51FA\u767B\u5F55", "ph-sign-out", "logout") : ""}
+        ${state.mode !== "login" ? controlButton("\u9000\u51FA\u767B\u5F55", "ph-sign-out", "logout", false, "", "drive-logout-button") : ""}
       </nav>
     </header>
   `;
@@ -19091,21 +19091,12 @@ function tabButton(tab, label, icon) {
     </button>
   `;
 }
-function controlButton(label, icon, action, primary = false, path = "") {
+function controlButton(label, icon, action, primary = false, path = "", extraClass = "") {
   return `
-    <button class="drive-control ${primary ? "drive-control-primary" : ""}" type="button" data-action="${escapeAttr(action)}" ${path ? `data-path="${escapeAttr(path)}"` : ""}>
+    <button class="drive-control ${primary ? "drive-control-primary" : ""} ${escapeAttr(extraClass)}" type="button" data-action="${escapeAttr(action)}" ${path ? `data-path="${escapeAttr(path)}"` : ""}>
       <i class="ph ${icon}" aria-hidden="true"></i>
       ${escapeHtml2(label)}
     </button>
-  `;
-}
-function iconButton(label, icon, action) {
-  return `
-    <wa-tooltip content="${escapeAttr(label)}">
-      <button class="drive-icon-button" type="button" data-action="${escapeAttr(action)}" aria-label="${escapeAttr(label)}">
-        <i class="ph ${icon}" aria-hidden="true"></i>
-      </button>
-    </wa-tooltip>
   `;
 }
 function actionButton(label, action, path, name = "", danger = false) {

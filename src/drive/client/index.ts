@@ -717,7 +717,7 @@ function renderTopbar(): string {
       </a>
       <nav class="drive-nav" aria-label="专题资料库导航">
         <a href="./index.html">返回首页</a>
-        ${state.mode !== "login" ? iconButton("退出登录", "ph-sign-out", "logout") : ""}
+        ${state.mode !== "login" ? controlButton("退出登录", "ph-sign-out", "logout", false, "", "drive-logout-button") : ""}
       </nav>
     </header>
   `;
@@ -1224,9 +1224,9 @@ function tabButton(tab: TopicTab, label: string, icon: string): string {
   `;
 }
 
-function controlButton(label: string, icon: string, action: string, primary = false, path = ""): string {
+function controlButton(label: string, icon: string, action: string, primary = false, path = "", extraClass = ""): string {
   return `
-    <button class="drive-control ${primary ? "drive-control-primary" : ""}" type="button" data-action="${escapeAttr(action)}" ${path ? `data-path="${escapeAttr(path)}"` : ""}>
+    <button class="drive-control ${primary ? "drive-control-primary" : ""} ${escapeAttr(extraClass)}" type="button" data-action="${escapeAttr(action)}" ${path ? `data-path="${escapeAttr(path)}"` : ""}>
       <i class="ph ${icon}" aria-hidden="true"></i>
       ${escapeHtml(label)}
     </button>

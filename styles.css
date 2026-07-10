@@ -80,6 +80,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  margin-left: auto;
 }
 
 .drive-nav a {
@@ -304,6 +305,10 @@
   color: #ffffff;
   background: var(--drive-danger);
   border-color: var(--drive-danger);
+}
+
+.drive-logout-button {
+  flex: 0 0 auto;
 }
 
 .drive-icon-button {
@@ -939,6 +944,10 @@
   .drive-control,
   .drive-upload-trigger {
     width: 100%;
+  }
+
+  .drive-logout-button {
+    width: auto;
   }
 
   .drive-head-actions,
