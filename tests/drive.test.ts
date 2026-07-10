@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelativeFilePath } from "../src/drive/paths";
-import { parseListObjectsXml, parseObjectPathsXml } from "../src/drive/cos";
+import { parseListObjectsXml, parseObjectPathsXml, presignObjectUrl } from "../src/drive/cos";
 import { toDriveOverviewApiResponse, toTopicDetailApiResponse } from "../src/drive/api-responses";
 import {
   createAgentOutputToken,
@@ -29,7 +29,7 @@ import {
   readTopic,
   updateTopic,
 } from "../src/drive/topic";
-import type { DriveConfig } from "../src/drive/config";
+import { getDriveConfig, type DriveConfig } from "../src/drive/config";
 import type { DriveEnv } from "../src/drive/config";
 import { onRequestPost as createAgentUploadUrl } from "../functions/api/drive/agent-output-upload-url";
 import { onRequestPost as completeAgentUpload } from "../functions/api/drive/agent-output-upload-complete";
@@ -63,6 +63,21 @@ const testConfig: DriveConfig = {
   signExpiresSeconds: 900,
   sessionMaxAgeSeconds: 3600,
 };
+
+describe("drive configuration", () => {
+  it("fixes all presigned upload and download URLs at 30 minutes", async () => {
+    const config = getDriveConfig({ ...apiEnv, DRIVE_SIGN_EXPIRES_SECONDS: "30" });
+    expect(config.signExpiresSeconds).toBe(1800);
+    expect(getDriveConfig({ ...apiEnv, DRIVE_SIGN_EXPIRES_SECONDS: "3600" }).signExpiresSeconds).toBe(1800);
+
+    const [downloadUrl, uploadUrl] = await Promise.all([
+      presignObjectUrl(config, "GET", "新能源/report.pdf"),
+      presignObjectUrl(config, "PUT", "新能源/outputs/report.pdf", { "content-type": "application/pdf" }),
+    ]);
+    expect(new URL(downloadUrl).searchParams.get("X-Amz-Expires")).toBe("1800");
+    expect(new URL(uploadUrl).searchParams.get("X-Amz-Expires")).toBe("1800");
+  });
+});
 
 describe("drive path validation", () => {
   it("normalizes prefixes and keeps a trailing slash", () => {

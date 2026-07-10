@@ -20,8 +20,9 @@ Variables:
 - `COS_ENDPOINT`: 可选，例如 `https://example-1250000000.cos.ap-guangzhou.myqcloud.com`
 - `DRIVE_ROOT_PREFIX`: 默认 `cloud-drive/`
 - `DRIVE_MAX_FILE_MB`: 默认 `512`
-- `DRIVE_SIGN_EXPIRES_SECONDS`: 默认 `900`
 - `DRIVE_SESSION_MAX_AGE_SECONDS`: 默认 `28800`，即 8 小时
+
+所有 COS 上传和下载预签名短链固定有效 30 分钟（1800 秒）。旧的 `DRIVE_SIGN_EXPIRES_SECONDS` 变量会被忽略，避免不同环境产生不一致的过期时间。
 
 本地调试可在 `.dev.vars` 中放同名变量。该文件已被 `.gitignore` 忽略，不要提交真实密钥。
 

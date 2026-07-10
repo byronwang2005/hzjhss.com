@@ -8,6 +8,7 @@ export interface DriveEnv {
   DRIVE_SESSION_SECRET?: string;
   DRIVE_ROOT_PREFIX?: string;
   DRIVE_MAX_FILE_MB?: string;
+  /** @deprecated Short-lived COS URLs are fixed at 30 minutes. */
   DRIVE_SIGN_EXPIRES_SECONDS?: string;
   DRIVE_SESSION_MAX_AGE_SECONDS?: string;
 }
@@ -26,8 +27,7 @@ export interface DriveConfig {
 
 const DEFAULT_ROOT_PREFIX = "cloud-drive/";
 const DEFAULT_MAX_FILE_MB = 512;
-const DEFAULT_SIGN_EXPIRES_SECONDS = 900;
-const MAX_SIGN_EXPIRES_SECONDS = 3600;
+const SIGN_EXPIRES_SECONDS = 30 * 60;
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
 export function getRequiredEnv(env: DriveEnv, key: keyof DriveEnv): string {
@@ -61,10 +61,7 @@ export function getDriveConfig(env: DriveEnv): DriveConfig {
     endpoint,
     rootPrefix: normalizeRootPrefix(env.DRIVE_ROOT_PREFIX),
     maxFileBytes: parsePositiveInt(env.DRIVE_MAX_FILE_MB, DEFAULT_MAX_FILE_MB) * 1024 * 1024,
-    signExpiresSeconds: Math.min(
-      parsePositiveInt(env.DRIVE_SIGN_EXPIRES_SECONDS, DEFAULT_SIGN_EXPIRES_SECONDS),
-      MAX_SIGN_EXPIRES_SECONDS,
-    ),
+    signExpiresSeconds: SIGN_EXPIRES_SECONDS,
     sessionMaxAgeSeconds: parsePositiveInt(env.DRIVE_SESSION_MAX_AGE_SECONDS, DEFAULT_SESSION_MAX_AGE_SECONDS),
   };
 }
