@@ -798,8 +798,8 @@ function renderOverview(): string {
 
       <div class="drive-metrics" aria-label="专题资料库概览">
         ${metricCard("专题", String(topics.length), "已建专题数")}
-        ${metricCard("成果", String(totalOutputs), "outputs 目录文件")}
-        ${metricCard("待交付", String(emptyTopics), "还没有成果的专题")}
+        ${metricCard("成果", String(totalOutputs), "成果文件数")}
+        ${metricCard("待交付", String(emptyTopics), "无成果的专题数")}
       </div>
 
       <div class="drive-two-column">
@@ -808,7 +808,7 @@ function renderOverview(): string {
             <h2>最近成果</h2>
             <span>${latest.length ? "可预览或复制短时链接" : "暂无成果"}</span>
           </div>
-          ${latest.length ? latest.map(({ topic, output }) => renderLatestOutput(topic, output)).join("") : renderEmpty("ph-tray", "还没有可交付成果", "进入专题后上传资料，让 agent 生成并回传到 outputs/。")}
+          ${latest.length ? latest.map(({ topic, output }) => renderLatestOutput(topic, output)).join("") : renderEmpty("ph-tray", "还没有可交付成果", "")}
         </section>
         <section class="drive-panel">
           <div class="drive-panel-head">
@@ -827,9 +827,7 @@ function renderCreateTopic(): string {
     <section class="drive-create-layout">
       <div class="drive-page-head">
         <div>
-          <p class="drive-kicker">New topic</p>
           <h1>创建专题</h1>
-          <p>专题创建后会自动准备 outputs 目录，并以分析关键词指导第一阶段分析。</p>
         </div>
         ${controlButton("返回", "ph-arrow-left", "back-overview")}
       </div>

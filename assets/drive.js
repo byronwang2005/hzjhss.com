@@ -18698,8 +18698,8 @@ function renderOverview() {
 
       <div class="drive-metrics" aria-label="\u4E13\u9898\u8D44\u6599\u5E93\u6982\u89C8">
         ${metricCard("\u4E13\u9898", String(topics.length), "\u5DF2\u5EFA\u4E13\u9898\u6570")}
-        ${metricCard("\u6210\u679C", String(totalOutputs), "outputs \u76EE\u5F55\u6587\u4EF6")}
-        ${metricCard("\u5F85\u4EA4\u4ED8", String(emptyTopics), "\u8FD8\u6CA1\u6709\u6210\u679C\u7684\u4E13\u9898")}
+        ${metricCard("\u6210\u679C", String(totalOutputs), "\u6210\u679C\u6587\u4EF6\u6570")}
+        ${metricCard("\u5F85\u4EA4\u4ED8", String(emptyTopics), "\u65E0\u6210\u679C\u7684\u4E13\u9898\u6570")}
       </div>
 
       <div class="drive-two-column">
@@ -18708,7 +18708,7 @@ function renderOverview() {
             <h2>\u6700\u8FD1\u6210\u679C</h2>
             <span>${latest.length ? "\u53EF\u9884\u89C8\u6216\u590D\u5236\u77ED\u65F6\u94FE\u63A5" : "\u6682\u65E0\u6210\u679C"}</span>
           </div>
-          ${latest.length ? latest.map(({ topic, output }) => renderLatestOutput(topic, output)).join("") : renderEmpty("ph-tray", "\u8FD8\u6CA1\u6709\u53EF\u4EA4\u4ED8\u6210\u679C", "\u8FDB\u5165\u4E13\u9898\u540E\u4E0A\u4F20\u8D44\u6599\uFF0C\u8BA9 agent \u751F\u6210\u5E76\u56DE\u4F20\u5230 outputs/\u3002")}
+          ${latest.length ? latest.map(({ topic, output }) => renderLatestOutput(topic, output)).join("") : renderEmpty("ph-tray", "\u8FD8\u6CA1\u6709\u53EF\u4EA4\u4ED8\u6210\u679C", "")}
         </section>
         <section class="drive-panel">
           <div class="drive-panel-head">
@@ -18726,9 +18726,7 @@ function renderCreateTopic() {
     <section class="drive-create-layout">
       <div class="drive-page-head">
         <div>
-          <p class="drive-kicker">New topic</p>
           <h1>\u521B\u5EFA\u4E13\u9898</h1>
-          <p>\u4E13\u9898\u521B\u5EFA\u540E\u4F1A\u81EA\u52A8\u51C6\u5907 outputs \u76EE\u5F55\uFF0C\u5E76\u4EE5\u5206\u6790\u5173\u952E\u8BCD\u6307\u5BFC\u7B2C\u4E00\u9636\u6BB5\u5206\u6790\u3002</p>
         </div>
         ${controlButton("\u8FD4\u56DE", "ph-arrow-left", "back-overview")}
       </div>
