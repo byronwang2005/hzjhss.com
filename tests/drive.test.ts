@@ -17,7 +17,7 @@ import {
   OUTPUTS_FOLDER_NAME,
   TOPIC_META_FILENAME,
   createAgentManifestPrompt,
-  createAgentOutputPaths,
+  createAgentOutputPath,
   createAgentOutputPrompt,
   createTopic,
   hasSystemPathSegment,
@@ -233,7 +233,7 @@ describe("drive sessions", () => {
   });
 
   it("creates a path-scoped agent output capability", async () => {
-    const allowedPaths = ["新能源/outputs/report.md", "新能源/outputs/report.pdf"];
+    const allowedPaths = ["新能源/outputs/report.pdf"];
     const result = await createAgentOutputToken(env, {
       displayName: "王小明",
       topicPrefix: "新能源/",
@@ -246,7 +246,7 @@ describe("drive sessions", () => {
     expect(capability).toMatchObject({ displayName: "王小明", topicPrefix: "新能源/", allowedPaths });
     expect(allowsAgentOutputPath(capability!, allowedPaths[0])).toBe(true);
     expect(allowsAgentOutputPath(capability!, "新能源/outputs/report.html")).toBe(false);
-    expect(allowsAgentOutputPath(capability!, "其他/outputs/report.md")).toBe(false);
+    expect(allowsAgentOutputPath(capability!, "其他/outputs/report.pdf")).toBe(false);
     await expect(getAgentOutputCapability(env, `Bearer ${result.token}x`)).resolves.toBeNull();
     await expect(getAgentOutputCapability(env, null)).resolves.toBeNull();
     await expect(getDriveSession(env, `jhss_drive_session=${result.token}`)).resolves.toBeNull();
@@ -260,7 +260,7 @@ describe("drive sessions", () => {
         displayName: "王小明",
         topicPrefix: "新能源/",
         topicInstanceId: "topicinstance1",
-        allowedPaths: ["新能源/outputs/report.md"],
+        allowedPaths: ["新能源/outputs/report.pdf"],
       });
       vi.setSystemTime(new Date("2026-07-10T01:00:01.000Z"));
       await expect(getAgentOutputCapability(env, `Bearer ${result.token}`)).resolves.toBeNull();
@@ -272,7 +272,7 @@ describe("drive sessions", () => {
 
 describe("topic prompts", () => {
   it("creates a format-only output prompt with dedicated cookie-free callbacks", () => {
-    const [markdownPath, pdfPath] = createAgentOutputPaths(
+    const pdfPath = createAgentOutputPath(
       { name: "新能源", prefix: "新能源/", instanceId: "topicinstance1" },
       new Date("2026-07-09T01:23:00.000Z"),
       "a1b2c3d4",
@@ -283,15 +283,14 @@ describe("topic prompts", () => {
       token: "signed-capability",
       expiresAt: "2026-07-09T02:23:00.000Z",
       expiresIn: 3600,
-      markdownPath,
       pdfPath,
     });
 
     expect(prompt).toContain("用户最终确认的口径");
     expect(prompt).toContain("禁止使用 `web_fetch`");
     expect(prompt).toContain("curl -fL --retry 3 --retry-all-errors");
-    expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.md");
     expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.pdf");
+    expect(prompt).not.toContain("专题总结.md");
     expect(prompt).toContain("/api/drive/agent-output-upload-url");
     expect(prompt).toContain("/api/drive/agent-output-upload-complete");
     expect(prompt).toContain("该接口不使用 Cookie");
@@ -342,7 +341,7 @@ describe("agent output upload API", () => {
         ["新能源/outputs/", ""],
       ],
       async (storage) => {
-      const path = "新能源/outputs/report.md";
+      const path = "新能源/outputs/report.pdf";
       const { token } = await createAgentOutputToken(apiEnv, {
         displayName: "王小明",
         topicPrefix: "新能源/",
@@ -354,7 +353,7 @@ describe("agent output upload API", () => {
         request: new Request("https://example.com/api/drive/agent-output-upload-url", {
           method: "POST",
           headers,
-          body: JSON.stringify({ path, size: 12, contentType: "text/markdown; charset=utf-8" }),
+          body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
         }),
         env: apiEnv,
       } as any);
@@ -362,8 +361,8 @@ describe("agent output upload API", () => {
       const upload = (await uploadResponse.json()) as { url: string; path: string; contentType: string; requiredHeaders: Record<string, string> };
       expect(upload).toMatchObject({
         path,
-        contentType: "text/markdown; charset=utf-8",
-        requiredHeaders: { "content-length": "12", "content-type": "text/markdown; charset=utf-8" },
+        contentType: "application/pdf",
+        requiredHeaders: { "content-length": "12", "content-type": "application/pdf" },
       });
       expect(new URL(upload.url).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
 
@@ -371,12 +370,12 @@ describe("agent output upload API", () => {
         request: new Request("https://example.com/api/drive/agent-output-upload-complete", {
           method: "POST",
           headers,
-          body: JSON.stringify({ path, size: 12, contentType: "text/markdown; charset=utf-8" }),
+          body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
         }),
         env: apiEnv,
       } as any);
       expect(completeResponse.status).toBe(200);
-      expect(JSON.parse(storage.get(`新能源/outputs/${DRIVE_META_FILENAME}`) || "{}").files["report.md"]).toMatchObject({
+      expect(JSON.parse(storage.get(`新能源/outputs/${DRIVE_META_FILENAME}`) || "{}").files["report.pdf"]).toMatchObject({
         uploadedBy: "王小明",
         kind: "output",
       });
@@ -386,12 +385,13 @@ describe("agent output upload API", () => {
 
   it("rejects missing credentials, unlisted paths, and mismatched formats", async () => {
     await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async () => {
-      const allowedPath = "新能源/outputs/report.md";
+      const allowedPath = "新能源/outputs/report.pdf";
+      const markdownPath = "新能源/outputs/report.md";
       const { token } = await createAgentOutputToken(apiEnv, {
         displayName: "王小明",
         topicPrefix: "新能源/",
         topicInstanceId: "topicinstance1",
-        allowedPaths: [allowedPath],
+        allowedPaths: [allowedPath, markdownPath],
       });
       const callUploadUrl = (path: string, contentType: string, authorization?: string) =>
         createAgentUploadUrl({
@@ -403,18 +403,18 @@ describe("agent output upload API", () => {
           env: apiEnv,
         } as any);
 
-      expect((await callUploadUrl(allowedPath, "text/markdown; charset=utf-8")).status).toBe(401);
+      expect((await callUploadUrl(allowedPath, "application/pdf")).status).toBe(401);
       const cookieOnlyResponse = await createAgentUploadUrl({
         request: new Request("https://example.com/api/drive/agent-output-upload-url", {
           method: "POST",
           headers: { cookie: "jhss_drive_session=ignored", "content-type": "application/json" },
-          body: JSON.stringify({ path: allowedPath, size: 12, contentType: "text/markdown; charset=utf-8" }),
+          body: JSON.stringify({ path: allowedPath, size: 12, contentType: "application/pdf" }),
         }),
         env: apiEnv,
       } as any);
       expect(cookieOnlyResponse.status).toBe(401);
       expect((await callUploadUrl("新能源/outputs/report.html", "text/html", `Bearer ${token}`)).status).toBe(401);
-      expect((await callUploadUrl(allowedPath, "application/pdf", `Bearer ${token}`)).status).toBe(400);
+      expect((await callUploadUrl(markdownPath, "text/markdown; charset=utf-8", `Bearer ${token}`)).status).toBe(400);
     });
   });
 
@@ -449,7 +449,7 @@ describe("agent output upload API", () => {
   });
 
   it("rejects a capability after the topic is deleted and recreated", async () => {
-    const path = "新能源/outputs/report.md";
+    const path = "新能源/outputs/report.pdf";
     const { token } = await createAgentOutputToken(apiEnv, {
       displayName: "王小明",
       topicPrefix: "新能源/",
@@ -463,7 +463,7 @@ describe("agent output upload API", () => {
           request: new Request("https://example.com/api/drive/agent-output-upload-url", {
             method: "POST",
             headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-            body: JSON.stringify({ path, size: 12, contentType: "text/markdown; charset=utf-8" }),
+            body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
           }),
           env: apiEnv,
         } as any);

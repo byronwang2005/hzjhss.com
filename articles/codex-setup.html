@@ -1,22 +1,21 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
       name="description"
-      content="Codex配置教程。"
-    />
+      content="Codex配置教程。">
     <title>Codex配置教程</title>
-    <link rel="icon" type="image/png" href="../assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="../styles.css" />
+    <link rel="icon" type="image/png" href="../assets/jhss-logo-cropped.png">
+    <link rel="stylesheet" href="../styles.css">
   </head>
   <body>
     <a class="skip-link" href="#setup-guide">跳到正文</a>
-    <main class="page" id="setup-guide">
+    <div class="page setup-guide-page">
       <header class="site-header blog-header" aria-label="博客导航">
         <a class="brand-lockup" href="../index.html" aria-label="返回博客首页">
-          <img class="company-logo" src="../assets/jhss-logo-cropped.png" alt="嘉合杉升 Logo" />
+          <img class="company-logo" src="../assets/jhss-logo-cropped.png" width="400" height="501" alt="嘉合杉升 Logo">
           <span>嘉合杉升AI手册</span>
         </a>
         <nav class="top-nav" aria-label="站点导航">
@@ -25,19 +24,20 @@
         </nav>
       </header>
 
+      <main id="setup-guide">
       <section class="hero article-hero">
         <div class="hero-grid">
           <a class="back-link" href="../index.html">返回博客首页</a>
           <h1>Codex配置教程</h1>
-          <div class="article-meta" aria-label="文章信息">
+          <div class="article-meta" role="group" aria-label="文章信息">
             <span>15分钟阅读</span>
           </div>
         </div>
       </section>
 
       <div class="article-layout setup-layout">
-        <aside class="article-toc" aria-label="目录">
-          <p>目录</p>
+        <aside class="article-toc" data-toc aria-label="目录">
+          <button class="toc-toggle" type="button" aria-expanded="true">目录</button>
           <a href="#install-codex-app">安装 Codex App</a>
           <a href="#install-codex-plus-plus">安装 Codex++</a>
           <a href="#register-account">注册账号</a>
@@ -64,19 +64,19 @@
                 </p>
               </div>
             </div>
-            <div class="setup-choice" aria-label="操作系统和芯片选择提示">
+            <div class="setup-choice" role="group" aria-label="操作系统和芯片选择提示">
               <p>先选择你正在使用的系统。选择 macOS 后，再在 macOS 选项内选择芯片版本。</p>
-              <div class="system-tabs" aria-label="选择操作系统">
+              <div class="system-tabs" role="tablist" aria-label="选择操作系统">
                 <div class="system-option is-expanded" data-system-option="macos">
                   <button class="system-tab is-active" type="button" aria-pressed="true" data-system="macos">
                     <svg aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M7 4h10a2 2 0 0 1 2 2v9H5V6a2 2 0 0 1 2-2Z" />
-                      <path d="M4 18h16" />
-                      <path d="M9 21h6" />
+                      <path d="M7 4h10a2 2 0 0 1 2 2v9H5V6a2 2 0 0 1 2-2Z">
+                      <path d="M4 18h16">
+                      <path d="M9 21h6">
                     </svg>
                     <span>macOS</span>
                   </button>
-                  <div class="architecture-tabs" aria-label="选择芯片架构" data-architecture-choice>
+                  <div class="architecture-tabs" role="tablist" aria-label="选择芯片架构" data-architecture-choice>
                     <button class="system-tab architecture-tab is-active" type="button" aria-pressed="true" data-architecture="arm64">
                       <span>M芯片</span>
                     </button>
@@ -87,10 +87,10 @@
                 </div>
                 <button class="system-tab" type="button" aria-pressed="false" data-system="windows">
                   <svg aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 5.5 11 4v7H4V5.5Z" />
-                    <path d="M13 3.6 20 2v9h-7V3.6Z" />
-                    <path d="M4 13h7v7l-7-1.5V13Z" />
-                    <path d="M13 13h7v9l-7-1.6V13Z" />
+                    <path d="M4 5.5 11 4v7H4V5.5Z">
+                    <path d="M13 3.6 20 2v9h-7V3.6Z">
+                    <path d="M4 13h7v7l-7-1.5V13Z">
+                    <path d="M13 13h7v9l-7-1.6V13Z">
                   </svg>
                   <span>Windows</span>
                 </button>
@@ -255,17 +255,17 @@
                 <li>按照右侧表单完成配置，其中 Key 使用第四步保存的内容。</li>
                 <li>点击上方“保存”按钮保存配置。</li>
               </ol>
-              <div class="provider-form" aria-label="供应商配置表单示例">
+              <div class="provider-form" role="group" aria-label="供应商配置表单示例">
                 <div class="form-field">
                   <span class="field-label">名称</span>
                   <div class="field-value">
                     <button class="copy-button" type="button" aria-label="复制名称">
                       <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="M9 9h9v11H9z" />
-                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                        <path d="M9 9h9v11H9z">
+                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1">
                       </svg>
                       <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m5 12 4 4L19 6" />
+                        <path d="m5 12 4 4L19 6">
                       </svg>
                       <span>复制</span>
                     </button>
@@ -295,11 +295,11 @@
                   <div class="field-value">
                     <button class="copy-button" type="button" aria-label="复制 Base URL">
                       <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="M9 9h9v11H9z" />
-                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                        <path d="M9 9h9v11H9z">
+                        <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1">
                       </svg>
                       <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m5 12 4 4L19 6" />
+                        <path d="m5 12 4 4L19 6">
                       </svg>
                       <span>复制</span>
                     </button>
@@ -346,112 +346,11 @@
         </section>
       </div>
 
+      </main>
       <footer class="footer">
         <a href="../index.html">回到首页</a>
       </footer>
-    </main>
-    <script>
-      const systemTabs = document.querySelectorAll("[data-system]");
-      const systemPanels = document.querySelectorAll("[data-system-panel]");
-      const systemNotes = document.querySelectorAll("[data-system-note]");
-      const systemOptions = document.querySelectorAll("[data-system-option]");
-      const architectureTabs = document.querySelectorAll("[data-architecture]");
-      const architectureChoice = document.querySelector("[data-architecture-choice]");
-      const codexAppPackage = document.querySelector("[data-codex-app-package]");
-      const codexPlusPackage = document.querySelector("[data-codex-plus-package]");
-      const packageNames = {
-        arm64: {
-          codexApp: "Codex-mac-arm64.dmg",
-          codexPlus: "xxx-macos-arm64.dmg",
-        },
-        x64: {
-          codexApp: "Codex-mac-x64.dmg",
-          codexPlus: "xxx-macos-x64.dmg",
-        },
-      };
-
-      const setArchitecture = (selectedArchitecture) => {
-        architectureTabs.forEach((item) => {
-          const isSelected = item.dataset.architecture === selectedArchitecture;
-          item.classList.toggle("is-active", isSelected);
-          item.setAttribute("aria-pressed", String(isSelected));
-        });
-
-        codexAppPackage.textContent = packageNames[selectedArchitecture].codexApp;
-        codexPlusPackage.textContent = packageNames[selectedArchitecture].codexPlus;
-      };
-
-      systemTabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-          const selectedSystem = tab.dataset.system;
-
-          systemTabs.forEach((item) => {
-            const isSelected = item.dataset.system === selectedSystem;
-            item.classList.toggle("is-active", isSelected);
-            item.setAttribute("aria-pressed", String(isSelected));
-          });
-
-          systemOptions.forEach((item) => {
-            item.classList.toggle("is-expanded", item.dataset.systemOption === selectedSystem);
-          });
-
-          systemPanels.forEach((panel) => {
-            const isSelected =
-              panel.dataset.systemPanel === selectedSystem ||
-              panel.dataset.systemPanel === `codex-plus-${selectedSystem}`;
-            panel.classList.toggle("is-active", isSelected);
-            panel.hidden = !isSelected;
-          });
-
-          systemNotes.forEach((note) => {
-            note.hidden = note.dataset.systemNote !== selectedSystem;
-          });
-
-          if (architectureChoice) {
-            architectureChoice.hidden = selectedSystem !== "macos";
-          }
-        });
-      });
-
-      architectureTabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-          setArchitecture(tab.dataset.architecture);
-        });
-      });
-
-      document.querySelectorAll(".code-block, .field-value").forEach((block) => {
-        const button = block.querySelector(".copy-button");
-        if (!button) return;
-
-        const label = button.querySelector("span");
-        const code = block.querySelector("code") || block;
-
-        button.addEventListener("click", async () => {
-          const text = code.textContent;
-          const originalText = label.textContent;
-          button.dataset.state = "pending";
-
-          try {
-            await navigator.clipboard.writeText(text);
-            button.dataset.state = "success";
-            label.textContent = "已复制";
-          } catch {
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(code);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            button.dataset.state = "success";
-            label.textContent = document.execCommand("copy") ? "已复制" : "已选中";
-          }
-
-          window.setTimeout(() => {
-            button.dataset.state = "";
-            label.textContent = originalText;
-          }, 1600);
-        });
-      });
-
-    </script>
+    </div>
+    <script src="../site.js" defer></script>
   </body>
 </html>

@@ -38,7 +38,7 @@ Variables:
 Agent 流程分为两步：
 
 1. “复制第一阶段提示词”会在专题下生成 `._agent-manifests/` 临时 manifest JSON。Agent 按短时链接读取资料，并以 `._topic.json` 中的分析关键词为依据完成分析。
-2. 用户在同一会话中校正判断并确认最终口径后，“复制第二阶段提示词”会签发 1 小时有效、仅允许写入本次 Markdown/PDF 两个指定路径的 Bearer 令牌。Agent 通过专用的 `agent-output-upload-*` 接口回传，不使用浏览器 Cookie。
+2. 用户在同一会话中校正判断并确认最终口径后，“复制第二阶段提示词”会签发 1 小时有效、仅允许写入本次 PDF 指定路径的 Bearer 令牌。Agent 通过专用的 `agent-output-upload-*` 接口回传，不使用浏览器 Cookie。
 
 两阶段提示词都要求 Agent 使用终端 `curl` 访问 manifest、签名资料、回传 API 和 COS PUT，不使用 `web_fetch` 或浏览器抓取工具，避免非浏览器客户端被 Cloudflare 识别为 Error 1010。
 
@@ -52,8 +52,10 @@ Bucket 保持私有读写。CORS 至少允许：
 
 - Origin: Cloudflare Pages 正式域名、本地调试域名
 - Methods: `GET`, `PUT`, `HEAD`
-- Allowed Headers: `*` 或至少 `Content-Type`
-- Expose Headers: `ETag`
+- Allowed Headers: `*` 或至少 `Content-Type`, `Range`
+- Expose Headers: `ETag`, `Accept-Ranges`, `Content-Length`, `Content-Range`
+
+PDF 页内预览使用 Range 请求。部署后需确认 COS 对带 `Range` 的 GET 返回 `206 Partial Content`，并返回正确的 `Content-Range`。如果站点额外配置 CSP，至少允许同源 worker、COS `connect-src` 和 PDF.js WASM 执行。
 
 CAM 子账号建议按最小权限授权，只允许目标 Bucket 的 `DRIVE_ROOT_PREFIX` 下执行：
 
@@ -66,6 +68,7 @@ CAM 子账号建议按最小权限授权，只允许目标 Bucket 的 `DRIVE_ROO
 
 ```bash
 npm install
+npm run build:drive
 npm run dev
 npm test
 npm run typecheck

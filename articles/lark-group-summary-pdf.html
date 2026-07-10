@@ -1,22 +1,21 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta
       name="description"
-      content="从飞书下载安装到授权、触发总结、PDF回传的完整操作指南。"
-    />
+      content="从飞书下载安装到授权、触发总结、PDF回传的完整操作指南。">
     <title>Codex飞书群聊总结操作指南</title>
-    <link rel="icon" type="image/png" href="../assets/jhss-logo-cropped.png" />
-    <link rel="stylesheet" href="../styles.css" />
+    <link rel="icon" type="image/png" href="../assets/jhss-logo-cropped.png">
+    <link rel="stylesheet" href="../styles.css">
   </head>
   <body>
     <a class="skip-link" href="#article-main">跳到正文</a>
-    <main class="page article-page" id="article-main">
+    <div class="page article-page">
       <header class="site-header blog-header" aria-label="博客导航">
         <a class="brand-lockup" href="../index.html" aria-label="返回博客首页">
-          <img class="company-logo" src="../assets/jhss-logo-cropped.png" alt="嘉合杉升 Logo" />
+          <img class="company-logo" src="../assets/jhss-logo-cropped.png" width="400" height="501" alt="嘉合杉升 Logo">
           <span>嘉合杉升AI手册</span>
         </a>
         <nav class="top-nav" aria-label="站点导航">
@@ -25,18 +24,19 @@
         </nav>
       </header>
 
+      <main id="article-main">
       <article class="article-shell">
         <header class="article-hero">
           <a class="back-link" href="../index.html">返回博客首页</a>
           <h1>Codex飞书群聊总结操作指南</h1>
-          <div class="article-meta" aria-label="文章信息">
+          <div class="article-meta" role="group" aria-label="文章信息">
             <span>10分钟阅读</span>
           </div>
         </header>
 
         <div class="article-layout">
-          <aside class="article-toc" aria-label="目录">
-            <p>目录</p>
+          <aside class="article-toc" data-toc aria-label="目录">
+            <button class="toc-toggle" type="button" aria-expanded="true">目录</button>
             <a href="#prepare">准备什么</a>
             <a href="#download-feishu">下载飞书</a>
             <a href="#login">注册并登录</a>
@@ -117,11 +117,11 @@
               <div class="code-block compact-code" data-label="macos-linux">
                 <button class="copy-button" type="button" aria-label="复制 macOS Linux 安装路径">
                   <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M9 9h9v11H9z" />
-                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                    <path d="M9 9h9v11H9z">
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1">
                   </svg>
                   <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="m5 12 4 4L19 6" />
+                    <path d="m5 12 4 4L19 6">
                   </svg>
                   <span>复制</span>
                 </button>
@@ -131,11 +131,11 @@
               <div class="code-block compact-code" data-label="windows">
                 <button class="copy-button" type="button" aria-label="复制 Windows 安装路径">
                   <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M9 9h9v11H9z" />
-                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                    <path d="M9 9h9v11H9z">
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1">
                   </svg>
                   <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="m5 12 4 4L19 6" />
+                    <path d="m5 12 4 4L19 6">
                   </svg>
                   <span>复制</span>
                 </button>
@@ -169,11 +169,11 @@
               <div class="code-block compact-code" data-label="prompt">
                 <button class="copy-button" type="button" aria-label="复制总结指令">
                   <svg class="icon-copy" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M9 9h9v11H9z" />
-                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" />
+                    <path d="M9 9h9v11H9z">
+                    <path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1">
                   </svg>
                   <svg class="icon-check" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="m5 12 4 4L19 6" />
+                    <path d="m5 12 4 4L19 6">
                   </svg>
                   <span>复制</span>
                 </button>
@@ -222,44 +222,12 @@
           </div>
         </div>
       </article>
+      </main>
 
       <footer class="footer">
         <a href="../index.html">回到首页</a>
       </footer>
-    </main>
-    <script>
-      document.querySelectorAll(".code-block, .field-value").forEach((block) => {
-        const button = block.querySelector(".copy-button");
-        if (!button) return;
-
-        const label = button.querySelector("span");
-        const code = block.querySelector("code") || block;
-
-        button.addEventListener("click", async () => {
-          const text = code.textContent;
-          const originalText = label.textContent;
-          button.dataset.state = "pending";
-
-          try {
-            await navigator.clipboard.writeText(text);
-            button.dataset.state = "success";
-            label.textContent = "已复制";
-          } catch {
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(code);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            button.dataset.state = "success";
-            label.textContent = document.execCommand("copy") ? "已复制" : "已选中";
-          }
-
-          window.setTimeout(() => {
-            button.dataset.state = "";
-            label.textContent = originalText;
-          }, 1600);
-        });
-      });
-    </script>
+    </div>
+    <script src="../site.js" defer></script>
   </body>
 </html>

@@ -2,7 +2,7 @@ import type { DriveEnv } from "../../../src/drive/config";
 import { getDriveConfig } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
 import { createAgentOutputToken } from "../../../src/drive/session";
-import { createAgentOutputPaths, createAgentOutputPrompt, readTopic } from "../../../src/drive/topic";
+import { createAgentOutputPath, createAgentOutputPrompt, readTopic } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -20,12 +20,12 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     if (!detail.topic.analysisKeywords.trim()) {
       throw new Error("请先在设置中填写分析关键词");
     }
-    const [markdownPath, pdfPath] = createAgentOutputPaths(detail.topic);
+    const pdfPath = createAgentOutputPath(detail.topic);
     const capability = await createAgentOutputToken(env, {
       displayName: session.displayName,
       topicPrefix: detail.topic.prefix,
       topicInstanceId: detail.topic.instanceId,
-      allowedPaths: [markdownPath, pdfPath],
+      allowedPaths: [pdfPath],
     });
 
     return jsonResponse({
@@ -35,12 +35,11 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
         token: capability.token,
         expiresAt: capability.expiresAt,
         expiresIn: capability.expiresIn,
-        markdownPath,
         pdfPath,
       }),
       expiresAt: capability.expiresAt,
       expiresIn: capability.expiresIn,
-      paths: [markdownPath, pdfPath],
+      paths: [pdfPath],
     });
   } catch (error) {
     return errorResponse(error);

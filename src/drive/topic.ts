@@ -17,10 +17,7 @@ export const TOPIC_META_FILENAME = "._topic.json";
 export const GENERATE_PROMPT_FILENAME = "成果生成与回传.prompt.md";
 export const OUTPUTS_FOLDER_NAME = "outputs";
 export const AGENT_MANIFEST_FOLDER_NAME = "._agent-manifests";
-export const AGENT_OUTPUT_FORMATS = [
-  { extension: ".md", contentType: "text/markdown; charset=utf-8" },
-  { extension: ".pdf", contentType: "application/pdf" },
-] as const;
+export const AGENT_OUTPUT_FORMAT = { extension: ".pdf", contentType: "application/pdf" } as const;
 
 export interface DriveFileMetadata {
   uploadedBy: string;
@@ -250,7 +247,7 @@ export async function deleteTopic(
 }
 
 export async function readDriveOverview(config: DriveConfig, options: TopicScaffoldOptions): Promise<DriveOverview> {
-  const root = await listDirectoryWithMetadata(config, "");
+  const root = await listAllDirectoryWithMetadata(config, "");
   const topics = await Promise.all(
     root.folders.map(async (folder): Promise<DriveOverviewTopic | null> => {
       try {
@@ -451,19 +448,19 @@ ${input.topic.analysisKeywords}
 `;
 }
 
-export function createAgentOutputPaths(
+export function createAgentOutputPath(
   topic: Pick<TopicMetadata, "name" | "prefix" | "instanceId">,
   generatedAt = new Date(),
   taskId = createNonce().slice(0, 8),
-): [string, string] {
+): string {
   const timestamp = generatedAt.toISOString().slice(0, 16).replace("T", "-").replace(":", "");
   const safeTopicName = topic.name.slice(0, 110);
   const basePath = `${topic.prefix}${OUTPUTS_FOLDER_NAME}/agent-${topic.instanceId}-${timestamp}-${taskId}-${safeTopicName}-专题总结`;
-  return [`${basePath}${AGENT_OUTPUT_FORMATS[0].extension}`, `${basePath}${AGENT_OUTPUT_FORMATS[1].extension}`];
+  return `${basePath}${AGENT_OUTPUT_FORMAT.extension}`;
 }
 
 export function isExpectedAgentOutputContentType(path: string, contentType: string): boolean {
-  return AGENT_OUTPUT_FORMATS.some((format) => path.endsWith(format.extension) && contentType === format.contentType);
+  return path.endsWith(AGENT_OUTPUT_FORMAT.extension) && contentType === AGENT_OUTPUT_FORMAT.contentType;
 }
 
 export function createAgentOutputPrompt(input: {
@@ -472,7 +469,6 @@ export function createAgentOutputPrompt(input: {
   token: string;
   expiresAt: string;
   expiresIn: number;
-  markdownPath: string;
   pdfPath: string;
 }): string {
   return `# ${input.topic.name}：第二阶段 · 成果生成与回传
@@ -487,8 +483,7 @@ export function createAgentOutputPrompt(input: {
 1. 仅把当前会话中用户最终确认的口径整理为正式成果，不自行增加、删除或改变结论。
 2. 成果至少包含：摘要、分析框架、关键发现、证据引用、风险、待核验事项。
 3. 每个重要判断保留第一阶段提供的来源 path；不要虚构引用。
-4. 必须生成内容一致的 Markdown 和 PDF 两个文件：
-   - ${input.markdownPath}
+4. 必须生成一个 PDF 文件：
    - ${input.pdfPath}
 
 回传授权：
@@ -497,11 +492,11 @@ export function createAgentOutputPrompt(input: {
 - Bearer token：${input.token}
 - 令牌和短时 PUT URL 只用于请求鉴权，禁止写入成果正文、日志或最终回复。
 
-回传流程（两个文件分别执行）：
+回传流程：
 1. 使用终端 curl POST \`${input.origin}/api/drive/agent-output-upload-url\`，请求头带 \`Authorization: Bearer <token>\` 和 \`Content-Type: application/json\`；body 包含上方对应的完整 \`path\`、实际字节数 \`size\` 与 \`contentType\`。该接口不使用 Cookie。
-2. Markdown 使用 \`${AGENT_OUTPUT_FORMATS[0].contentType}\`，PDF 使用 \`${AGENT_OUTPUT_FORMATS[1].contentType}\`。用返回的短时 PUT URL 上传，并原样携带返回的全部 \`requiredHeaders\`；其中 \`content-length\` 必须等于申请时的实际字节数。
+2. PDF 使用 \`${AGENT_OUTPUT_FORMAT.contentType}\`。用返回的短时 PUT URL 上传，并原样携带返回的全部 \`requiredHeaders\`；其中 \`content-length\` 必须等于申请时的实际字节数。
 3. PUT 成功后使用终端 curl POST \`${input.origin}/api/drive/agent-output-upload-complete\`，同样只携带 Bearer token、不携带 Cookie；body 包含返回的 \`path\`、实际 \`size\` 与 \`contentType\`。
-4. 两个文件都成功登记后，报告各自 path。授权过期、专题已删除或任一步失败时停止并报告具体错误，提示用户重新复制第二阶段提示词。
+4. 文件成功登记后，报告 PDF path。授权过期、专题已删除或任一步失败时停止并报告具体错误，提示用户重新复制第二阶段提示词。
 `;
 }
 
@@ -663,7 +658,7 @@ function isOutputForTopicInstance(fileName: string, instanceId: string): boolean
 }
 
 async function listOutputsForTopicInstance(config: DriveConfig, topic: Pick<TopicMetadata, "prefix" | "instanceId">): Promise<DriveFile[]> {
-  const outputList = await listDirectoryWithMetadata(config, `${topic.prefix}${OUTPUTS_FOLDER_NAME}/`);
+  const outputList = await listAllDirectoryWithMetadata(config, `${topic.prefix}${OUTPUTS_FOLDER_NAME}/`);
   return outputList.files.filter((file) => isOutputForTopicInstance(file.name, topic.instanceId));
 }
 

@@ -3,8 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "build:drive": "esbuild src/drive/client/index.ts --bundle --format=esm --target=es2022 --outfile=assets/drive.js --loader:.woff2=file --loader:.woff=file --loader:.ttf=file --loader:.svg=file --asset-names=drive-assets/[name]-[hash]",
+    "build:drive": "node scripts/build-drive.mjs",
     "dev": "wrangler pages dev . --compatibility-date=2026-07-08",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -17,7 +20,9 @@
     "aws4fetch": "^1.0.20",
     "dompurify": "^3.4.11",
     "fast-xml-parser": "^4.5.1",
-    "markdown-it": "^14.3.0"
+    "lit": "^3.3.3",
+    "markdown-it": "^14.3.0",
+    "pdfjs-dist": "6.1.200"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260708.1",
