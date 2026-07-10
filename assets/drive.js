@@ -18615,13 +18615,15 @@ function render() {
 function renderTopbar() {
   return `
     <header class="drive-topbar">
-      <a class="drive-brand" href="./index.html" aria-label="\u8FD4\u56DE\u5609\u5408\u6749\u5347AI\u624B\u518C\u9996\u9875">
-        <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />
-        <span>\u5609\u5408\u6749\u5347\u4E13\u9898\u8D44\u6599\u5E93</span>
-      </a>
+      <div class="drive-brand-actions">
+        <a class="drive-brand" href="/drive" aria-label="\u8FD4\u56DE\u5609\u5408\u6749\u5347\u4E13\u9898\u8D44\u6599\u5E93">
+          <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />
+          <span>\u5609\u5408\u6749\u5347\u4E13\u9898\u8D44\u6599\u5E93</span>
+        </a>
+        ${state.mode !== "login" ? controlButton("\u9000\u51FA\u767B\u5F55", "ph-sign-out", "logout", false, "", "drive-logout-button") : ""}
+      </div>
       <nav class="drive-nav" aria-label="\u4E13\u9898\u8D44\u6599\u5E93\u5BFC\u822A">
         <a href="./index.html">\u8FD4\u56DE\u9996\u9875</a>
-        ${state.mode !== "login" ? controlButton("\u9000\u51FA\u767B\u5F55", "ph-sign-out", "logout", false, "", "drive-logout-button") : ""}
       </nav>
     </header>
   `;

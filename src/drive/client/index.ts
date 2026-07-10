@@ -711,13 +711,15 @@ function render(): void {
 function renderTopbar(): string {
   return `
     <header class="drive-topbar">
-      <a class="drive-brand" href="./index.html" aria-label="返回嘉合杉升AI手册首页">
-        <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />
-        <span>嘉合杉升专题资料库</span>
-      </a>
+      <div class="drive-brand-actions">
+        <a class="drive-brand" href="/drive" aria-label="返回嘉合杉升专题资料库">
+          <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />
+          <span>嘉合杉升专题资料库</span>
+        </a>
+        ${state.mode !== "login" ? controlButton("退出登录", "ph-sign-out", "logout", false, "", "drive-logout-button") : ""}
+      </div>
       <nav class="drive-nav" aria-label="专题资料库导航">
         <a href="./index.html">返回首页</a>
-        ${state.mode !== "login" ? controlButton("退出登录", "ph-sign-out", "logout", false, "", "drive-logout-button") : ""}
       </nav>
     </header>
   `;

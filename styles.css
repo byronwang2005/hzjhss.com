@@ -60,8 +60,16 @@
   -webkit-backdrop-filter: blur(18px);
 }
 
+.drive-brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
 .drive-brand {
   display: inline-flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -925,8 +933,12 @@
     padding: 0 14px;
   }
 
+  .drive-brand-actions {
+    gap: 8px;
+  }
+
   .drive-brand span {
-    max-width: 9em;
+    max-width: 7em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -948,6 +960,7 @@
 
   .drive-logout-button {
     width: auto;
+    padding-inline: 10px;
   }
 
   .drive-head-actions,
