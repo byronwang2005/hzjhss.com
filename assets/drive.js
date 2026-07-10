@@ -18055,7 +18055,7 @@ root.addEventListener("wa-after-hide", (event) => {
 });
 void boot();
 async function boot() {
-  setStatus("\u6B63\u5728\u8BFB\u53D6\u6210\u679C\u4E2D\u5FC3...");
+  setStatus("\u6B63\u5728\u8BFB\u53D6\u4E13\u9898\u8D44\u6599\u5E93...");
   await loadOverview();
 }
 async function handleSubmit(event) {
@@ -18617,9 +18617,9 @@ function renderTopbar() {
     <header class="drive-topbar">
       <a class="drive-brand" href="./index.html" aria-label="\u8FD4\u56DE\u5609\u5408\u6749\u5347AI\u624B\u518C\u9996\u9875">
         <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />
-        <span>\u5609\u5408\u6749\u5347\u6210\u679C\u4E2D\u5FC3</span>
+        <span>\u5609\u5408\u6749\u5347\u4E13\u9898\u8D44\u6599\u5E93</span>
       </a>
-      <nav class="drive-nav" aria-label="\u6210\u679C\u4E2D\u5FC3\u5BFC\u822A">
+      <nav class="drive-nav" aria-label="\u4E13\u9898\u8D44\u6599\u5E93\u5BFC\u822A">
         <a href="./index.html">\u8FD4\u56DE\u9996\u9875</a>
         ${state.mode !== "login" ? iconButton("\u9000\u51FA\u767B\u5F55", "ph-sign-out", "logout") : ""}
       </nav>
@@ -18644,8 +18644,8 @@ function renderLogin() {
   return `
     <section class="drive-login-panel" aria-labelledby="drive-login-title">
       <div>
-        <p class="drive-kicker">Internal delivery</p>
-        <h1 id="drive-login-title">\u4E13\u9898\u6210\u679C\u4EA4\u4ED8\u4E2D\u5FC3</h1>
+        <p class="drive-kicker">\u4E13\u9898\u8D44\u6599\u5E93</p>
+        <h1 id="drive-login-title">\u4E13\u9898\u8D44\u6599\u5E93</h1>
         <p>\u767B\u5F55\u540E\u67E5\u770B\u4E13\u9898\u6210\u679C\u3001\u7AD9\u5185\u9884\u89C8\u3001\u590D\u5236\u77ED\u65F6\u94FE\u63A5\uFF0C\u5E76\u628A\u8D44\u6599\u4EA4\u7ED9\u672C\u5730 agent \u7EE7\u7EED\u5206\u6790\u3002</p>
       </div>
       <form class="drive-form drive-login-card" data-login-form>
@@ -18661,7 +18661,7 @@ function renderLogin() {
         </label>
         <button class="drive-control drive-control-primary" type="submit">
           <i class="ph ph-arrow-right" aria-hidden="true"></i>
-          \u8FDB\u5165\u6210\u679C\u4E2D\u5FC3
+          \u8FDB\u5165\u8D44\u6599\u5E93
         </button>
       </form>
     </section>
@@ -18679,9 +18679,7 @@ function renderOverview() {
     <section class="drive-dashboard">
       <div class="drive-page-head">
         <div>
-          <p class="drive-kicker">Delivery center</p>
-          <h1>\u6210\u679C\u4F18\u5148\uFF0C\u8D44\u6599\u968F\u540E</h1>
-          <p>\u5148\u770B\u80FD\u4EA4\u4ED8\u7684\u6210\u679C\uFF0C\u518D\u8FDB\u5165\u4E13\u9898\u8865\u8D44\u6599\u3001\u751F\u6210\u63D0\u793A\u8BCD\u6216\u7EF4\u62A4\u8BBE\u7F6E\u3002</p>
+          <h1>\u4E13\u9898\u8D44\u6599\u5E93</h1>
         </div>
         <div class="drive-head-actions">
           ${controlButton("\u5237\u65B0", "ph-arrow-clockwise", "refresh")}
@@ -18689,7 +18687,7 @@ function renderOverview() {
         </div>
       </div>
 
-      <div class="drive-metrics" aria-label="\u6210\u679C\u4E2D\u5FC3\u6982\u89C8">
+      <div class="drive-metrics" aria-label="\u4E13\u9898\u8D44\u6599\u5E93\u6982\u89C8">
         ${metricCard("\u4E13\u9898", String(topics.length), "\u5DF2\u5EFA\u4E13\u9898\u6570")}
         ${metricCard("\u6210\u679C", String(totalOutputs), "outputs \u76EE\u5F55\u6587\u4EF6")}
         ${metricCard("\u5F85\u4EA4\u4ED8", String(emptyTopics), "\u8FD8\u6CA1\u6709\u6210\u679C\u7684\u4E13\u9898")}

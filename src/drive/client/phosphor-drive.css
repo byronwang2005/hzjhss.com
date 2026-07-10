@@ -1,0 +1,59 @@
+@font-face {
+  font-family: "Phosphor";
+  src: url("../../../node_modules/@phosphor-icons/web/src/regular/Phosphor.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+.ph {
+  font-family: "Phosphor" !important;
+  speak: never;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  -webkit-font-feature-settings: "liga";
+  -moz-font-feature-settings: "liga=1";
+  -moz-font-feature-settings: "liga";
+  -ms-font-feature-settings: "liga" 1;
+  font-feature-settings: "liga";
+  -webkit-font-variant-ligatures: discretionary-ligatures;
+  font-variant-ligatures: discretionary-ligatures;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ph.ph-arrow-clockwise:before { content: "\e036"; }
+.ph.ph-arrow-left:before { content: "\e058"; }
+.ph.ph-arrow-right:before { content: "\e06c"; }
+.ph.ph-check:before { content: "\e182"; }
+.ph.ph-circle-notch:before { content: "\eb44"; }
+.ph.ph-clipboard-text:before { content: "\e198"; }
+.ph.ph-copy:before { content: "\e1ca"; }
+.ph.ph-download-simple:before { content: "\e20c"; }
+.ph.ph-eye-slash:before { content: "\e224"; }
+.ph.ph-files:before { content: "\e710"; }
+.ph.ph-file:before { content: "\e230"; }
+.ph.ph-file-doc:before { content: "\eb1e"; }
+.ph.ph-file-html:before { content: "\eb38"; }
+.ph.ph-file-image:before { content: "\ea24"; }
+.ph.ph-file-pdf:before { content: "\e702"; }
+.ph.ph-file-ppt:before { content: "\eb20"; }
+.ph.ph-file-text:before { content: "\e23a"; }
+.ph.ph-file-xls:before { content: "\eb22"; }
+.ph.ph-floppy-disk:before { content: "\e248"; }
+.ph.ph-folder:before { content: "\e24a"; }
+.ph.ph-folder-plus:before { content: "\e258"; }
+.ph.ph-folder-simple-plus:before { content: "\e25e"; }
+.ph.ph-info:before { content: "\e2ce"; }
+.ph.ph-link:before { content: "\e2e2"; }
+.ph.ph-package:before { content: "\e390"; }
+.ph.ph-sign-out:before { content: "\e42a"; }
+.ph.ph-sliders-horizontal:before { content: "\e434"; }
+.ph.ph-terminal-window:before { content: "\eae8"; }
+.ph.ph-trash:before { content: "\e4a6"; }
+.ph.ph-tray:before { content: "\e4aa"; }
+.ph.ph-upload-simple:before { content: "\e4c0"; }

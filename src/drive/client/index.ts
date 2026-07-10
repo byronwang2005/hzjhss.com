@@ -4,7 +4,7 @@ import "@awesome.me/webawesome/dist/components/drawer/drawer.js";
 import "@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js";
 import "@awesome.me/webawesome/dist/components/tooltip/tooltip.js";
 import "@awesome.me/webawesome/dist/components/callout/callout.js";
-import "@phosphor-icons/web/regular/style.css";
+import "./phosphor-drive.css";
 
 import Uppy from "@uppy/core";
 import type { UppyFile } from "@uppy/core";
@@ -117,7 +117,7 @@ root.addEventListener("wa-after-hide", (event) => {
 void boot();
 
 async function boot(): Promise<void> {
-  setStatus("正在读取成果中心...");
+  setStatus("正在读取专题资料库...");
   await loadOverview();
 }
 
@@ -713,9 +713,9 @@ function renderTopbar(): string {
     <header class="drive-topbar">
       <a class="drive-brand" href="./index.html" aria-label="返回嘉合杉升AI手册首页">
         <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" />
-        <span>嘉合杉升成果中心</span>
+        <span>嘉合杉升专题资料库</span>
       </a>
-      <nav class="drive-nav" aria-label="成果中心导航">
+      <nav class="drive-nav" aria-label="专题资料库导航">
         <a href="./index.html">返回首页</a>
         ${state.mode !== "login" ? iconButton("退出登录", "ph-sign-out", "logout") : ""}
       </nav>
@@ -742,8 +742,8 @@ function renderLogin(): string {
   return `
     <section class="drive-login-panel" aria-labelledby="drive-login-title">
       <div>
-        <p class="drive-kicker">Internal delivery</p>
-        <h1 id="drive-login-title">专题成果交付中心</h1>
+        <p class="drive-kicker">专题资料库</p>
+        <h1 id="drive-login-title">专题资料库</h1>
         <p>登录后查看专题成果、站内预览、复制短时链接，并把资料交给本地 agent 继续分析。</p>
       </div>
       <form class="drive-form drive-login-card" data-login-form>
@@ -759,7 +759,7 @@ function renderLogin(): string {
         </label>
         <button class="drive-control drive-control-primary" type="submit">
           <i class="ph ph-arrow-right" aria-hidden="true"></i>
-          进入成果中心
+          进入资料库
         </button>
       </form>
     </section>
@@ -779,9 +779,7 @@ function renderOverview(): string {
     <section class="drive-dashboard">
       <div class="drive-page-head">
         <div>
-          <p class="drive-kicker">Delivery center</p>
-          <h1>成果优先，资料随后</h1>
-          <p>先看能交付的成果，再进入专题补资料、生成提示词或维护设置。</p>
+          <h1>专题资料库</h1>
         </div>
         <div class="drive-head-actions">
           ${controlButton("刷新", "ph-arrow-clockwise", "refresh")}
@@ -789,7 +787,7 @@ function renderOverview(): string {
         </div>
       </div>
 
-      <div class="drive-metrics" aria-label="成果中心概览">
+      <div class="drive-metrics" aria-label="专题资料库概览">
         ${metricCard("专题", String(topics.length), "已建专题数")}
         ${metricCard("成果", String(totalOutputs), "outputs 目录文件")}
         ${metricCard("待交付", String(emptyTopics), "还没有成果的专题")}
