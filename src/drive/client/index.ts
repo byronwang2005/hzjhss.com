@@ -27,7 +27,6 @@ import type {
   PreviewKind,
   TopicDetail,
   TopicTab,
-  UploadCompleteResponse,
   ViewMode,
 } from "./types";
 import {
@@ -94,6 +93,18 @@ interface PresignedUpload {
   url: string;
   path: string;
   contentType: string;
+}
+
+interface UploadCompletion {
+  path: string;
+  size: number;
+  contentType: string;
+  kind: "material" | "output";
+}
+
+interface UploadCompleteBatchResponse {
+  ok: true;
+  files: DriveFile[];
 }
 
 type UppyMeta = Record<string, unknown>;
@@ -842,7 +853,7 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
     renderApp();
 
     const signedUploads = new Map<string, PresignedUpload>();
-    const completed: Promise<UploadCompleteResponse>[] = [];
+    const completed: UploadCompletion[] = [];
     uppy = new Uppy<UppyMeta, UppyBody>({ autoProceed: false });
     uppy.use(XHRUpload, {
       endpoint: async (fileOrBundle: unknown) => {
@@ -896,17 +907,12 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
         return;
       }
       const fileData = file.data as Blob | undefined;
-      completed.push(
-        api<UploadCompleteResponse>("/upload-complete", {
-          method: "POST",
-          body: {
-            path: upload.path,
-            size: fileData?.size || 0,
-            contentType: upload.contentType,
-            kind: upload.path.startsWith(`${topicPrefix}outputs/`) ? "output" : "material",
-          },
-        }),
-      );
+      completed.push({
+        path: upload.path,
+        size: fileData?.size || 0,
+        contentType: upload.contentType,
+        kind: upload.path.startsWith(`${topicPrefix}outputs/`) ? "output" : "material",
+      });
     });
 
     entries.forEach((entry) => {
@@ -918,7 +924,12 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
       });
     });
     const result = await uppy.upload();
-    await Promise.all(completed);
+    for (let index = 0; index < completed.length; index += 1000) {
+      await api<UploadCompleteBatchResponse>("/upload-complete", {
+        method: "POST",
+        body: { files: completed.slice(index, index + 1000) },
+      });
+    }
     if (result?.failed?.length) {
       throw new Error(`${result.failed.length} 个文件上传失败。`);
     }

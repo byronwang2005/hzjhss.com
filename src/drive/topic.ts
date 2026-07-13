@@ -46,6 +46,18 @@ export interface DriveDirectoryMetadata {
   files: Record<string, DriveFileMetadata>;
 }
 
+export interface UploadCompletionInput {
+  path: unknown;
+  size?: unknown;
+  contentType?: unknown;
+  kind?: unknown;
+}
+
+export interface RecordedUpload extends DriveFileMetadata {
+  path: string;
+  name: string;
+}
+
 export interface TopicMetadata {
   version: 4;
   instanceId: string;
@@ -407,29 +419,45 @@ export function mergeListMetadata(result: DriveListResult, meta: DriveDirectoryM
 
 export async function recordUploadComplete(
   config: DriveConfig,
-  input: { path: unknown; displayName: string; size?: unknown; contentType?: unknown; kind?: unknown },
-): Promise<DriveFileMetadata & { path: string; name: string }> {
-  const path = normalizeObjectPath(input.path);
-  if (isSystemFileName(fileNameFromPath(path))) {
-    throw new Error("不能登记系统文件");
+  input: UploadCompletionInput & { displayName: string },
+): Promise<RecordedUpload> {
+  const [file] = await recordUploadsComplete(config, { files: [input], displayName: input.displayName });
+  return file;
+}
+
+export async function recordUploadsComplete(
+  config: DriveConfig,
+  input: { files: unknown; displayName: string },
+): Promise<RecordedUpload[]> {
+  if (!Array.isArray(input.files) || input.files.length === 0) {
+    throw new Error("请提供已上传文件");
   }
-  const now = new Date().toISOString();
-  const meta: DriveFileMetadata = {
-    uploadedBy: input.displayName,
-    uploadedAt: now,
-    contentType: normalizeContentType(input.contentType),
-    size: normalizeSize(input.size),
-    kind: normalizeUploadKind(input.kind, path),
-  };
-  await recordFileMetadata(config, path, meta);
-  if (meta.kind === "output") {
-    const topicPrefix = path.split(`${OUTPUTS_FOLDER_NAME}/`, 1)[0];
-    const topic = await readTopicMetadataIfExists(config, topicPrefix);
-    if (topic && !topic.featuredOutputPath && isPreviewableOutput({ path, name: fileNameFromPath(path), contentType: meta.contentType })) {
-      await writeTopicMetadata(config, { ...topic, version: 4, featuredOutputPath: path }, input.displayName);
-    }
+  if (input.files.length > 1000) {
+    throw new Error("单次最多登记 1000 个文件");
   }
-  return { ...meta, path, name: fileNameFromPath(path) };
+
+  const uploadedAt = new Date().toISOString();
+  const files = input.files.map((entry) => normalizeUploadCompletion(entry, input.displayName, uploadedAt));
+  const filesByDirectory = new Map<string, RecordedUpload[]>();
+  for (const file of files) {
+    const prefix = directoryPrefixFromPath(file.path);
+    const directoryFiles = filesByDirectory.get(prefix) ?? [];
+    directoryFiles.push(file);
+    filesByDirectory.set(prefix, directoryFiles);
+  }
+
+  await Promise.all(
+    Array.from(filesByDirectory, async ([prefix, directoryFiles]) => {
+      const meta = await readDriveMeta(config, prefix);
+      for (const file of directoryFiles) {
+        meta.files[file.name] = fileMetadataFromRecordedUpload(file);
+      }
+      await writeDriveMeta(config, prefix, meta);
+    }),
+  );
+
+  await updateFeaturedOutputs(config, files, input.displayName);
+  return files;
 }
 
 export async function removeFileMetadata(config: DriveConfig, rawPath: unknown): Promise<void> {
@@ -860,6 +888,56 @@ async function recordFileMetadata(config: DriveConfig, path: string, fileMeta: D
   const meta = await readDriveMeta(config, prefix);
   meta.files[name] = fileMeta;
   await writeDriveMeta(config, prefix, meta);
+}
+
+function normalizeUploadCompletion(entry: unknown, displayName: string, uploadedAt: string): RecordedUpload {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error("上传文件登记信息无效");
+  }
+  const input = entry as UploadCompletionInput;
+  const path = normalizeObjectPath(input.path);
+  const name = fileNameFromPath(path);
+  if (isSystemFileName(name)) {
+    throw new Error("不能登记系统文件");
+  }
+  return {
+    path,
+    name,
+    uploadedBy: displayName,
+    uploadedAt,
+    contentType: normalizeContentType(input.contentType),
+    size: normalizeSize(input.size),
+    kind: normalizeUploadKind(input.kind, path),
+  };
+}
+
+function fileMetadataFromRecordedUpload(file: RecordedUpload): DriveFileMetadata {
+  return {
+    uploadedBy: file.uploadedBy,
+    uploadedAt: file.uploadedAt,
+    contentType: file.contentType,
+    size: file.size,
+    kind: file.kind,
+  };
+}
+
+async function updateFeaturedOutputs(config: DriveConfig, files: RecordedUpload[], actor: string): Promise<void> {
+  const candidates = new Map<string, RecordedUpload>();
+  for (const file of files) {
+    if (file.kind !== "output" || !isPreviewableOutput(file)) {
+      continue;
+    }
+    const topicPrefix = file.path.split(`${OUTPUTS_FOLDER_NAME}/`, 1)[0];
+    if (!candidates.has(topicPrefix)) {
+      candidates.set(topicPrefix, file);
+    }
+  }
+  for (const [topicPrefix, file] of candidates) {
+    const topic = await readTopicMetadataIfExists(config, topicPrefix);
+    if (topic && !topic.featuredOutputPath) {
+      await writeTopicMetadata(config, { ...topic, version: 4, featuredOutputPath: file.path }, actor);
+    }
+  }
 }
 
 async function readDriveMeta(config: DriveConfig, prefix: string): Promise<DriveDirectoryMetadata> {

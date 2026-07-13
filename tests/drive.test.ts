@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { normalizeFileName, normalizeObjectPath, normalizePrefix, normalizeRelativeFilePath } from "../src/drive/paths";
 import { parseListObjectsXml, parseObjectPathsXml, presignObjectUrl } from "../src/drive/cos";
 import { toDriveOverviewApiResponse, toTopicDetailApiResponse } from "../src/drive/api-responses";
@@ -31,6 +32,7 @@ import {
   normalizeTopicPrefix,
   readDriveOverview,
   readTopic,
+  recordUploadsComplete,
   transferTopicOwner,
   updateTopic,
 } from "../src/drive/topic";
@@ -631,6 +633,35 @@ describe("agent output upload API", () => {
 });
 
 describe("topic scaffolding", () => {
+  it("records every uploader when a batch contains files in the same directory", async () => {
+    await withMockCos([], async (storage) => {
+      const files = await recordUploadsComplete(testConfig, {
+        displayName: "王小明",
+        files: [
+          { path: "新能源/a.pdf", size: 10, contentType: "application/pdf", kind: "material" },
+          { path: "新能源/b.pdf", size: 20, contentType: "application/pdf", kind: "material" },
+          { path: "新能源/c.pdf", size: 30, contentType: "application/pdf", kind: "material" },
+        ],
+      });
+
+      expect(files).toHaveLength(3);
+      const metadata = JSON.parse(storage.get(`新能源/${DRIVE_META_FILENAME}`) || "{}");
+      expect(Object.keys(metadata.files)).toEqual(["a.pdf", "b.pdf", "c.pdf"]);
+      expect(Object.values(metadata.files)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ uploadedBy: "王小明", kind: "material" }),
+          expect.objectContaining({ uploadedBy: "王小明", kind: "material" }),
+          expect.objectContaining({ uploadedBy: "王小明", kind: "material" }),
+        ]),
+      );
+
+      const clientSource = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+      expect(clientSource).toContain("const completed: UploadCompletion[] = [];");
+      expect(clientSource).toContain("body: { files: completed.slice(index, index + 1000) }");
+      expect(clientSource).not.toContain("await Promise.all(completed);");
+    });
+  });
+
   it("requires analysis keywords when creating a topic", async () => {
     await withMockCos([], async () => {
       await expect(

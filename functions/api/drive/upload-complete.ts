@@ -1,7 +1,7 @@
 import type { DriveEnv } from "../../../src/drive/config";
 import { getDriveConfig } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { recordUploadComplete } from "../../../src/drive/topic";
+import { recordUploadComplete, recordUploadsComplete } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -11,6 +11,13 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     }
 
     const body = await readJsonBody(request);
+    if (Array.isArray(body.files)) {
+      const files = await recordUploadsComplete(getDriveConfig(env), {
+        files: body.files,
+        displayName: session.displayName,
+      });
+      return jsonResponse({ ok: true, files });
+    }
     const file = await recordUploadComplete(getDriveConfig(env), {
       path: body.path,
       size: body.size,
