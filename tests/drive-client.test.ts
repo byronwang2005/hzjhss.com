@@ -119,4 +119,26 @@ describe("drive client topic navigation", () => {
     expect(source).not.toContain("事实与推断须分开标注");
     expect(source).not.toContain("反向证据、敏感变量、潜在偏差和待核验事项");
   });
+
+  it("collects a one-time first-stage question and clears it only after a successful copy", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source).toContain("您想了解什么？（留空将以推荐口径分析）");
+    expect(source).toContain("例如：最新周报信息、库存情况......");
+    expect(source).toContain('body: { prefix: state.topic.topic.prefix, userQuestion: state.drafts.agentQuestion }');
+
+    const requestIndex = source.indexOf('body: { prefix: state.topic.topic.prefix, userQuestion: state.drafts.agentQuestion }');
+    const clearIndex = source.indexOf('state.drafts.agentQuestion = "";', requestIndex);
+    const successIndex = source.indexOf("分析提示词已复制", requestIndex);
+    const catchIndex = source.indexOf("} catch (error) {", requestIndex);
+    expect(clearIndex).toBeGreaterThan(requestIndex);
+    expect(clearIndex).toBeLessThan(successIndex);
+    expect(clearIndex).toBeLessThan(catchIndex);
+    expect(source.slice(catchIndex, source.indexOf("} finally {", catchIndex))).not.toContain('state.drafts.agentQuestion = "";');
+  });
+
+  it("uses the same copy icon for both Agent prompt buttons", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source.match(/ph ph-clipboard-text/g)).toHaveLength(2);
+    expect(source).not.toContain("ph ph-file-arrow-up");
+  });
 });

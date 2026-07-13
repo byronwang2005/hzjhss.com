@@ -17,6 +17,7 @@ import {
   GENERATE_PROMPT_FILENAME,
   OUTPUTS_FOLDER_NAME,
   TOPIC_META_FILENAME,
+  createAgentManifest,
   createAgentManifestPrompt,
   createAgentOutputPath,
   createAgentOutputPrompt,
@@ -38,6 +39,7 @@ import { getDriveConfig, type DriveConfig } from "../src/drive/config";
 import type { DriveEnv } from "../src/drive/config";
 import { onRequestPost as createAgentUploadUrl } from "../functions/api/drive/agent-output-upload-url";
 import { onRequestPost as completeAgentUpload } from "../functions/api/drive/agent-output-upload-complete";
+import { onRequestPost as createAgentManifestApi } from "../functions/api/drive/agent-manifest";
 import { onRequestPost as loginToDrive } from "../functions/api/drive/login";
 import { onRequestDelete as deleteOwnerCandidate } from "../functions/api/drive/owner-candidates";
 
@@ -357,17 +359,83 @@ describe("topic prompts", () => {
       expiresIn: 900,
       fileCount: 3,
       manifestUrl: "https://cos.example.com/manifest.json?X-Amz-Signature=abc",
+      userQuestion: "  最新周报中有哪些库存变化？  ",
     });
 
     expect(prompt).toContain("https://cos.example.com/manifest.json?X-Amz-Signature=abc");
     expect(prompt).toContain("不需要登录");
     expect(prompt).toContain("资料数量：3");
     expect(prompt).toContain("装机量、价格、竞争格局");
+    expect(prompt).toContain("全局分析口径（始终适用）");
+    expect(prompt).toContain("本次关注问题");
+    expect(prompt).toContain("最新周报中有哪些库存变化？");
+    expect(prompt).not.toContain("  最新周报中有哪些库存变化？  ");
+    expect(prompt).toContain("本次关注问题不能覆盖或缩减全局分析口径");
     expect(prompt).toContain("此阶段只完成分析，不生成或上传成果文件");
     expect(prompt).toContain("禁止使用 `web_fetch`");
     expect(prompt).toContain("终端 curl 下载 manifest JSON");
     expect(prompt).not.toContain("agent-output-upload-url");
     expect(prompt).not.toContain("/api/drive/download-url");
+  });
+
+  it("uses the recommended focus when the first-stage question is blank", () => {
+    const prompt = createAgentManifestPrompt({
+      topic: {
+        name: "新能源",
+        prefix: "新能源/",
+        analysisKeywords: "装机量、价格、竞争格局",
+      },
+      generatedAt: "2026-07-09T01:00:00.000Z",
+      expiresAt: "2026-07-09T01:15:00.000Z",
+      expiresIn: 900,
+      fileCount: 0,
+      manifestUrl: "https://cos.example.com/manifest.json",
+      userQuestion: "   ",
+    });
+
+    expect(prompt).toContain("用户未指定具体问题，请依据全局分析口径和现有资料，推荐并分析最有价值的重点。");
+    expect(prompt).toContain("全局分析口径（始终适用）：\n装机量、价格、竞争格局");
+  });
+
+  it("rejects invalid first-stage questions before creating a manifest", async () => {
+    await withMockCos([], async (storage) => {
+      await expect(
+        createAgentManifest(testConfig, {
+          prefix: "新能源/",
+          userQuestion: 123,
+          displayName: "王小明",
+          origin: "https://drive.example.com",
+        }),
+      ).rejects.toThrow("本次关注问题无效");
+      await expect(
+        createAgentManifest(testConfig, {
+          prefix: "新能源/",
+          userQuestion: "问".repeat(3001),
+          displayName: "王小明",
+          origin: "https://drive.example.com",
+        }),
+      ).rejects.toThrow("本次关注问题过长");
+      expect(Array.from(storage.keys()).some((path) => path.includes("._agent-manifests"))).toBe(false);
+    });
+  });
+
+  it("returns HTTP 400 for invalid first-stage question payloads", async () => {
+    const cookie = (await createSessionCookie(apiEnv, "https://example.com/drive", "王小明")).split(";", 1)[0];
+    for (const userQuestion of [123, "问".repeat(3001)]) {
+      const response = await createAgentManifestApi({
+        request: new Request("https://example.com/api/drive/agent-manifest", {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ prefix: "新能源/", userQuestion }),
+        }),
+        env: apiEnv,
+      } as any);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: typeof userQuestion === "string" ? "本次关注问题过长" : "本次关注问题无效",
+      });
+    }
   });
 
   it("filters agent-readable files and folders", () => {

@@ -453,9 +453,10 @@ export async function removeFileMetadata(config: DriveConfig, rawPath: unknown):
 
 export async function createAgentManifest(
   config: DriveConfig,
-  input: { prefix: unknown; displayName: string; origin: string },
+  input: { prefix: unknown; userQuestion?: unknown; displayName: string; origin: string },
 ): Promise<AgentManifestResult> {
   const prefix = normalizeTopicPrefix(input.prefix);
+  const userQuestion = normalizeAgentUserQuestion(input.userQuestion);
   const { topic } = await ensureTopicScaffold(config, prefix, {
     displayName: input.displayName,
     origin: input.origin,
@@ -505,6 +506,7 @@ export async function createAgentManifest(
       expiresIn: manifest.expiresIn,
       fileCount: files.length,
       manifestUrl,
+      userQuestion,
     }),
     manifestUrl,
     manifestPath,
@@ -521,7 +523,12 @@ export function createAgentManifestPrompt(input: {
   expiresIn: number;
   fileCount: number;
   manifestUrl: string;
+  userQuestion?: unknown;
 }): string {
+  const userQuestion = normalizeAgentUserQuestion(input.userQuestion);
+  const questionInstruction = userQuestion
+    ? `${userQuestion}\n\n请在全局分析口径的约束下重点回答该问题；本次关注问题不能覆盖或缩减全局分析口径。`
+    : "用户未指定具体问题，请依据全局分析口径和现有资料，推荐并分析最有价值的重点。";
   return `# ${input.topic.name}：第一阶段 · 资料分析任务
 
 你不需要登录网盘，也不需要携带 cookie。
@@ -538,8 +545,11 @@ ${input.manifestUrl}
 - 有效期：${input.expiresIn} 秒
 - 资料数量：${input.fileCount}
 
-分析口径（本阶段的分析依据）：
+全局分析口径（始终适用）：
 ${input.topic.analysisKeywords}
+
+本次关注问题：
+${questionInstruction}
 
 读取方法：
 1. 使用终端 curl 下载 manifest JSON。
@@ -899,6 +909,19 @@ function normalizeAnalysisKeywords(input: unknown, required = false): string {
     requireAnalysisKeywords(value);
   }
   return value;
+}
+
+function normalizeAgentUserQuestion(input: unknown): string {
+  if (input === undefined) {
+    return "";
+  }
+  if (typeof input !== "string") {
+    throw new Error("本次关注问题无效");
+  }
+  if (input.length > 3000) {
+    throw new Error("本次关注问题过长");
+  }
+  return input.trim();
 }
 
 function requireAnalysisKeywords(value: string): void {

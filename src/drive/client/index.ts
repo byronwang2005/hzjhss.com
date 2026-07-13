@@ -64,6 +64,7 @@ interface DraftState {
   topicName: string;
   createKeywords: string;
   settingsKeywords: string;
+  agentQuestion: string;
   owner: string;
   ownerConfirmName: string;
 }
@@ -127,6 +128,7 @@ const state: AppState = {
     topicName: "",
     createKeywords: "",
     settingsKeywords: "",
+    agentQuestion: "",
     owner: "",
     ownerConfirmName: "",
   },
@@ -479,6 +481,7 @@ async function openTopic(prefix: string, tab: TopicTab = "agent"): Promise<void>
     state.activeTab = tab;
     state.loading = true;
     state.materialPrefix = prefix;
+    state.drafts.agentQuestion = "";
     renderApp();
     const [topic, materialList, ownerCandidates] = await Promise.all([
       api<TopicDetail>(`/topic?${new URLSearchParams({ prefix }).toString()}`, { signal }),
@@ -611,9 +614,10 @@ async function copyAgentManifest(): Promise<void> {
     renderApp();
     const data = await api<{ prompt: string; fileCount: number; expiresIn: number }>("/agent-manifest", {
       method: "POST",
-      body: { prefix: state.topic.topic.prefix },
+      body: { prefix: state.topic.topic.prefix, userQuestion: state.drafts.agentQuestion },
     });
     await writeClipboard(data.prompt);
+    state.drafts.agentQuestion = "";
     setStatus(`分析提示词已复制。资料 ${data.fileCount || 0} 个，链接 ${data.expiresIn || 0} 秒内有效。`, "success");
   } catch (error) {
     showError(error);
@@ -1176,6 +1180,18 @@ function renderAgentTab(): TemplateResult {
         <div class="drive-agent-card">
           <h2>1. 获取资料并分析</h2>
           <p>复制后交给本地 Agent。它会读取短时资料链接，并只按分析口径完成结构化分析，不生成文件。</p>
+          <label class="drive-field drive-agent-question">
+            <span>您想了解什么？（留空将以推荐口径分析）</span>
+            <input
+              data-draft="agentQuestion"
+              name="agentQuestion"
+              type="text"
+              maxlength="3000"
+              placeholder="例如：最新周报信息、库存情况......"
+              .value=${state.drafts.agentQuestion}
+              ?disabled=${state.busyAction !== null}
+            />
+          </label>
           <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest" ?disabled=${!hasKeywords || state.busyAction !== null}>
             <i class="ph ph-clipboard-text" aria-hidden="true"></i>${state.busyAction === "agent-manifest" ? "正在生成..." : "复制第一阶段提示词"}
           </button>
@@ -1184,7 +1200,7 @@ function renderAgentTab(): TemplateResult {
           <h2>2. 转换格式并回传</h2>
           <p>请先在同一会话中校正判断并确认最终口径。第二阶段只转换为 PDF，并使用无 Cookie 的短时授权回传。</p>
           <button class="drive-control drive-control-primary" type="button" data-action="agent-output-task" ?disabled=${!hasKeywords || state.busyAction !== null}>
-            <i class="ph ph-file-arrow-up" aria-hidden="true"></i>${state.busyAction === "agent-output-task" ? "正在生成..." : "复制第二阶段提示词"}
+            <i class="ph ph-clipboard-text" aria-hidden="true"></i>${state.busyAction === "agent-output-task" ? "正在生成..." : "复制第二阶段提示词"}
           </button>
         </div>
       </div>
