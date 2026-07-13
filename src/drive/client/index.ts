@@ -83,6 +83,7 @@ interface AppState {
   preview: PreviewState | null;
   pendingDelete: { type: "file" | "topic"; path?: string; prefix?: string; name: string } | null;
   pendingSettingsPublish: boolean;
+  pendingUploadSelection: "file" | "folder" | null;
   deleteConfirmText: string;
   busyAction: "agent-manifest" | "agent-output-task" | null;
   ownerCandidates: OwnerCandidatesResponse | null;
@@ -119,6 +120,7 @@ const state: AppState = {
   preview: null,
   pendingDelete: null,
   pendingSettingsPublish: false,
+  pendingUploadSelection: null,
   deleteConfirmText: "",
   busyAction: null,
   ownerCandidates: null,
@@ -173,6 +175,10 @@ root.addEventListener("wa-after-hide", (event) => {
   }
   if (target.matches("[data-settings-confirm-dialog]")) {
     state.pendingSettingsPublish = false;
+    renderApp();
+  }
+  if (target.matches("[data-upload-reminder-dialog]")) {
+    state.pendingUploadSelection = null;
     renderApp();
   }
 });
@@ -241,6 +247,14 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await publishTopicSettings();
   } else if (action === "cancel-settings-publish") {
     closeSettingsPublishDialog();
+  } else if (action === "request-file-upload") {
+    openUploadReminder("file");
+  } else if (action === "request-folder-upload") {
+    openUploadReminder("folder");
+  } else if (action === "continue-upload") {
+    continueUploadSelection();
+  } else if (action === "cancel-upload") {
+    closeUploadReminder();
   } else if (action === "agent-manifest") {
     await copyAgentManifest();
   } else if (action === "agent-output-task") {
@@ -375,6 +389,26 @@ async function publishTopicSettings(): Promise<void> {
 function closeSettingsPublishDialog(): void {
   state.pendingSettingsPublish = false;
   renderApp();
+}
+
+function openUploadReminder(kind: "file" | "folder"): void {
+  state.pendingUploadSelection = kind;
+  renderApp();
+}
+
+function closeUploadReminder(): void {
+  state.pendingUploadSelection = null;
+  renderApp();
+}
+
+function continueUploadSelection(): void {
+  const kind = state.pendingUploadSelection;
+  if (!kind) {
+    return;
+  }
+  state.pendingUploadSelection = null;
+  renderApp();
+  root.querySelector<HTMLInputElement>(kind === "file" ? "[data-file-input]" : "[data-folder-input]")?.click();
 }
 
 async function transferTopicOwner(): Promise<void> {
@@ -973,7 +1007,7 @@ function renderApp(): void {
           ${state.mode === "create" ? renderCreateTopic() : nothing}
           ${state.mode === "topic" ? renderTopic() : nothing}
         </main>
-        ${renderPreviewDrawer()} ${renderDeleteDialogMarkup()} ${renderSettingsPublishDialogMarkup()}
+        ${renderPreviewDrawer()} ${renderDeleteDialogMarkup()} ${renderSettingsPublishDialogMarkup()} ${renderUploadReminderDialogMarkup()}
       </div>
     `,
     root,
@@ -1158,12 +1192,14 @@ function renderMaterialsTab(): TemplateResult {
       <div class="drive-material-toolbar">
         <div><h2>资料库</h2>${renderBreadcrumbs(state.materialPrefix || topicPrefix)}</div>
         <div class="drive-upload-actions">
-          <label class="drive-control drive-control-primary drive-upload-trigger">
-            ${renderDriveIcon("upload-simple", "bold")}上传文件<input data-file-input type="file" multiple />
-          </label>
-          <label class="drive-control drive-upload-trigger">
-            ${renderDriveIcon("folder-simple-plus")}上传文件夹<input data-folder-input type="file" webkitdirectory multiple />
-          </label>
+          <button class="drive-control drive-control-primary drive-upload-trigger" type="button" data-action="request-file-upload">
+            ${renderDriveIcon("upload-simple", "bold")}上传文件
+          </button>
+          <button class="drive-control drive-upload-trigger" type="button" data-action="request-folder-upload">
+            ${renderDriveIcon("folder-simple-plus")}上传文件夹
+          </button>
+          <input data-file-input type="file" multiple hidden />
+          <input data-folder-input type="file" webkitdirectory multiple hidden />
         </div>
       </div>
       ${listing
@@ -1471,6 +1507,23 @@ function renderSettingsPublishDialogMarkup(): TemplateResult | typeof nothing {
       <div slot="footer" class="drive-dialog-actions">
         <button class="drive-control" type="button" data-action="cancel-settings-publish">${renderDriveIcon("x-circle")}取消</button>
         <button class="drive-control drive-control-primary" type="button" data-action="confirm-settings-publish">${renderDriveIcon("check", "bold")}确认发布</button>
+      </div>
+    </wa-dialog>
+  `;
+}
+
+function renderUploadReminderDialogMarkup(): TemplateResult | typeof nothing {
+  if (!state.pendingUploadSelection) {
+    return nothing;
+  }
+  return html`
+    <wa-dialog data-upload-reminder-dialog open label="上传提示" style="--width: min(520px, 94vw);">
+      <div class="drive-delete-body">
+        <p>如需上传大量文件，建议分多次上传，以提高上传成功率并便于确认进度。</p>
+      </div>
+      <div slot="footer" class="drive-dialog-actions">
+        <button class="drive-control" type="button" data-action="cancel-upload">${renderDriveIcon("x-circle")}取消</button>
+        <button class="drive-control drive-control-primary" type="button" data-action="continue-upload">${renderDriveIcon("check", "bold")}继续上传</button>
       </div>
     </wa-dialog>
   `;

@@ -73,6 +73,28 @@ describe("drive client state refresh policy", () => {
 });
 
 describe("drive client upload progress", () => {
+  it("shows the shared upload reminder before opening file and folder pickers", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+
+    expect(source).toContain('data-action="request-file-upload"');
+    expect(source).toContain('data-action="request-folder-upload"');
+    expect(source).toContain('openUploadReminder("file")');
+    expect(source).toContain('openUploadReminder("folder")');
+    expect(source).toContain('data-upload-reminder-dialog open label="上传提示"');
+    expect(source).toContain("如需上传大量文件，建议分多次上传，以提高上传成功率并便于确认进度。");
+    expect(source).toContain('data-action="cancel-upload"');
+    expect(source).toContain('data-action="continue-upload"');
+    expect(source).toContain('kind === "file" ? "[data-file-input]" : "[data-folder-input]"');
+  });
+
+  it("clears the pending upload selection when the reminder is dismissed", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+
+    expect(source).toContain('target.matches("[data-upload-reminder-dialog]")');
+    expect(source).toContain('state.pendingUploadSelection = null;');
+    expect(source).toContain('action === "cancel-upload"');
+  });
+
   it("uses Uppy progress weighted by uploaded bytes across differently sized files", async () => {
     vi.useFakeTimers();
     const uppy = new Uppy();
