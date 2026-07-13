@@ -4,7 +4,7 @@ import { presignObjectUrl } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody } from "../../../src/drive/http";
 import { normalizeObjectPath } from "../../../src/drive/paths";
 import { allowsAgentOutputPath, getAgentOutputCapability } from "../../../src/drive/session";
-import { isExpectedAgentOutputContentType, readExistingTopicMetadata } from "../../../src/drive/topic";
+import { isExpectedAgentOutput, readExistingTopicMetadata } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -28,8 +28,8 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       return jsonResponse({ error: "文件超过上传大小限制" }, 413);
     }
     const contentType = typeof body.contentType === "string" ? body.contentType : "";
-    if (!isExpectedAgentOutputContentType(path, contentType)) {
-      return jsonResponse({ error: "成果文件格式与 contentType 不匹配" }, 400);
+    if (!isExpectedAgentOutput(path, contentType, topic)) {
+      return jsonResponse({ error: "成果文件命名、格式或 contentType 不匹配" }, 400);
     }
 
     const expiresIn = Math.min(config.signExpiresSeconds, capability.exp - Math.floor(Date.now() / 1000));

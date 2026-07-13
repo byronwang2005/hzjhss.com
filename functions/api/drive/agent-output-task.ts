@@ -31,6 +31,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     return jsonResponse({
       prompt: createAgentOutputPrompt({
         topic: detail.topic,
+        displayName: session.displayName,
         origin,
         token: capability.token,
         expiresAt: capability.expiresAt,

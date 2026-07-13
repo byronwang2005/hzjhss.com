@@ -19,6 +19,18 @@ export const GENERATE_PROMPT_FILENAME = "成果生成与回传.prompt.md";
 export const OUTPUTS_FOLDER_NAME = "outputs";
 export const AGENT_MANIFEST_FOLDER_NAME = "._agent-manifests";
 export const AGENT_OUTPUT_FORMAT = { extension: ".pdf", contentType: "application/pdf" } as const;
+const MAX_AGENT_OUTPUT_FILENAME_LENGTH = 180;
+const AGENT_OUTPUT_TIMESTAMP_PATTERN = /^\d{8}-\d{9}$/;
+const SHANGHAI_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
 
 export interface DriveFileMetadata {
   uploadedBy: string;
@@ -477,7 +489,7 @@ export function createAgentManifestPrompt(input: {
 }): string {
   return `# ${input.topic.name}：第一阶段 · 资料分析任务
 
-你是本地 AI agent。你不需要登录网盘，也不需要携带 cookie。
+你不需要登录网盘，也不需要携带 cookie。
 
 传输要求：所有 manifest 和资料链接必须使用终端 HTTP 客户端（优先 \`curl -fL --retry 3 --retry-all-errors\`）下载；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具访问这些链接。若浏览器类工具返回 HTTP 403 / Error 1010，直接改用终端 curl，不要重试浏览器工具。
 
@@ -505,22 +517,54 @@ ${input.topic.analysisKeywords}
 }
 
 export function createAgentOutputPath(
-  topic: Pick<TopicMetadata, "name" | "prefix" | "instanceId">,
+  topic: Pick<TopicMetadata, "name" | "prefix">,
   generatedAt = new Date(),
-  taskId = createNonce().slice(0, 8),
 ): string {
-  const timestamp = generatedAt.toISOString().slice(0, 16).replace("T", "-").replace(":", "");
-  const safeTopicName = topic.name.slice(0, 110);
-  const basePath = `${topic.prefix}${OUTPUTS_FOLDER_NAME}/agent-${topic.instanceId}-${timestamp}-${taskId}-${safeTopicName}-专题总结`;
-  return `${basePath}${AGENT_OUTPUT_FORMAT.extension}`;
+  const timestamp = formatShanghaiAgentOutputTimestamp(generatedAt);
+  const safeTopicName = agentOutputTopicName(topic.name);
+  return `${topic.prefix}${OUTPUTS_FOLDER_NAME}/${safeTopicName}-${timestamp}${AGENT_OUTPUT_FORMAT.extension}`;
 }
 
-export function isExpectedAgentOutputContentType(path: string, contentType: string): boolean {
-  return path.endsWith(AGENT_OUTPUT_FORMAT.extension) && contentType === AGENT_OUTPUT_FORMAT.contentType;
+export function isExpectedAgentOutput(
+  path: string,
+  contentType: string,
+  topic: Pick<TopicMetadata, "name" | "prefix">,
+): boolean {
+  if (contentType !== AGENT_OUTPUT_FORMAT.contentType) {
+    return false;
+  }
+  const outputsPrefix = `${topic.prefix}${OUTPUTS_FOLDER_NAME}/`;
+  if (!path.startsWith(outputsPrefix)) {
+    return false;
+  }
+  const fileName = path.slice(outputsPrefix.length);
+  const namePrefix = `${agentOutputTopicName(topic.name)}-`;
+  if (!fileName.startsWith(namePrefix) || !fileName.endsWith(AGENT_OUTPUT_FORMAT.extension)) {
+    return false;
+  }
+  const timestamp = fileName.slice(namePrefix.length, -AGENT_OUTPUT_FORMAT.extension.length);
+  return AGENT_OUTPUT_TIMESTAMP_PATTERN.test(timestamp);
+}
+
+function formatShanghaiAgentOutputTimestamp(date: Date): string {
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error("成果生成时间无效");
+  }
+  const parts = Object.fromEntries(
+    SHANGHAI_DATE_TIME_FORMATTER.formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const milliseconds = String(date.getUTCMilliseconds()).padStart(3, "0");
+  return `${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}${milliseconds}`;
+}
+
+function agentOutputTopicName(topicName: string): string {
+  const reservedLength = 1 + 8 + 1 + 9 + AGENT_OUTPUT_FORMAT.extension.length;
+  return topicName.slice(0, MAX_AGENT_OUTPUT_FILENAME_LENGTH - reservedLength);
 }
 
 export function createAgentOutputPrompt(input: {
   topic: Pick<TopicMetadata, "name" | "prefix" | "instanceId">;
+  displayName: string;
   origin: string;
   token: string;
   expiresAt: string;
@@ -529,18 +573,20 @@ export function createAgentOutputPrompt(input: {
 }): string {
   return `# ${input.topic.name}：第二阶段 · 成果生成与回传
 
-你是本地 AI agent。本阶段不再重新分析资料，也不要重新套用第一阶段的分析口径。
+本阶段不再重新分析资料。如果用户刚刚已经发送过类似的第二阶段 prompt，本次很可能只是更新回传链接：仅当已有 PDF 已按下述要求生成并验证合格、且文件内容无需修改时，才可跳过 PDF 生成步骤并直接重试回传。只要需要生成、重新生成或修改 PDF，就必须完整执行下述 Kami 流程。
 
 传输要求：回传 API 和 COS PUT 必须使用终端 HTTP 客户端（优先 \`curl -fL --retry 3 --retry-all-errors\`）；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具。HTTP 403 / Error 1010 通常来自浏览器型抓取出口，遇到后直接改用终端 curl。
 
 先检查当前会话：必须已经完成第一阶段资料分析，并且用户已经对判断进行调整、明确确认最终口径。若尚未形成用户确认的最终口径，立即停止，要求用户先确认；不得擅自生成成果。
 
-成果要求：
-1. 仅把当前会话中用户最终确认的口径整理为正式成果，不自行增加、删除或改变结论。
-2. 成果至少包含：摘要、分析框架、关键发现、证据引用、风险、待核验事项。
-3. 每个重要判断保留第一阶段提供的来源 path；不要虚构引用。
-4. 必须生成一个 PDF 文件：
+成果生成顺序（必须依次执行）：
+1. 仅把当前会话中用户最终确认的口径整理为正式成果，不自行增加、删除或改变结论。成果至少包含：摘要、分析框架、关键发现、证据引用、风险、待核验事项；每个重要判断保留第一阶段提供的来源 path，不要虚构引用。
+2. 在生成、重新生成或修改 PDF 前，必须先使用终端执行 \`npx skills add tw93/kami/plugins/kami -a universal -g -y\`。即使环境中可能已有 Kami，也必须执行该命令；安装失败时立即停止，不得改用自制模板或其他 PDF 工具，并向用户报告安装错误。
+3. 安装成功后，定位并完整读取所安装 Kami skill 的 \`SKILL.md\`，严格依据该 skill 选择模板、排版、构建并执行其要求的内容检查、PDF 检查和视觉验收；不得只参考 skill 名称或凭经验仿制 Kami 样式。
+4. PDF 每一页的固定页眉区域必须清晰展示 \`嘉合杉升-${input.displayName}\`，其中 \`${input.displayName}\` 是当前登录用户的真实姓名，必须原样使用，不得猜测、缩写或替换。该署名必须出现在页面可见内容中，不得仅写入 PDF Author 元数据、日志或最终回复。
+5. 必须生成并验证以下 PDF 文件：
    - ${input.pdfPath}
+6. 上传前再次检查：文件可正常打开、Kami 要求的验证已通过、每一页页眉均包含 \`嘉合杉升-${input.displayName}\`，且正文不包含令牌或短时 PUT URL。任一检查失败都不得上传。
 
 回传授权：
 - 有效期：${input.expiresIn} 秒

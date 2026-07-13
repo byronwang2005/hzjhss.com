@@ -281,12 +281,12 @@ describe("drive sessions", () => {
 describe("topic prompts", () => {
   it("creates a format-only output prompt with dedicated cookie-free callbacks", () => {
     const pdfPath = createAgentOutputPath(
-      { name: "新能源", prefix: "新能源/", instanceId: "topicinstance1" },
-      new Date("2026-07-09T01:23:00.000Z"),
-      "a1b2c3d4",
+      { name: "新能源", prefix: "新能源/" },
+      new Date("2026-07-09T01:23:00.123Z"),
     );
     const prompt = createAgentOutputPrompt({
       topic: { name: "新能源", prefix: "新能源/", instanceId: "topicinstance1" },
+      displayName: "王小明",
       origin: "https://example.com",
       token: "signed-capability",
       expiresAt: "2026-07-09T02:23:00.000Z",
@@ -295,14 +295,34 @@ describe("topic prompts", () => {
     });
 
     expect(prompt).toContain("用户最终确认的口径");
+    expect(prompt).toContain("npx skills add tw93/kami/plugins/kami -a universal -g -y");
+    expect(prompt).toContain("即使环境中可能已有 Kami，也必须执行该命令");
+    expect(prompt).toContain("安装失败时立即停止");
+    expect(prompt).toContain("完整读取所安装 Kami skill 的 `SKILL.md`");
+    expect(prompt).toContain("选择模板、排版、构建并执行其要求的内容检查、PDF 检查和视觉验收");
+    expect(prompt).toContain("PDF 每一页的固定页眉区域必须清晰展示 `嘉合杉升-王小明`");
+    expect(prompt).toContain("仅当已有 PDF 已按下述要求生成并验证合格、且文件内容无需修改时");
+    expect(prompt).toContain("才可跳过 PDF 生成步骤并直接重试回传");
     expect(prompt).toContain("禁止使用 `web_fetch`");
     expect(prompt).toContain("curl -fL --retry 3 --retry-all-errors");
-    expect(prompt).toContain("新能源/outputs/agent-topicinstance1-2026-07-09-0123-a1b2c3d4-新能源-专题总结.pdf");
+    expect(prompt).toContain("新能源/outputs/新能源-20260709-092300123.pdf");
     expect(prompt).not.toContain("专题总结.md");
     expect(prompt).toContain("/api/drive/agent-output-upload-url");
     expect(prompt).toContain("/api/drive/agent-output-upload-complete");
     expect(prompt).toContain("该接口不使用 Cookie");
     expect(prompt).not.toContain("分析关键词（本阶段的分析依据）");
+  });
+
+  it("creates Beijing-time output paths with millisecond precision and truncates long topic names", () => {
+    expect(createAgentOutputPath({ name: "新能源", prefix: "新能源/" }, new Date("2026-07-09T16:00:00.007Z"))).toBe(
+      "新能源/outputs/新能源-20260710-000000007.pdf",
+    );
+
+    const topicName = "超".repeat(180);
+    const path = createAgentOutputPath({ name: topicName, prefix: `${topicName}/` }, new Date("2026-07-09T01:23:00.123Z"));
+    const fileName = path.slice(path.lastIndexOf("/") + 1);
+    expect(fileName).toHaveLength(180);
+    expect(fileName).toMatch(/-20260709-092300123\.pdf$/);
   });
 
   it("creates an agent prompt with one manifest link", () => {
@@ -349,7 +369,7 @@ describe("agent output upload API", () => {
         ["新能源/outputs/", ""],
       ],
       async (storage) => {
-      const path = "新能源/outputs/report.pdf";
+      const path = "新能源/outputs/新能源-20260709-092300123.pdf";
       const { token } = await createAgentOutputToken(apiEnv, {
         displayName: "王小明",
         topicPrefix: "新能源/",
@@ -383,7 +403,7 @@ describe("agent output upload API", () => {
         env: apiEnv,
       } as any);
       expect(completeResponse.status).toBe(200);
-      expect(JSON.parse(storage.get(`新能源/outputs/${DRIVE_META_FILENAME}`) || "{}").files["report.pdf"]).toMatchObject({
+      expect(JSON.parse(storage.get(`新能源/outputs/${DRIVE_META_FILENAME}`) || "{}").files["新能源-20260709-092300123.pdf"]).toMatchObject({
         uploadedBy: "王小明",
         kind: "output",
       });
@@ -393,7 +413,7 @@ describe("agent output upload API", () => {
 
   it("rejects missing credentials, unlisted paths, and mismatched formats", async () => {
     await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async () => {
-      const allowedPath = "新能源/outputs/report.pdf";
+      const allowedPath = "新能源/outputs/新能源-20260709-092300123.pdf";
       const markdownPath = "新能源/outputs/report.md";
       const { token } = await createAgentOutputToken(apiEnv, {
         displayName: "王小明",
@@ -426,11 +446,52 @@ describe("agent output upload API", () => {
     });
   });
 
+  it("rejects malformed output names even when the capability explicitly allows them", async () => {
+    await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async () => {
+      const malformedPaths = [
+        "新能源/outputs/report.pdf",
+        "新能源/outputs/agent-topicinstance1-2026-07-10-1000-task0001-新能源-专题总结.pdf",
+        "新能源/outputs/其他专题-20260709-092300123.pdf",
+        "新能源/outputs/新能源-20260709-09230012.pdf",
+        "新能源/outputs/新能源-20260709-092300123.md",
+      ];
+      const { token } = await createAgentOutputToken(apiEnv, {
+        displayName: "王小明",
+        topicPrefix: "新能源/",
+        topicInstanceId: "topicinstance1",
+        allowedPaths: malformedPaths,
+      });
+      const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+
+      for (const path of malformedPaths) {
+        const uploadResponse = await createAgentUploadUrl({
+          request: new Request("https://example.com/api/drive/agent-output-upload-url", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
+          }),
+          env: apiEnv,
+        } as any);
+        expect(uploadResponse.status).toBe(400);
+
+        const completeResponse = await completeAgentUpload({
+          request: new Request("https://example.com/api/drive/agent-output-upload-complete", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
+          }),
+          env: apiEnv,
+        } as any);
+        expect(completeResponse.status).toBe(400);
+      }
+    });
+  });
+
   it("does not issue a PUT URL beyond the capability expiry", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-07-10T00:00:00.000Z"));
-      const path = "新能源/outputs/report.pdf";
+      const path = "新能源/outputs/新能源-20260710-080000000.pdf";
       const { token } = await createAgentOutputToken(apiEnv, {
         displayName: "王小明",
         topicPrefix: "新能源/",
@@ -457,7 +518,7 @@ describe("agent output upload API", () => {
   });
 
   it("rejects a capability after the topic is deleted and recreated", async () => {
-    const path = "新能源/outputs/report.pdf";
+    const path = "新能源/outputs/新能源-20260710-080000000.pdf";
     const { token } = await createAgentOutputToken(apiEnv, {
       displayName: "王小明",
       topicPrefix: "新能源/",
