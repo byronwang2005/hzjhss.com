@@ -50,13 +50,13 @@ export class DrivePdfPreview extends LitElement {
     scalePercent: { state: true },
   };
 
-  url = "";
-  title = "";
-  private loading = true;
-  private failed = false;
-  private currentPage = 0;
-  private pageCount = 0;
-  private scalePercent = 100;
+  accessor url = "";
+  accessor title = "";
+  private accessor loading = true;
+  private accessor failed = false;
+  private accessor currentPage = 0;
+  private accessor pageCount = 0;
+  private accessor scalePercent = 100;
 
   private loadVersion = 0;
   private loadingTask: PdfLoadingTask | null = null;
@@ -118,7 +118,7 @@ export class DrivePdfPreview extends LitElement {
           ${this.failed
             ? html`<div class="drive-empty drive-pdf-error"><i class="ph ph-eye-slash" aria-hidden="true"></i><h3>无法预览</h3><p>请下载文件后查看。</p></div>`
             : nothing}
-          <div class="pdfViewer" data-pdf-viewer ?hidden=${this.loading || this.failed}></div>
+          <div class="pdfViewer" data-pdf-viewer ?hidden=${this.failed}></div>
         </div>
       </section>
     `;
