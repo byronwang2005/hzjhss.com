@@ -35,6 +35,8 @@ Variables:
 
 每个目录还会维护 `._drive-meta.json`，用于记录文件上传者、上传时间、类型和 content type。系统隐藏文件不会在资料列表中展示，也不能通过页面删除。
 
+根目录的 `._drive-users.json` 会自动记录成功登录过的姓名，作为专题负责人候选名单。专题元数据分别保留最初创建人 `createdBy` 和当前负责人 `owner`：成果创建者取成果文件的 `uploadedBy`，专题管理权限则跟随 `owner`；当前负责人或管理员可以在设置页转交负责人，管理员可以清理未负责任何专题的候选姓名。
+
 Agent 流程分为两步：
 
 1. “复制第一阶段提示词”会在专题下生成 `._agent-manifests/` 临时 manifest JSON。Agent 按短时链接读取资料，并以 `._topic.json` 中的分析关键词为依据完成分析。

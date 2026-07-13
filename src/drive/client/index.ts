@@ -23,6 +23,7 @@ import type {
   DriveListResult,
   DriveOverview,
   DriveOverviewTopic,
+  OwnerCandidatesResponse,
   PreviewKind,
   TopicDetail,
   TopicTab,
@@ -63,6 +64,8 @@ interface DraftState {
   topicName: string;
   createKeywords: string;
   settingsKeywords: string;
+  owner: string;
+  ownerConfirmName: string;
 }
 
 interface AppState {
@@ -80,6 +83,7 @@ interface AppState {
   pendingDelete: { type: "file" | "topic"; path?: string; prefix?: string; name: string } | null;
   deleteConfirmText: string;
   busyAction: "agent-manifest" | "agent-output-task" | null;
+  ownerCandidates: OwnerCandidatesResponse | null;
   drafts: DraftState;
 }
 
@@ -114,12 +118,15 @@ const state: AppState = {
   pendingDelete: null,
   deleteConfirmText: "",
   busyAction: null,
+  ownerCandidates: null,
   drafts: {
     loginName: "",
     accessCode: "",
     topicName: "",
     createKeywords: "",
     settingsKeywords: "",
+    owner: "",
+    ownerConfirmName: "",
   },
 };
 
@@ -230,6 +237,10 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await refreshCurrent();
   } else if (action === "set-featured") {
     await setFeaturedOutput(path);
+  } else if (action === "transfer-owner") {
+    await transferTopicOwner();
+  } else if (action === "remove-owner-candidate") {
+    await removeOwnerCandidate(name);
   } else if (action === "featured-prev") {
     await showFeatured(featuredIndex - 1, target);
   } else if (action === "featured-next") {
@@ -240,20 +251,26 @@ async function handleClick(event: MouseEvent): Promise<void> {
 }
 
 async function handleChange(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement;
+  const input = event.target as HTMLInputElement | HTMLSelectElement;
+  const draft = input.dataset.draft as keyof DraftState | undefined;
+  if (draft) {
+    state.drafts[draft] = input.value;
+  }
   if (input.matches("[data-file-input]")) {
-    const files = Array.from(input.files || []);
-    input.value = "";
+    const fileInput = input as HTMLInputElement;
+    const files = Array.from(fileInput.files || []);
+    fileInput.value = "";
     await uploadFiles(files, (file) => file.name);
   } else if (input.matches("[data-folder-input]")) {
-    const files = Array.from(input.files || []);
-    input.value = "";
+    const fileInput = input as HTMLInputElement;
+    const files = Array.from(fileInput.files || []);
+    fileInput.value = "";
     await uploadFiles(files, (file) => file.webkitRelativePath || file.name);
   }
 }
 
 function handleInput(event: Event): void {
-  const input = event.target as HTMLInputElement | HTMLTextAreaElement;
+  const input = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
   const draft = input.dataset.draft as keyof DraftState | undefined;
   if (draft) {
     state.drafts[draft] = input.value;
@@ -339,6 +356,56 @@ async function submitTopicSettings(): Promise<void> {
   }
 }
 
+async function transferTopicOwner(): Promise<void> {
+  if (!state.topic?.canTransferTopicOwner) return;
+  const owner = state.drafts.owner;
+  if (!owner || owner === state.topic.topic.owner) {
+    setStatus("请选择不同的新负责人。", "danger");
+    renderApp();
+    return;
+  }
+  if (state.drafts.ownerConfirmName.trim() !== state.topic.topic.name) {
+    setStatus("请输入完整专题名以确认转交。", "danger");
+    renderApp();
+    return;
+  }
+  try {
+    setLoading(true, "正在转交专题负责人...");
+    state.topic = await api<TopicDetail>("/topic", {
+      method: "PUT",
+      body: { prefix: state.topic.topic.prefix, owner, confirmName: state.drafts.ownerConfirmName },
+    });
+    state.drafts.owner = state.topic.topic.owner;
+    state.drafts.ownerConfirmName = "";
+    setStatus(`专题负责人已转交给 ${state.topic.topic.owner}。`, "success");
+    renderApp();
+  } catch (error) {
+    showError(error);
+    renderApp();
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function removeOwnerCandidate(displayName: string): Promise<void> {
+  if (!state.ownerCandidates?.canManage || !window.confirm(`确认从负责人候选名单中移除“${displayName}”吗？`)) return;
+  try {
+    setLoading(true, "正在更新负责人候选名单...");
+    const result = await api<{ ok: true; candidates: string[] }>("/owner-candidates", {
+      method: "DELETE",
+      body: { displayName },
+    });
+    state.ownerCandidates = { ...state.ownerCandidates, candidates: result.candidates };
+    setStatus(`已移除负责人候选 ${displayName}。`, "success");
+    renderApp();
+  } catch (error) {
+    showError(error);
+    renderApp();
+  } finally {
+    setLoading(false);
+  }
+}
+
 async function loadOverview(successMessage = ""): Promise<void> {
   const signal = beginRequest("overview");
   cancelRequest("topic");
@@ -390,17 +457,21 @@ async function openTopic(prefix: string, tab: TopicTab = "outputs"): Promise<voi
     state.loading = true;
     state.materialPrefix = prefix;
     renderApp();
-    const [topic, materialList] = await Promise.all([
+    const [topic, materialList, ownerCandidates] = await Promise.all([
       api<TopicDetail>(`/topic?${new URLSearchParams({ prefix }).toString()}`, { signal }),
       listAllDirectory(prefix, signal),
+      api<OwnerCandidatesResponse>("/owner-candidates", { signal }),
     ]);
     if (signal.aborted) {
       return;
     }
     state.topic = topic;
+    state.ownerCandidates = ownerCandidates;
     state.materialList = materialList;
     state.materialPrefix = materialList.prefix;
     state.drafts.settingsKeywords = topic.topic.analysisKeywords;
+    state.drafts.owner = topic.topic.owner;
+    state.drafts.ownerConfirmName = "";
     state.loading = false;
     setStatus("专题成果和资料已更新。");
     renderApp();
@@ -484,6 +555,7 @@ async function logout(): Promise<void> {
   state.mode = "login";
   state.overview = null;
   state.topic = null;
+  state.ownerCandidates = null;
   setStatus("已退出登录。");
   renderApp();
 }
@@ -1002,7 +1074,7 @@ function renderTopic(): TemplateResult {
         <div class="drive-topic-title-row">
           <div><h1>${topic.name}</h1><p>${topic.analysisKeywords || "尚未填写分析口径。"}</p></div>
           <div class="drive-topic-meta">
-            <span>创建人 ${topic.createdBy || "-"}</span><span>更新 ${formatDate(topic.updatedAt)}</span><span>${topic.prefix}</span>
+            <span>专题负责人 ${topic.owner || "-"}</span><span>更新 ${formatDate(topic.updatedAt)}</span><span>${topic.prefix}</span>
           </div>
         </div>
       </div>
@@ -1063,7 +1135,7 @@ function renderAgentTab(): TemplateResult {
     <section class="drive-tab-panel" role="tabpanel" aria-label="Agent">
       ${hasKeywords
         ? nothing
-        : html`<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>请先由专题创建者在设置中填写分析口径，再执行 Agent 流程。</wa-callout>`}
+        : html`<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>请先由专题负责人在设置中填写分析口径，再执行 Agent 流程。</wa-callout>`}
       <div class="drive-agent-grid">
         <div class="drive-agent-card">
           <h2>1. 获取资料并分析</h2>
@@ -1089,6 +1161,7 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
     return nothing;
   }
   const canEdit = state.topic.canEditAnalysisScope;
+  const candidates = Array.from(new Set([state.topic.topic.owner, ...(state.ownerCandidates?.candidates || [])]));
   return html`
     <section class="drive-tab-panel" role="tabpanel" aria-label="设置">
       <form class="drive-form drive-settings-form" data-settings-form>
@@ -1096,7 +1169,7 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
           <i class=${`ph ${canEdit ? "ph-warning-octagon" : "ph-lock"}`} slot="icon" aria-hidden="true"></i>
           ${canEdit
             ? "强提醒：修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。保存前请确认内容准确。"
-            : `分析口径由专题创建者 ${state.topic.topic.createdBy || "-"} 维护并展示给所有人，只有创建者可以修改。`}
+            : `分析口径由专题负责人 ${state.topic.topic.owner || "-"} 维护并展示给所有人，只有负责人或管理员可以修改。`}
         </wa-callout>
         <label class="drive-field">
           <span>分析口径</span>
@@ -1110,6 +1183,47 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
             ? html`<button class="drive-control drive-control-danger" type="button" data-action="delete-topic"><i class="ph ph-trash" aria-hidden="true"></i>删除专题</button>`
             : nothing}
         </div>
+        <section class="drive-owner-settings" aria-label="专题负责人设置">
+          <h3>专题负责人</h3>
+          <p>当前负责人：<strong>${state.topic.topic.owner || "-"}</strong>。转交后管理权限立即生效，原负责人将失去专题管理权限。</p>
+          ${state.topic.canTransferTopicOwner
+            ? html`
+                <label class="drive-field">
+                  <span>新负责人</span>
+                  <select data-draft="owner" .value=${state.drafts.owner}>
+                    ${candidates.map((candidate) => html`<option value=${candidate}>${candidate}</option>`)}
+                  </select>
+                </label>
+                <label class="drive-field">
+                  <span>输入完整专题名确认</span>
+                  <input data-draft="ownerConfirmName" .value=${state.drafts.ownerConfirmName} placeholder=${state.topic.topic.name} />
+                </label>
+                <button class="drive-control drive-control-primary" type="button" data-action="transfer-owner" ?disabled=${state.loading}>
+                  <i class="ph ph-user-switch" aria-hidden="true"></i>转交负责人
+                </button>
+              `
+            : nothing}
+        </section>
+        ${state.ownerCandidates?.canManage
+          ? html`
+              <section class="drive-owner-settings" aria-label="负责人候选名单管理">
+                <h3>负责人候选名单</h3>
+                <p>候选姓名来自成功登录记录。正在负责专题的用户无法移除。</p>
+                <div class="drive-owner-candidates">
+                  ${candidates.map(
+                    (candidate) => html`
+                      <span class="drive-owner-candidate">
+                        <span>${candidate}</span>
+                        ${candidate !== "汪旭" && candidate !== state.topic?.topic.owner
+                          ? html`<button class="drive-icon-button" type="button" data-action="remove-owner-candidate" data-name=${candidate} aria-label=${`移除候选 ${candidate}`}><i class="ph ph-x"></i></button>`
+                          : nothing}
+                      </span>
+                    `,
+                  )}
+                </div>
+              </section>
+            `
+          : nothing}
       </form>
     </section>
   `;
@@ -1123,7 +1237,7 @@ function renderFeaturedCarousel(item: { topic: DriveOverviewTopic; output: NonNu
         <div class="drive-file-symbol"><i class=${`ph ${fileIconName(output)}`} aria-hidden="true"></i></div>
         <div class="drive-output-main">
           <button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${output.name}</button>
-          <p><strong>${topic.name}</strong> · 创建者 ${output.uploadedBy || "-"} · ${formatDate(output.uploadedAt || output.lastModified)}</p>
+          <p><strong>${topic.name}</strong> · 成果创建者 ${output.uploadedBy || "-"} · 专题负责人 ${topic.owner || "-"} · ${formatDate(output.uploadedAt || output.lastModified)}</p>
         </div>
         <div class="drive-row-actions">
           ${actionButton("链接", "copy-link", output.path)}${actionButton("下载", "download", output.path)}
@@ -1150,7 +1264,7 @@ function renderTopicCard(topic: DriveOverviewTopic): TemplateResult {
   return html`
     <article class="drive-topic-card">
       <div><button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${topic.name}</button><p>${topic.analysisKeywords || "尚未填写分析口径。"}</p></div>
-      <div class="drive-topic-card-meta"><span>${topic.outputCount} 个成果</span><span>更新 ${formatDateOnly(topic.updatedAt)}</span></div>
+      <div class="drive-topic-card-meta"><span>专题负责人 ${topic.owner || "-"}</span><span>${topic.outputCount} 个成果</span><span>更新 ${formatDateOnly(topic.updatedAt)}</span></div>
     </article>
   `;
 }
@@ -1161,7 +1275,7 @@ function renderFileTable(files: DriveFile[], options: { outputMode: boolean; emp
   }
   return html`
     <div class="drive-file-table" role="table">
-      <div class="drive-file-row drive-file-row-head" role="row"><span>名称</span><span>类型</span><span>上传者</span><span>更新</span><span>操作</span></div>
+      <div class="drive-file-row drive-file-row-head" role="row"><span>名称</span><span>类型</span><span>成果创建者</span><span>更新</span><span>操作</span></div>
       ${repeat(
         files,
         (file) => file.path,
@@ -1205,7 +1319,7 @@ function renderFileRow(file: DriveFile, outputMode: boolean): TemplateResult {
     <div class="drive-file-row" role="row">
       <span class="drive-file-name" data-label="名称"><i class=${`ph ${fileIconName(file)}`} aria-hidden="true"></i><span>${file.name}</span></span>
       <span data-label="类型">${fileKindLabel(file)}</span>
-      <span data-label="上传者">${file.uploadedBy || "-"}</span>
+      <span data-label=${outputMode ? "成果创建者" : "上传者"}>${file.uploadedBy || "-"}</span>
       <span data-label="更新">${formatDate(file.uploadedAt || file.lastModified)}</span>
       <span class="drive-row-actions" data-label="操作">
         ${outputMode && state.topic?.topic.featuredOutputPath === file.path ? html`<span class="drive-featured-badge"><i class="ph ph-star-fill"></i>精选</span>` : nothing}

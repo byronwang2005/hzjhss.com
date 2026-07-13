@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   isMaterialDirectoryEmpty,
   previewKindForFile,
@@ -67,5 +68,16 @@ describe("drive client state refresh policy", () => {
     expect(shouldRefreshAfterMutation("outputs", "新能源/outputs/summary.md", "新能源/")).toBe("topic");
     expect(shouldRefreshAfterMutation("materials", "新能源/reports/a.pdf", "新能源/")).toBe("directory");
     expect(shouldRefreshAfterMutation("materials", "其他/a.pdf", "新能源/")).toBe("overview");
+  });
+});
+
+describe("drive client responsibility labels", () => {
+  it("distinguishes output creators from topic owners while keeping material uploaders", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source).toContain("成果创建者 ${output.uploadedBy");
+    expect(source).toContain("专题负责人 ${topic.owner");
+    expect(source).toContain('<span>成果创建者</span><span>更新</span>');
+    expect(source).toContain('<span>上传者</span><span>更新</span>');
+    expect(source).not.toContain("专题创建者");
   });
 });

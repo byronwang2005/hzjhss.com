@@ -341,6 +341,7 @@ a {
 }
 
 .drive-field input,
+.drive-field select,
 .drive-field textarea {
   width: 100%;
   color: var(--drive-ink);
@@ -355,6 +356,11 @@ a {
   padding: 9px 11px;
 }
 
+.drive-field select {
+  min-height: 42px;
+  padding: 9px 11px;
+}
+
 .drive-field textarea {
   min-height: 132px;
   padding: 10px 11px;
@@ -363,9 +369,44 @@ a {
 }
 
 .drive-field input:focus,
+.drive-field select:focus,
 .drive-field textarea:focus {
   border-color: var(--drive-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--drive-accent) 18%, transparent);
+}
+
+.drive-owner-settings {
+  display: grid;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--drive-line);
+}
+
+.drive-owner-settings h3,
+.drive-owner-settings p {
+  margin: 0;
+}
+
+.drive-owner-settings p {
+  color: var(--drive-muted);
+  font-size: 13px;
+}
+
+.drive-owner-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drive-owner-candidate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 5px 4px 10px;
+  background: var(--drive-surface-muted);
+  border: 1px solid var(--drive-line);
+  border-radius: 999px;
+  font-size: 13px;
 }
 
 .drive-page-head {

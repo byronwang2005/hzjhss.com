@@ -23,11 +23,12 @@ export interface DriveListResult {
 }
 
 export interface TopicMetadata {
-  version: 3;
+  version: 4;
   instanceId: string;
   name: string;
   prefix: string;
   analysisKeywords: string;
+  owner: string;
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -41,6 +42,7 @@ export interface TopicDetail {
   canEditAnalysisScope: boolean;
   canDeleteTopic: boolean;
   canManageFeaturedOutput: boolean;
+  canTransferTopicOwner: boolean;
 }
 
 export interface DriveOverviewOutput {
@@ -57,6 +59,7 @@ export interface DriveOverviewTopic {
   prefix: string;
   name: string;
   analysisKeywords: string;
+  owner: string;
   createdBy: string;
   updatedAt: string;
   outputCount: number;
@@ -70,6 +73,11 @@ export interface DriveOverview {
 export interface UploadCompleteResponse {
   ok: true;
   file: DriveFile;
+}
+
+export interface OwnerCandidatesResponse {
+  candidates: string[];
+  canManage: boolean;
 }
 
 export type ViewMode = "login" | "overview" | "topic" | "create";

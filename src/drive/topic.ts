@@ -11,7 +11,8 @@ import {
   putObjectText,
 } from "./cos";
 import { normalizeFolderName, normalizeObjectPath, normalizePrefix } from "./paths";
-import { isDriveAdmin } from "./session";
+import { isDriveAdmin, normalizeDisplayName } from "./session";
+import { listDriveUserCandidates } from "./users";
 
 export const DRIVE_META_FILENAME = "._drive-meta.json";
 export const TOPIC_META_FILENAME = "._topic.json";
@@ -46,11 +47,12 @@ export interface DriveDirectoryMetadata {
 }
 
 export interface TopicMetadata {
-  version: 3;
+  version: 4;
   instanceId: string;
   name: string;
   prefix: string;
   analysisKeywords: string;
+  owner: string;
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -113,6 +115,7 @@ export interface DriveOverviewTopic {
   prefix: string;
   name: string;
   analysisKeywords: string;
+  owner: string;
   createdBy: string;
   updatedAt: string;
   outputCount: number;
@@ -162,11 +165,12 @@ export async function createTopic(
   const analysisKeywords = normalizeAnalysisKeywords(input.analysisKeywords ?? input.description, true);
   const now = new Date().toISOString();
   const topic: TopicMetadata = {
-    version: 3,
+    version: 4,
     instanceId: createNonce(),
     name,
     prefix,
     analysisKeywords,
+    owner: input.displayName,
     createdBy: input.displayName,
     createdAt: now,
     updatedBy: input.displayName,
@@ -220,8 +224,8 @@ export async function updateTopic(
     displayName: input.displayName,
     origin: input.origin,
   });
-  if (topic.createdBy !== input.displayName && !isDriveAdmin(input.displayName)) {
-    const error = new Error("只有专题创建者可以修改分析口径");
+  if (topic.owner !== input.displayName && !isDriveAdmin(input.displayName)) {
+    const error = new Error("只有专题负责人或管理员可以修改分析口径");
     error.name = "DriveForbiddenError";
     throw error;
   }
@@ -230,7 +234,7 @@ export async function updateTopic(
   const now = new Date().toISOString();
   const updatedTopic: TopicMetadata = {
     ...topic,
-    version: 3,
+    version: 4,
     analysisKeywords,
     updatedBy: input.displayName,
     updatedAt: now,
@@ -251,8 +255,8 @@ export async function updateFeaturedOutput(
 ): Promise<TopicDetail> {
   const prefix = normalizeTopicPrefix(input.prefix);
   const { topic } = await ensureTopicScaffold(config, prefix, { displayName: input.displayName, origin: input.origin });
-  if (topic.createdBy !== input.displayName && !isDriveAdmin(input.displayName)) {
-    const error = new Error("只有专题创建者或管理员可以设置精选成果");
+  if (topic.owner !== input.displayName && !isDriveAdmin(input.displayName)) {
+    const error = new Error("只有专题负责人或管理员可以设置精选成果");
     error.name = "DriveForbiddenError";
     throw error;
   }
@@ -265,9 +269,39 @@ export async function updateFeaturedOutput(
   if (!isPreviewableOutput(selected)) {
     throw new Error("该成果格式不支持首页预览");
   }
-  const updatedTopic = { ...topic, version: 3 as const, featuredOutputPath: path, updatedBy: input.displayName, updatedAt: new Date().toISOString() };
+  const updatedTopic = { ...topic, version: 4 as const, featuredOutputPath: path, updatedBy: input.displayName, updatedAt: new Date().toISOString() };
   await writeTopicMetadata(config, updatedTopic, input.displayName);
   return { topic: updatedTopic, outputs };
+}
+
+export async function transferTopicOwner(
+  config: DriveConfig,
+  input: { prefix: unknown; owner: unknown; confirmName: unknown; displayName: string; origin: string },
+): Promise<TopicDetail> {
+  const prefix = normalizeTopicPrefix(input.prefix);
+  const { topic } = await ensureTopicScaffold(config, prefix, { displayName: input.displayName, origin: input.origin });
+  if (topic.owner !== input.displayName && !isDriveAdmin(input.displayName)) {
+    const error = new Error("只有专题负责人或管理员可以转交负责人");
+    error.name = "DriveForbiddenError";
+    throw error;
+  }
+  if (typeof input.confirmName !== "string" || input.confirmName.trim() !== topic.name) {
+    throw new Error("专题名称确认不一致");
+  }
+  const owner = normalizeDisplayName(input.owner);
+  const candidates = await listDriveUserCandidates(config);
+  if (!candidates.includes(owner)) {
+    throw new Error("新负责人不在候选名单中");
+  }
+  const updatedTopic: TopicMetadata = {
+    ...topic,
+    version: 4,
+    owner,
+    updatedBy: input.displayName,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeTopicMetadata(config, updatedTopic, input.displayName);
+  return { topic: updatedTopic, outputs: await listOutputsForTopicInstance(config, updatedTopic) };
 }
 
 export async function deleteTopic(
@@ -312,6 +346,7 @@ export async function readDriveOverview(config: DriveConfig, options: TopicScaff
           prefix: topic.prefix,
           name: topic.name,
           analysisKeywords: topic.analysisKeywords,
+          owner: topic.owner,
           createdBy: topic.createdBy,
           updatedAt: topic.updatedAt,
           outputCount: outputs.length,
@@ -391,7 +426,7 @@ export async function recordUploadComplete(
     const topicPrefix = path.split(`${OUTPUTS_FOLDER_NAME}/`, 1)[0];
     const topic = await readTopicMetadataIfExists(config, topicPrefix);
     if (topic && !topic.featuredOutputPath && isPreviewableOutput({ path, name: fileNameFromPath(path), contentType: meta.contentType })) {
-      await writeTopicMetadata(config, { ...topic, version: 3, featuredOutputPath: path }, input.displayName);
+      await writeTopicMetadata(config, { ...topic, version: 4, featuredOutputPath: path }, input.displayName);
     }
   }
   return { ...meta, path, name: fileNameFromPath(path) };
@@ -676,11 +711,12 @@ async function ensureTopicScaffold(
   if (!topic) {
     const name = topicNameFromPrefix(prefix);
     topic = {
-      version: 3,
+      version: 4,
       instanceId: createNonce(),
       name,
       prefix,
       analysisKeywords: "",
+      owner: options.displayName,
       createdBy: options.displayName,
       createdAt: now,
       updatedBy: options.displayName,
@@ -728,11 +764,11 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
     return null;
   }
   const parsed = JSON.parse(text) as Omit<Partial<TopicMetadata>, "version"> & { version?: number; description?: unknown };
-  if (![1, 2, 3].includes(parsed.version || 0) || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
+  if (![1, 2, 3, 4].includes(parsed.version || 0) || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
     throw new Error("专题元数据无效");
   }
-  return {
-    version: 3,
+  const topic: TopicMetadata = {
+    version: 4,
     instanceId:
       typeof parsed.instanceId === "string" && /^[a-z0-9]{8,32}$/.test(parsed.instanceId)
         ? parsed.instanceId
@@ -745,12 +781,17 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
         : typeof parsed.description === "string"
           ? parsed.description
           : "",
+    owner: typeof parsed.owner === "string" && parsed.owner.trim() ? parsed.owner : typeof parsed.createdBy === "string" ? parsed.createdBy : "-",
     createdBy: typeof parsed.createdBy === "string" ? parsed.createdBy : "-",
     createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : "",
     updatedBy: typeof parsed.updatedBy === "string" ? parsed.updatedBy : "-",
     updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
     featuredOutputPath: typeof parsed.featuredOutputPath === "string" ? parsed.featuredOutputPath : null,
   };
+  if (parsed.version !== 4 || typeof parsed.owner !== "string" || !parsed.owner.trim()) {
+    await writeTopicMetadata(config, topic, topic.updatedBy);
+  }
+  return topic;
 }
 
 function topicNameFromPrefix(prefix: string): string {
@@ -786,8 +827,8 @@ async function ensureFeaturedOutput(config: DriveConfig, topic: TopicMetadata, a
   const outputs = (await listOutputsForTopicInstance(config, topic)).sort((a, b) => timestampForFile(b) - timestampForFile(a));
   const eligible = outputs.filter(isPreviewableOutput);
   const featuredOutputPath = eligible.some((file) => file.path === topic.featuredOutputPath) ? topic.featuredOutputPath : eligible[0]?.path || null;
-  if (topic.version !== 3 || featuredOutputPath !== topic.featuredOutputPath) {
-    topic = { ...topic, version: 3, featuredOutputPath };
+  if (topic.version !== 4 || featuredOutputPath !== topic.featuredOutputPath) {
+    topic = { ...topic, version: 4, featuredOutputPath };
     await writeTopicMetadata(config, topic, actor);
   }
   return { topic, outputs };

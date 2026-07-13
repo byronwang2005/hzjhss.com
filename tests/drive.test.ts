@@ -30,12 +30,16 @@ import {
   normalizeTopicPrefix,
   readDriveOverview,
   readTopic,
+  transferTopicOwner,
   updateTopic,
 } from "../src/drive/topic";
+import { DRIVE_USERS_FILENAME, listDriveUserCandidates, registerDriveUser, removeDriveUserCandidate } from "../src/drive/users";
 import { getDriveConfig, type DriveConfig } from "../src/drive/config";
 import type { DriveEnv } from "../src/drive/config";
 import { onRequestPost as createAgentUploadUrl } from "../functions/api/drive/agent-output-upload-url";
 import { onRequestPost as completeAgentUpload } from "../functions/api/drive/agent-output-upload-complete";
+import { onRequestPost as loginToDrive } from "../functions/api/drive/login";
+import { onRequestDelete as deleteOwnerCandidate } from "../functions/api/drive/owner-candidates";
 
 const env: DriveEnv = {
   DRIVE_ACCESS_CODE: "open-sesame",
@@ -275,6 +279,22 @@ describe("drive sessions", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("registers the normalized display name after a successful login", async () => {
+    await withMockCos([], async (storage) => {
+      const response = await loginToDrive({
+        request: new Request("https://example.com/api/drive/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ displayName: " 王小明 ", accessCode: "open-sesame" }),
+        }),
+        env: apiEnv,
+      } as any);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, displayName: "王小明" });
+      expect(JSON.parse(storage.get(DRIVE_USERS_FILENAME) || "{}").users["王小明"]).toBeDefined();
+    });
   });
 });
 
@@ -565,7 +585,7 @@ describe("topic scaffolding", () => {
         origin: "https://example.com",
       });
 
-      expect(detail.topic).toMatchObject({ version: 3, analysisKeywords: "装机量、价格、竞争格局", featuredOutputPath: null });
+      expect(detail.topic).toMatchObject({ version: 4, owner: "王小明", analysisKeywords: "装机量、价格、竞争格局", featuredOutputPath: null });
       expect(toTopicDetailApiResponse(detail, "王小明")).toMatchObject({
         canEditAnalysisScope: true,
         topic: { description: "装机量、价格、竞争格局" },
@@ -623,7 +643,7 @@ describe("topic scaffolding", () => {
           origin: "https://example.com",
         });
 
-        expect(detail.topic).toMatchObject({ version: 3, analysisKeywords: "已有说明", featuredOutputPath: null });
+        expect(detail.topic).toMatchObject({ version: 4, owner: "张三", createdBy: "张三", analysisKeywords: "已有说明", featuredOutputPath: null });
         expect(storage.get(`旧专题/${GENERATE_PROMPT_FILENAME}`)).toBe("自定义生成提示词");
         expect(storage.has(`旧专题/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
 
@@ -634,14 +654,15 @@ describe("topic scaffolding", () => {
           origin: "https://example.com",
         });
         expect(JSON.parse(storage.get(`旧专题/${TOPIC_META_FILENAME}`) || "{}")).toMatchObject({
-          version: 3,
+          version: 4,
+          owner: "张三",
           analysisKeywords: "更新后的关键词",
         });
       },
     );
   });
 
-  it("allows only the topic creator to update the analysis scope", async () => {
+  it("allows only the topic owner or administrator to update the analysis scope", async () => {
     await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async (storage) => {
       await expect(
         updateTopic(testConfig, {
@@ -650,7 +671,7 @@ describe("topic scaffolding", () => {
           displayName: "李小明",
           origin: "https://example.com",
         }),
-      ).rejects.toThrow("只有专题创建者可以修改分析口径");
+      ).rejects.toThrow("只有专题负责人或管理员可以修改分析口径");
 
       expect(JSON.parse(storage.get(`新能源/${TOPIC_META_FILENAME}`) || "{}").analysisKeywords).toBe("装机量、价格、竞争格局");
       const detail = await readTopic(testConfig, "新能源/", { displayName: "李小明", origin: "https://example.com" });
@@ -665,6 +686,130 @@ describe("topic scaffolding", () => {
       });
       expect(JSON.parse(storage.get(`新能源/${TOPIC_META_FILENAME}`) || "{}").analysisKeywords).toBe("管理员修改后的分析口径");
     });
+  });
+
+  it("transfers topic ownership to a registered candidate without changing the original creator", async () => {
+    await withMockCos(
+      [
+        [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())],
+        [
+          DRIVE_USERS_FILENAME,
+          JSON.stringify({
+            version: 1,
+            users: {
+              王小明: { firstLoginAt: "2026-07-01T00:00:00.000Z", lastLoginAt: "2026-07-01T00:00:00.000Z" },
+              李小明: { firstLoginAt: "2026-07-02T00:00:00.000Z", lastLoginAt: "2026-07-02T00:00:00.000Z" },
+            },
+          }),
+        ],
+      ],
+      async (storage) => {
+        const detail = await transferTopicOwner(testConfig, {
+          prefix: "新能源/",
+          owner: "李小明",
+          confirmName: "新能源",
+          displayName: "王小明",
+          origin: "https://example.com",
+        });
+        expect(detail.topic).toMatchObject({ owner: "李小明", createdBy: "王小明", updatedBy: "王小明" });
+        expect(toTopicDetailApiResponse(detail, "王小明")).toMatchObject({
+          canEditAnalysisScope: false,
+          canManageFeaturedOutput: false,
+          canTransferTopicOwner: false,
+        });
+        expect(toTopicDetailApiResponse(detail, "李小明")).toMatchObject({
+          canEditAnalysisScope: true,
+          canManageFeaturedOutput: true,
+          canTransferTopicOwner: true,
+        });
+        expect(JSON.parse(storage.get(`新能源/${TOPIC_META_FILENAME}`) || "{}")).toMatchObject({
+          version: 4,
+          owner: "李小明",
+          createdBy: "王小明",
+        });
+      },
+    );
+  });
+
+  it("rejects unauthorized, unregistered, and incorrectly confirmed owner transfers", async () => {
+    await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async () => {
+      await expect(
+        transferTopicOwner(testConfig, {
+          prefix: "新能源/",
+          owner: "李小明",
+          confirmName: "新能源",
+          displayName: "赵六",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("只有专题负责人或管理员可以转交负责人");
+      await expect(
+        transferTopicOwner(testConfig, {
+          prefix: "新能源/",
+          owner: "李小明",
+          confirmName: "写错了",
+          displayName: "王小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("专题名称确认不一致");
+      await expect(
+        transferTopicOwner(testConfig, {
+          prefix: "新能源/",
+          owner: "李小明",
+          confirmName: "新能源",
+          displayName: "王小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("新负责人不在候选名单中");
+      await expect(
+        transferTopicOwner(testConfig, {
+          prefix: "新能源/",
+          owner: "",
+          confirmName: "新能源",
+          displayName: "王小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("请输入登录姓名");
+      await expect(
+        transferTopicOwner(testConfig, {
+          prefix: "新能源/",
+          owner: "名".repeat(41),
+          confirmName: "新能源",
+          displayName: "王小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("登录姓名过长");
+    });
+  });
+
+  it("registers login names idempotently and protects administrator and active owners from removal", async () => {
+    await withMockCos([], async (storage) => {
+      await registerDriveUser(testConfig, " 王小明 ", new Date("2026-07-01T00:00:00.000Z"));
+      await registerDriveUser(testConfig, "王小明", new Date("2026-07-02T00:00:00.000Z"));
+      await registerDriveUser(testConfig, "李小明", new Date("2026-07-03T00:00:00.000Z"));
+      expect(await listDriveUserCandidates(testConfig)).toEqual(["李小明", "汪旭", "王小明"]);
+      const registry = JSON.parse(storage.get(DRIVE_USERS_FILENAME) || "{}");
+      expect(registry.users["王小明"]).toEqual({
+        firstLoginAt: "2026-07-01T00:00:00.000Z",
+        lastLoginAt: "2026-07-02T00:00:00.000Z",
+      });
+      await expect(removeDriveUserCandidate(testConfig, "汪旭", new Set())).rejects.toThrow("不能移除管理员候选");
+      await expect(removeDriveUserCandidate(testConfig, "王小明", new Set(["王小明"]))).rejects.toThrow("仍是专题负责人");
+      await removeDriveUserCandidate(testConfig, "李小明", new Set(["王小明"]));
+      expect(await listDriveUserCandidates(testConfig)).toEqual(["汪旭", "王小明"]);
+    });
+  });
+
+  it("allows only the administrator to call the candidate removal API", async () => {
+    const cookie = (await createSessionCookie(apiEnv, "https://example.com/drive", "王小明")).split(";", 1)[0];
+    const response = await deleteOwnerCandidate({
+      request: new Request("https://example.com/api/drive/owner-candidates", {
+        method: "DELETE",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ displayName: "李小明" }),
+      }),
+      env: apiEnv,
+    } as any);
+    expect(response.status).toBe(403);
   });
 
   it("allows only the administrator to delete a topic", async () => {

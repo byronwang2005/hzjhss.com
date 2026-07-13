@@ -2,7 +2,7 @@ import type { DriveEnv } from "../../../src/drive/config";
 import { toTopicDetailApiResponse } from "../../../src/drive/api-responses";
 import { getDriveConfig } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createTopic, deleteTopic, readTopic, updateFeaturedOutput, updateTopic } from "../../../src/drive/topic";
+import { createTopic, deleteTopic, readTopic, transferTopicOwner, updateFeaturedOutput, updateTopic } from "../../../src/drive/topic";
 
 export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -51,7 +51,15 @@ export const onRequestPut: PagesFunction<DriveEnv> = async ({ request, env }) =>
     }
 
     const body = await readJsonBody(request);
-    const detail = Object.prototype.hasOwnProperty.call(body, "featuredOutputPath")
+    const detail = Object.prototype.hasOwnProperty.call(body, "owner")
+      ? await transferTopicOwner(getDriveConfig(env), {
+          prefix: body.prefix,
+          owner: body.owner,
+          confirmName: body.confirmName,
+          displayName: session.displayName,
+          origin: new URL(request.url).origin,
+        })
+      : Object.prototype.hasOwnProperty.call(body, "featuredOutputPath")
       ? await updateFeaturedOutput(getDriveConfig(env), {
           prefix: body.prefix,
           path: body.featuredOutputPath,

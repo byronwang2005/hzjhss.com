@@ -10,6 +10,7 @@ export interface TopicDetailApiResponse extends Omit<TopicDetail, "topic"> {
   topic: TopicMetadataApiResponse;
   canEditAnalysisScope: boolean;
   canManageFeaturedOutput: boolean;
+  canTransferTopicOwner: boolean;
   canDeleteTopic: boolean;
 }
 
@@ -18,11 +19,12 @@ export interface DriveOverviewApiResponse extends Omit<DriveOverview, "topics"> 
 }
 
 export function toTopicDetailApiResponse(detail: TopicDetail, viewerDisplayName?: string): TopicDetailApiResponse {
-  const canManageTopic = detail.topic.createdBy === viewerDisplayName || Boolean(viewerDisplayName && isDriveAdmin(viewerDisplayName));
+  const canManageTopic = detail.topic.owner === viewerDisplayName || Boolean(viewerDisplayName && isDriveAdmin(viewerDisplayName));
   return {
     ...detail,
     canEditAnalysisScope: canManageTopic,
     canManageFeaturedOutput: canManageTopic,
+    canTransferTopicOwner: canManageTopic,
     canDeleteTopic: Boolean(viewerDisplayName && isDriveAdmin(viewerDisplayName)),
     topic: {
       ...detail.topic,
