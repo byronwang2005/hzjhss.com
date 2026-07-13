@@ -81,3 +81,26 @@ describe("drive client responsibility labels", () => {
     expect(source).not.toContain("专题创建者");
   });
 });
+
+describe("drive client topic navigation", () => {
+  it("opens topics on Agent and orders Agent before materials and outputs", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source).toContain('activeTab: "agent"');
+    expect(source).toContain('openTopic(prefix: string, tab: TopicTab = "agent")');
+
+    const agentTab = source.indexOf('tabButton("agent", "Agent"');
+    const materialsTab = source.indexOf('tabButton("materials", "资料"');
+    const outputsTab = source.indexOf('tabButton("outputs", "成果"');
+    expect(agentTab).toBeGreaterThan(-1);
+    expect(agentTab).toBeLessThan(materialsTab);
+    expect(materialsTab).toBeLessThan(outputsTab);
+  });
+
+  it("only renders settings for topic managers and falls back after permission loss", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source).toContain('canViewSettings() ? tabButton("settings", "设置"');
+    expect(source).toContain('state.activeTab === "settings" && canViewSettings() ? renderSettingsTab()');
+    expect(source).toContain('if (tab === "settings" && !canViewSettings())');
+    expect(source).toContain('if (!canViewSettings()) {\n      state.activeTab = "agent";');
+  });
+});

@@ -105,7 +105,7 @@ const requestControllers = new Map<RequestKey, AbortController>();
 
 const state: AppState = {
   mode: "login",
-  activeTab: "outputs",
+  activeTab: "agent",
   overview: null,
   topic: null,
   materialList: null,
@@ -210,7 +210,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
   } else if (action === "cancel-create" || action === "back-overview") {
     await loadOverview();
   } else if (action === "open-topic") {
-    await openTopic(prefix || path, "outputs");
+    await openTopic(prefix || path, "agent");
   } else if (action === "tab") {
     setActiveTab(target.dataset.tab as TopicTab);
   } else if (action === "open-folder") {
@@ -375,6 +375,9 @@ async function transferTopicOwner(): Promise<void> {
       method: "PUT",
       body: { prefix: state.topic.topic.prefix, owner, confirmName: state.drafts.ownerConfirmName },
     });
+    if (!canViewSettings()) {
+      state.activeTab = "agent";
+    }
     state.drafts.owner = state.topic.topic.owner;
     state.drafts.ownerConfirmName = "";
     setStatus(`专题负责人已转交给 ${state.topic.topic.owner}。`, "success");
@@ -447,7 +450,7 @@ async function loadOverview(successMessage = ""): Promise<void> {
   }
 }
 
-async function openTopic(prefix: string, tab: TopicTab = "outputs"): Promise<void> {
+async function openTopic(prefix: string, tab: TopicTab = "agent"): Promise<void> {
   const signal = beginRequest("topic");
   cancelRequest("materials");
   closePreview(false);
@@ -466,6 +469,9 @@ async function openTopic(prefix: string, tab: TopicTab = "outputs"): Promise<voi
       return;
     }
     state.topic = topic;
+    if (state.activeTab === "settings" && !canViewSettings(topic)) {
+      state.activeTab = "agent";
+    }
     state.ownerCandidates = ownerCandidates;
     state.materialList = materialList;
     state.materialPrefix = materialList.prefix;
@@ -529,6 +535,9 @@ async function listAllDirectory(prefix: string, signal?: AbortSignal): Promise<D
 
 function setActiveTab(tab: TopicTab): void {
   if (!["outputs", "materials", "agent", "settings"].includes(tab)) {
+    return;
+  }
+  if (tab === "settings" && !canViewSettings()) {
     return;
   }
   closePreview(false);
@@ -1079,14 +1088,18 @@ function renderTopic(): TemplateResult {
         </div>
       </div>
       <div class="drive-tabs" role="tablist" aria-label="专题工作区">
-        ${tabButton("outputs", "成果", "ph-package")}${tabButton("materials", "资料", "ph-files")}${tabButton("agent", "Agent", "ph-terminal-window")}${tabButton("settings", "设置", "ph-sliders-horizontal")}
+        ${tabButton("agent", "Agent", "ph-terminal-window")}${tabButton("materials", "资料", "ph-files")}${tabButton("outputs", "成果", "ph-package")}${canViewSettings() ? tabButton("settings", "设置", "ph-sliders-horizontal") : nothing}
       </div>
-      ${state.activeTab === "outputs" ? renderOutputsTab() : nothing}
-      ${state.activeTab === "materials" ? renderMaterialsTab() : nothing}
       ${state.activeTab === "agent" ? renderAgentTab() : nothing}
-      ${state.activeTab === "settings" ? renderSettingsTab() : nothing}
+      ${state.activeTab === "materials" ? renderMaterialsTab() : nothing}
+      ${state.activeTab === "outputs" ? renderOutputsTab() : nothing}
+      ${state.activeTab === "settings" && canViewSettings() ? renderSettingsTab() : nothing}
     </section>
   `;
+}
+
+function canViewSettings(topic: TopicDetail | null = state.topic): boolean {
+  return Boolean(topic?.canEditAnalysisScope);
 }
 
 function renderOutputsTab(): TemplateResult {
