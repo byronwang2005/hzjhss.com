@@ -44,6 +44,22 @@ describe("shared UI system", () => {
     }
   });
 
+  it("keeps optional file row actions aligned without changing mobile behavior", () => {
+    const driveCss = readFileSync("src/drive/client/drive.css", "utf8");
+    const baseRuleStart = driveCss.indexOf(".drive-row-actions {");
+    const baseRuleEnd = driveCss.indexOf("}", baseRuleStart);
+    const baseRule = driveCss.slice(baseRuleStart, baseRuleEnd);
+
+    expect(baseRuleStart).toBeGreaterThan(-1);
+    expect(baseRule).toContain("display: flex;");
+    expect(baseRule).toContain("align-items: center;");
+    expect(baseRule).toContain("justify-content: flex-end;");
+    expect(baseRule).toContain("flex-wrap: wrap;");
+
+    const mobileCss = driveCss.slice(driveCss.indexOf("@media (max-width: 760px)"));
+    expect(mobileCss).toMatch(/\.drive-row-actions \{[\s\S]*?justify-content: flex-start;/);
+  });
+
   it("locks interaction motion to shared nonlinear curves", () => {
     const declarations = cssSource.match(/(?:transition|animation)\s*:[^;]+;/g) || [];
     for (const declaration of declarations) {
