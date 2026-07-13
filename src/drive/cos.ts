@@ -32,6 +32,12 @@ export interface DriveObjectPathList {
   nextCursor: string | null;
 }
 
+export interface DriveObjectMetadata {
+  size: number;
+  contentType: string;
+  etag: string;
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   parseTagValue: true,
@@ -120,6 +126,28 @@ export async function getObjectText(config: DriveConfig, relativePath: string): 
   return response.text();
 }
 
+export async function headObject(config: DriveConfig, relativePath: string): Promise<DriveObjectMetadata | null> {
+  const key = makeObjectKey(config.rootPrefix, relativePath);
+  const response = await signedFetch(config, objectUrl(config, key), { method: "HEAD" });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`COS 文件检查失败: ${response.status}`);
+  }
+
+  const contentLength = response.headers.get("content-length");
+  if (contentLength === null || !/^\d+$/.test(contentLength)) {
+    throw new Error("COS 文件大小元数据无效");
+  }
+  const size = Number(contentLength);
+  return {
+    size,
+    contentType: response.headers.get("content-type") || "",
+    etag: (response.headers.get("etag") || "").replace(/^"|"$/g, ""),
+  };
+}
+
 export async function deleteObject(config: DriveConfig, relativePath: string): Promise<void> {
   const key = makeObjectKey(config.rootPrefix, relativePath);
   const response = await signedFetch(config, objectUrl(config, key), { method: "DELETE" });
@@ -140,7 +168,7 @@ export async function presignObjectUrl(
   method: "GET" | "PUT",
   relativePath: string,
   headers: HeadersInit = {},
-  options: { expiresSeconds?: number; signAllHeaders?: boolean } = {},
+  options: { expiresSeconds?: number } = {},
 ): Promise<string> {
   const key = makeObjectKey(config.rootPrefix, relativePath);
   const client = createClient(config);
@@ -152,7 +180,6 @@ export async function presignObjectUrl(
     headers,
     aws: {
       signQuery: true,
-      allHeaders: options.signAllHeaders,
     },
   });
   return signedRequest.url;

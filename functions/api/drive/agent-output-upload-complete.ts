@@ -1,5 +1,6 @@
 import type { DriveEnv } from "../../../src/drive/config";
 import { getDriveConfig } from "../../../src/drive/config";
+import { headObject } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody } from "../../../src/drive/http";
 import { normalizeObjectPath } from "../../../src/drive/paths";
 import { allowsAgentOutputPath, getAgentOutputCapability } from "../../../src/drive/session";
@@ -27,6 +28,17 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       return jsonResponse({ error: "文件大小无效" }, 400);
     }
 
+    const object = await headObject(config, path);
+    if (!object) {
+      return jsonResponse({ error: "COS 中未找到已上传的成果文件" }, 400);
+    }
+    if (object.size !== size) {
+      return jsonResponse({ error: "COS 文件实际大小与回传信息不一致" }, 400);
+    }
+    if (normalizeContentType(object.contentType) !== normalizeContentType(contentType)) {
+      return jsonResponse({ error: "COS 文件实际 contentType 与回传信息不一致" }, 400);
+    }
+
     const file = await recordUploadComplete(config, {
       path,
       size,
@@ -39,3 +51,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     return errorResponse(error);
   }
 };
+
+function normalizeContentType(value: string): string {
+  return value.split(";", 1)[0].trim().toLowerCase();
+}

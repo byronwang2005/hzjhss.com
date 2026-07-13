@@ -328,7 +328,10 @@ describe("topic prompts", () => {
     expect(prompt).toContain("仅当已有 PDF 已按下述要求生成并验证合格、且文件内容无需修改时");
     expect(prompt).toContain("才可跳过 PDF 生成步骤并直接重试回传");
     expect(prompt).toContain("禁止使用 `web_fetch`");
-    expect(prompt).toContain("curl -fL --retry 3 --retry-all-errors");
+    expect(prompt).toContain("curl --fail-with-body --location --retry 3 --retry-all-errors");
+    expect(prompt).toContain("--upload-file");
+    expect(prompt).toContain("`Code`、`Message`、`RequestId`");
+    expect(prompt).not.toContain("`content-length` 必须等于");
     expect(prompt).toContain("新能源/outputs/新能源-20260709-092300123.pdf");
     expect(prompt).not.toContain("专题总结.md");
     expect(prompt).toContain("/api/drive/agent-output-upload-url");
@@ -457,6 +460,7 @@ describe("agent output upload API", () => {
       [
         [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())],
         ["新能源/outputs/", ""],
+        ["新能源/outputs/新能源-20260709-092300123.pdf", "uploaded-pdf", "application/pdf"],
       ],
       async (storage) => {
       const path = "新能源/outputs/新能源-20260709-092300123.pdf";
@@ -480,9 +484,10 @@ describe("agent output upload API", () => {
       expect(upload).toMatchObject({
         path,
         contentType: "application/pdf",
-        requiredHeaders: { "content-length": "12", "content-type": "application/pdf" },
+        requiredHeaders: { "content-type": "application/pdf" },
       });
-      expect(new URL(upload.url).searchParams.get("X-Amz-SignedHeaders")).toContain("content-length");
+      expect(upload.requiredHeaders).not.toHaveProperty("content-length");
+      expect(new URL(upload.url).searchParams.get("X-Amz-SignedHeaders")).toBe("host");
 
       const completeResponse = await completeAgentUpload({
         request: new Request("https://example.com/api/drive/agent-output-upload-complete", {
@@ -499,6 +504,57 @@ describe("agent output upload API", () => {
       });
       },
     );
+  });
+
+  it("rejects completion when the COS object is missing or its metadata does not match", async () => {
+    const path = "新能源/outputs/新能源-20260709-092300123.pdf";
+    const cases: Array<{
+      name: string;
+      object?: [string, string, string?];
+      expectedError: string;
+    }> = [
+      { name: "missing object", expectedError: "COS 中未找到已上传的成果文件" },
+      {
+        name: "mismatched size",
+        object: [path, "wrong-size!", "application/pdf"],
+        expectedError: "COS 文件实际大小与回传信息不一致",
+      },
+      {
+        name: "mismatched content type",
+        object: [path, "uploaded-pdf", "text/plain"],
+        expectedError: "COS 文件实际 contentType 与回传信息不一致",
+      },
+    ];
+
+    for (const testCase of cases) {
+      await withMockCos(
+        [
+          [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())],
+          ...(testCase.object ? [testCase.object] : []),
+        ],
+        async (storage) => {
+          const { token } = await createAgentOutputToken(apiEnv, {
+            displayName: "王小明",
+            topicPrefix: "新能源/",
+            topicInstanceId: "topicinstance1",
+            allowedPaths: [path],
+          });
+          const response = await completeAgentUpload({
+            request: new Request("https://example.com/api/drive/agent-output-upload-complete", {
+              method: "POST",
+              headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+              body: JSON.stringify({ path, size: 12, contentType: "application/pdf" }),
+            }),
+            env: apiEnv,
+          } as any);
+
+          expect(response.status, testCase.name).toBe(400);
+          expect(await response.json(), testCase.name).toEqual({ error: testCase.expectedError });
+          const metadata = JSON.parse(storage.get(`新能源/outputs/${DRIVE_META_FILENAME}`) || "{}");
+          expect(metadata.files?.["新能源-20260709-092300123.pdf"], testCase.name).toBeUndefined();
+        },
+      );
+    }
   });
 
   it("rejects missing credentials, unlisted paths, and mismatched formats", async () => {
@@ -1050,10 +1106,15 @@ describe("drive overview", () => {
 });
 
 async function withMockCos(
-  initialObjects: Array<[string, string]>,
+  initialObjects: Array<[string, string, string?]>,
   callback: (storage: Map<string, string>) => Promise<void>,
 ): Promise<void> {
-  const storage = new Map(initialObjects);
+  const storage = new Map(initialObjects.map(([path, content]) => [path, content]));
+  const contentTypes = new Map(
+    initialObjects
+      .filter((entry): entry is [string, string, string] => typeof entry[2] === "string")
+      .map(([path, _content, contentType]) => [path, contentType]),
+  );
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -1070,8 +1131,23 @@ async function withMockCos(
     if (request.method === "GET") {
       return storage.has(path) ? new Response(storage.get(path), { status: 200 }) : new Response("", { status: 404 });
     }
+    if (request.method === "HEAD") {
+      const content = storage.get(path);
+      if (content === undefined) {
+        return new Response(null, { status: 404 });
+      }
+      return new Response(null, {
+        status: 200,
+        headers: {
+          "content-length": String(new TextEncoder().encode(content).byteLength),
+          "content-type": contentTypes.get(path) || "application/octet-stream",
+          etag: '"etag"',
+        },
+      });
+    }
     if (request.method === "PUT") {
       storage.set(path, await request.text());
+      contentTypes.set(path, request.headers.get("content-type") || "application/octet-stream");
       return new Response("", { status: 200 });
     }
     if (request.method === "DELETE") {

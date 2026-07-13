@@ -648,7 +648,7 @@ export function createAgentOutputPrompt(input: {
 
 本阶段不再重新分析资料。如果用户刚刚已经发送过类似的第二阶段 prompt，本次很可能只是更新回传链接：仅当已有 PDF 已按下述要求生成并验证合格、且文件内容无需修改时，才可跳过 PDF 生成步骤并直接重试回传。只要需要生成、重新生成或修改 PDF，就必须完整执行下述 Kami 流程。
 
-传输要求：回传 API 和 COS PUT 必须使用终端 HTTP 客户端（优先 \`curl -fL --retry 3 --retry-all-errors\`）；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具。HTTP 403 / Error 1010 通常来自浏览器型抓取出口，遇到后直接改用终端 curl。
+传输要求：回传 API 和 COS PUT 必须使用终端 HTTP 客户端（优先 \`curl --fail-with-body --location --retry 3 --retry-all-errors\`）；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具。HTTP 403 / Error 1010 通常来自浏览器型抓取出口，遇到后直接改用终端 curl。
 
 先检查当前会话：必须已经完成第一阶段资料分析，并且用户已经对判断进行调整、明确确认最终口径。若尚未形成用户确认的最终口径，立即停止，要求用户先确认；不得擅自生成成果。
 
@@ -669,9 +669,9 @@ export function createAgentOutputPrompt(input: {
 
 回传流程：
 1. 使用终端 curl POST \`${input.origin}/api/drive/agent-output-upload-url\`，请求头带 \`Authorization: Bearer <token>\` 和 \`Content-Type: application/json\`；body 包含上方对应的完整 \`path\`、实际字节数 \`size\` 与 \`contentType\`。该接口不使用 Cookie。
-2. PDF 使用 \`${AGENT_OUTPUT_FORMAT.contentType}\`。用返回的短时 PUT URL 上传，并原样携带返回的全部 \`requiredHeaders\`；其中 \`content-length\` 必须等于申请时的实际字节数。
+2. PDF 使用 \`${AGENT_OUTPUT_FORMAT.contentType}\`。用返回的短时 PUT URL 上传，并原样携带返回的全部 \`requiredHeaders\`。上传命令必须使用 \`curl --fail-with-body --location --retry 3 --retry-all-errors --header "Content-Type: ${AGENT_OUTPUT_FORMAT.contentType}" --upload-file "$PDF_PATH" "$PUT_URL"\` 这一等价形式，让 curl 根据文件自动发送 Content-Length，不得手工设置该请求头。
 3. PUT 成功后使用终端 curl POST \`${input.origin}/api/drive/agent-output-upload-complete\`，同样只携带 Bearer token、不携带 Cookie；body 包含返回的 \`path\`、实际 \`size\` 与 \`contentType\`。
-4. 文件成功登记后，报告 PDF path。授权过期、专题已删除或任一步失败时停止并报告具体错误，提示用户重新复制第二阶段提示词。
+4. 文件成功登记后，报告 PDF path。授权过期、专题已删除或任一步失败时停止并报告具体错误，提示用户重新复制第二阶段提示词。COS PUT 失败时保留响应体，报告其中的 \`Code\`、\`Message\`、\`RequestId\`，但不得输出 Bearer token 或短时 PUT URL。
 `;
 }
 

@@ -33,8 +33,8 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     }
 
     const expiresIn = Math.min(config.signExpiresSeconds, capability.exp - Math.floor(Date.now() / 1000));
-    const requiredHeaders = { "content-type": contentType, "content-length": String(size) };
-    const url = await presignObjectUrl(config, "PUT", path, requiredHeaders, { expiresSeconds: expiresIn, signAllHeaders: true });
+    const requiredHeaders = { "content-type": contentType };
+    const url = await presignObjectUrl(config, "PUT", path, requiredHeaders, { expiresSeconds: expiresIn });
     return jsonResponse({ url, path, contentType, requiredHeaders, expiresIn, maxFileBytes: config.maxFileBytes });
   } catch (error) {
     return errorResponse(error);
