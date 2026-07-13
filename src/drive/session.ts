@@ -6,6 +6,11 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 const MAX_DISPLAY_NAME_LENGTH = 40;
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 export const AGENT_OUTPUT_TOKEN_MAX_AGE_SECONDS = 60 * 60;
+export const DRIVE_ADMIN_DISPLAY_NAME = "汪旭";
+
+export function isDriveAdmin(displayName: string): boolean {
+  return displayName === DRIVE_ADMIN_DISPLAY_NAME;
+}
 
 export interface DriveSession {
   v: 1;

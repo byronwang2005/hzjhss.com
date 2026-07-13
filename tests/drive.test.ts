@@ -7,6 +7,7 @@ import {
   createSessionCookie,
   getAgentOutputCapability,
   getDriveSession,
+  isDriveAdmin,
   allowsAgentOutputPath,
   verifyAccessCode,
   verifySessionCookie,
@@ -20,9 +21,11 @@ import {
   createAgentOutputPath,
   createAgentOutputPrompt,
   createTopic,
+  deleteTopic,
   hasSystemPathSegment,
   isAgentReadableFile,
   isAgentReadableFolder,
+  isPreviewableOutput,
   mergeListMetadata,
   normalizeTopicPrefix,
   readDriveOverview,
@@ -65,6 +68,11 @@ const testConfig: DriveConfig = {
 };
 
 describe("drive configuration", () => {
+  it("recognizes 汪旭 as the drive administrator", () => {
+    expect(isDriveAdmin("汪旭")).toBe(true);
+    expect(isDriveAdmin("王小明")).toBe(false);
+  });
+
   it("fixes all presigned upload and download URLs at 30 minutes", async () => {
     const config = getDriveConfig({ ...apiEnv, DRIVE_SIGN_EXPIRES_SECONDS: "30" });
     expect(config.signExpiresSeconds).toBe(1800);
@@ -483,7 +491,7 @@ describe("topic scaffolding", () => {
           displayName: "王小明",
           origin: "https://example.com",
         }),
-      ).rejects.toThrow("请填写分析关键词");
+      ).rejects.toThrow("请填写分析口径");
     });
   });
 
@@ -496,8 +504,11 @@ describe("topic scaffolding", () => {
         origin: "https://example.com",
       });
 
-      expect(detail.topic).toMatchObject({ version: 2, analysisKeywords: "装机量、价格、竞争格局" });
-      expect(toTopicDetailApiResponse(detail).topic.description).toBe("装机量、价格、竞争格局");
+      expect(detail.topic).toMatchObject({ version: 3, analysisKeywords: "装机量、价格、竞争格局", featuredOutputPath: null });
+      expect(toTopicDetailApiResponse(detail, "王小明")).toMatchObject({
+        canEditAnalysisScope: true,
+        topic: { description: "装机量、价格、竞争格局" },
+      });
       expect(storage.has(`新能源/${GENERATE_PROMPT_FILENAME}`)).toBe(false);
       expect(storage.has(`新能源/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
 
@@ -547,26 +558,66 @@ describe("topic scaffolding", () => {
       ],
       async (storage) => {
         const detail = await readTopic(testConfig, "旧专题/", {
-          displayName: "李小明",
+          displayName: "张三",
           origin: "https://example.com",
         });
 
-        expect(detail.topic).toMatchObject({ version: 2, analysisKeywords: "已有说明" });
+        expect(detail.topic).toMatchObject({ version: 3, analysisKeywords: "已有说明", featuredOutputPath: null });
         expect(storage.get(`旧专题/${GENERATE_PROMPT_FILENAME}`)).toBe("自定义生成提示词");
         expect(storage.has(`旧专题/${OUTPUTS_FOLDER_NAME}/`)).toBe(true);
 
         await updateTopic(testConfig, {
           prefix: "旧专题/",
           analysisKeywords: "更新后的关键词",
-          displayName: "李小明",
+          displayName: "张三",
           origin: "https://example.com",
         });
         expect(JSON.parse(storage.get(`旧专题/${TOPIC_META_FILENAME}`) || "{}")).toMatchObject({
-          version: 2,
+          version: 3,
           analysisKeywords: "更新后的关键词",
         });
       },
     );
+  });
+
+  it("allows only the topic creator to update the analysis scope", async () => {
+    await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async (storage) => {
+      await expect(
+        updateTopic(testConfig, {
+          prefix: "新能源/",
+          analysisKeywords: "未经授权的修改",
+          displayName: "李小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("只有专题创建者可以修改分析口径");
+
+      expect(JSON.parse(storage.get(`新能源/${TOPIC_META_FILENAME}`) || "{}").analysisKeywords).toBe("装机量、价格、竞争格局");
+      const detail = await readTopic(testConfig, "新能源/", { displayName: "李小明", origin: "https://example.com" });
+      expect(toTopicDetailApiResponse(detail, "李小明")).toMatchObject({ canEditAnalysisScope: false, canDeleteTopic: false });
+      expect(toTopicDetailApiResponse(detail, "汪旭")).toMatchObject({ canEditAnalysisScope: true, canDeleteTopic: true });
+
+      await updateTopic(testConfig, {
+        prefix: "新能源/",
+        analysisKeywords: "管理员修改后的分析口径",
+        displayName: "汪旭",
+        origin: "https://example.com",
+      });
+      expect(JSON.parse(storage.get(`新能源/${TOPIC_META_FILENAME}`) || "{}").analysisKeywords).toBe("管理员修改后的分析口径");
+    });
+  });
+
+  it("allows only the administrator to delete a topic", async () => {
+    await withMockCos([[`新能源/${TOPIC_META_FILENAME}`, JSON.stringify(testTopicMetadata())]], async (storage) => {
+      await expect(
+        deleteTopic(testConfig, {
+          prefix: "新能源/",
+          confirmName: "新能源",
+          displayName: "王小明",
+          origin: "https://example.com",
+        }),
+      ).rejects.toThrow("只有管理员汪旭可以删除专题");
+      expect(storage.has(`新能源/${TOPIC_META_FILENAME}`)).toBe(true);
+    });
   });
 
   it("hides Agent outputs that belong to a deleted topic instance", async () => {
@@ -597,6 +648,11 @@ describe("topic scaffolding", () => {
 });
 
 describe("drive overview", () => {
+  it("only allows browser-previewable outputs to be featured", () => {
+    expect(isPreviewableOutput({ name: "report.pdf", path: "专题/outputs/report.pdf", contentType: "application/pdf" })).toBe(true);
+    expect(isPreviewableOutput({ name: "notes.md", path: "专题/outputs/notes.md", contentType: "" })).toBe(true);
+    expect(isPreviewableOutput({ name: "data.xlsx", path: "专题/outputs/data.xlsx", contentType: "application/vnd.ms-excel" })).toBe(false);
+  });
   it("summarizes topics, keeps empty output topics, and picks the latest output", async () => {
     const topicA = {
       version: 1,
@@ -664,16 +720,17 @@ describe("drive overview", () => {
         expect(overview.topics[0]).toMatchObject({
           name: "新能源",
           outputCount: 2,
-          latestOutput: {
+          featuredOutput: {
             name: "2026-07-09-summary.pdf",
             path: "新能源/outputs/2026-07-09-summary.pdf",
             contentType: "application/pdf",
+            uploadedBy: "王小明",
           },
         });
         expect(overview.topics[1]).toMatchObject({
           name: "半导体",
           outputCount: 0,
-          latestOutput: undefined,
+          featuredOutput: undefined,
         });
       },
     );

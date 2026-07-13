@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { previewKindForFile, shouldRefreshAfterMutation, sortFilesByFreshness, visibleMaterialFiles } from "../src/drive/client/utils";
-import type { DriveFile } from "../src/drive/client/types";
+import {
+  isMaterialDirectoryEmpty,
+  previewKindForFile,
+  shouldRefreshAfterMutation,
+  sortFilesByFreshness,
+  visibleMaterialFiles,
+} from "../src/drive/client/utils";
+import type { DriveFile, DriveFolder } from "../src/drive/client/types";
 
 describe("drive client preview policy", () => {
   it("detects station-previewable delivery files", () => {
@@ -35,6 +41,24 @@ describe("drive client file shaping", () => {
     ] satisfies DriveFile[];
 
     expect(sortFilesByFreshness(files).map((file) => file.name)).toEqual(["a.md", "b.md"]);
+  });
+
+  it("treats a directory containing only folders as non-empty", () => {
+    const folders = [{ name: "archive", path: "新能源/archive/" }] satisfies DriveFolder[];
+
+    expect(isMaterialDirectoryEmpty(folders, [])).toBe(false);
+  });
+
+  it("detects empty and populated material directories after hidden entries are removed", () => {
+    const file = { name: "report.pdf", path: "新能源/report.pdf", size: 1, lastModified: "2026-07-09T00:00:00.000Z" } satisfies DriveFile;
+    const folder = { name: "archive", path: "新能源/archive/" } satisfies DriveFolder;
+    const hiddenFile = { ...file, name: "成果生成与回传.prompt.md", path: "新能源/成果生成与回传.prompt.md" };
+    const hiddenFolder = { name: "outputs", path: "新能源/outputs/" } satisfies DriveFolder;
+
+    expect(isMaterialDirectoryEmpty([], [])).toBe(true);
+    expect(isMaterialDirectoryEmpty([], [file])).toBe(false);
+    expect(isMaterialDirectoryEmpty([folder], [file])).toBe(false);
+    expect(isMaterialDirectoryEmpty([hiddenFolder], [hiddenFile])).toBe(true);
   });
 });
 

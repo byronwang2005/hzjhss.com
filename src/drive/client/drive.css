@@ -232,7 +232,6 @@ a {
 .drive-tab,
 .drive-link-button,
 .drive-title-button,
-.drive-folder-tile,
 .drive-icon-button,
 .drive-breadcrumbs button {
   color: inherit;
@@ -264,7 +263,6 @@ a {
 
 .drive-control:active:not(:disabled),
 .drive-table-action:active:not(:disabled),
-.drive-folder-tile:active:not(:disabled),
 .drive-icon-button:active:not(:disabled) {
   transform: translateY(1px);
 }
@@ -481,6 +479,48 @@ a {
   border-bottom: 1px solid var(--drive-line);
 }
 
+.drive-featured-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  animation: drive-featured-enter 400ms cubic-bezier(.22,.8,.25,1);
+}
+
+.drive-featured-preview {
+  min-height: 420px;
+  max-height: 68dvh;
+  padding: 12px;
+  overflow: auto;
+  background: var(--drive-surface-muted);
+  border-block: 1px solid var(--drive-line);
+  animation: drive-featured-enter 400ms cubic-bezier(.22,.8,.25,1);
+}
+
+.drive-featured-preview .drive-preview-frame { min-height: 520px; }
+.drive-featured-carousel .drive-inline-preview { border-inline: 0; }
+
+.drive-featured-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+.drive-featured-dots { display: flex; align-items: center; gap: 7px; }
+.drive-featured-dots button { width: 7px; height: 7px; padding: 0; background: var(--drive-line-strong); border-radius: 50%; transition: width 200ms ease, background 200ms ease; }
+.drive-featured-dots button.is-active { width: 22px; background: var(--drive-accent); border-radius: 5px; }
+.drive-featured-badge { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; color: var(--drive-warning); font-size: 12px; font-weight: 750; }
+
+@keyframes drive-featured-enter { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-featured-card, .drive-featured-preview { animation: none; }
+  .drive-featured-dots button { transition: none; }
+}
+
 .drive-output-item:last-child .drive-output-card,
 .drive-topic-card:last-child {
   border-bottom: 0;
@@ -682,43 +722,6 @@ a {
 .drive-breadcrumbs button {
   padding: 2px 3px;
   color: inherit;
-}
-
-.drive-folder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.drive-folder-tile {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  min-width: 0;
-  padding: 10px 12px;
-  color: var(--drive-ink);
-  background: var(--drive-surface);
-  border: 1px solid var(--drive-line);
-  border-radius: 6px;
-  text-align: left;
-}
-
-.drive-folder-tile:hover {
-  border-color: var(--drive-accent);
-}
-
-.drive-folder-tile i {
-  flex: 0 0 auto;
-  color: var(--drive-accent);
-  font-size: 20px;
-}
-
-.drive-folder-tile span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .drive-agent-grid {

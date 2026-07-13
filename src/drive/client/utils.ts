@@ -1,4 +1,4 @@
-import type { DriveFile, PreviewKind, TopicTab } from "./types";
+import type { DriveFile, DriveFolder, PreviewKind, TopicTab } from "./types";
 
 const markdownExtensions = new Set(["md", "markdown"]);
 const textExtensions = new Set(["txt"]);
@@ -148,6 +148,14 @@ export function sortFilesByFreshness(files: DriveFile[]): DriveFile[] {
 
 export function visibleMaterialFiles(files: DriveFile[]): DriveFile[] {
   return files.filter((file) => file.name !== "成果生成与回传.prompt.md");
+}
+
+export function visibleMaterialFolders(folders: DriveFolder[]): DriveFolder[] {
+  return folders.filter((folder) => folder.name !== "outputs");
+}
+
+export function isMaterialDirectoryEmpty(folders: DriveFolder[], files: DriveFile[]): boolean {
+  return visibleMaterialFolders(folders).length === 0 && visibleMaterialFiles(files).length === 0;
 }
 
 function timestampForFile(file: Pick<DriveFile, "uploadedAt" | "lastModified">): number {

@@ -38,11 +38,13 @@ import {
   formatBytes,
   formatDate,
   formatDateOnly,
+  isMaterialDirectoryEmpty,
   normalizeClientRelativePath,
   previewKindForFile,
   shouldRefreshAfterMutation,
   sortFilesByFreshness,
   visibleMaterialFiles,
+  visibleMaterialFolders,
 } from "./utils";
 
 interface PreviewState {
@@ -123,6 +125,9 @@ const state: AppState = {
 
 let previewVersion = 0;
 let previewReturnFocus: HTMLElement | null = null;
+let featuredIndex = 0;
+let featuredTimer: number | null = null;
+let featuredPaused = false;
 
 if (!rootElement) {
   throw new Error("Missing [data-drive-root] mount element.");
@@ -135,6 +140,16 @@ root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
 root.addEventListener("change", (event) => void handleChange(event));
 root.addEventListener("input", handleInput);
+root.addEventListener("pointerover", (event) => setFeaturedPaused(Boolean((event.target as HTMLElement).closest("[data-featured-carousel]"))));
+root.addEventListener("pointerout", (event) => {
+  const carousel = (event.target as HTMLElement).closest("[data-featured-carousel]");
+  if (carousel && !carousel.contains(event.relatedTarget as Node | null)) setFeaturedPaused(false);
+});
+root.addEventListener("focusin", (event) => { if ((event.target as HTMLElement).closest("[data-featured-carousel]")) setFeaturedPaused(true); });
+root.addEventListener("focusout", (event) => {
+  const carousel = (event.target as HTMLElement).closest("[data-featured-carousel]");
+  if (carousel && !carousel.contains(event.relatedTarget as Node | null)) setFeaturedPaused(false);
+});
 root.addEventListener("wa-after-hide", (event) => {
   const target = event.target as HTMLElement;
   if (target.matches("[data-preview-drawer]") && state.preview?.kind !== "pdf") {
@@ -213,6 +228,14 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await copyAgentOutputTask();
   } else if (action === "refresh") {
     await refreshCurrent();
+  } else if (action === "set-featured") {
+    await setFeaturedOutput(path);
+  } else if (action === "featured-prev") {
+    await showFeatured(featuredIndex - 1, target);
+  } else if (action === "featured-next") {
+    await showFeatured(featuredIndex + 1, target);
+  } else if (action === "featured-go") {
+    await showFeatured(Number(target.dataset.index || 0), target);
   }
 }
 
@@ -279,7 +302,7 @@ async function submitCreateTopic(): Promise<void> {
     });
     state.drafts.topicName = "";
     state.drafts.createKeywords = "";
-    setStatus("专题已创建，成果目录和分析关键词已准备好。", "success");
+    setStatus("专题已创建，分析口径已发布并展示给所有人。", "success");
     await openTopic(detail.topic.prefix, "agent");
   } catch (error) {
     showError(error);
@@ -290,11 +313,14 @@ async function submitCreateTopic(): Promise<void> {
 }
 
 async function submitTopicSettings(): Promise<void> {
-  if (!state.topic) {
+  if (!state.topic || !state.topic.canEditAnalysisScope) {
+    return;
+  }
+  if (!window.confirm("修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。确认发布本次修改吗？")) {
     return;
   }
   try {
-    setLoading(true, "正在保存专题设置...");
+    setLoading(true, "正在发布分析口径...");
     state.topic = await api<TopicDetail>("/topic", {
       method: "PUT",
       body: {
@@ -303,7 +329,7 @@ async function submitTopicSettings(): Promise<void> {
       },
     });
     state.drafts.settingsKeywords = state.topic.topic.analysisKeywords;
-    setStatus("专题设置已保存。", "success");
+    setStatus("分析口径已发布并展示给所有人。", "success");
     renderApp();
   } catch (error) {
     showError(error);
@@ -330,9 +356,14 @@ async function loadOverview(successMessage = ""): Promise<void> {
       return;
     }
     state.overview = overview;
+    featuredIndex = 0;
     state.loading = false;
     setStatus(successMessage || overviewStatus(overview), successMessage ? "success" : "neutral");
     renderApp();
+    const first = featuredItems()[0];
+    const trigger = root.querySelector<HTMLElement>("[data-featured-carousel]");
+    if (first && trigger) await openPreview(first.output.path, trigger);
+    scheduleFeaturedRotation();
   } catch (error) {
     if (isAbort(error)) {
       return;
@@ -462,7 +493,7 @@ function showCreateTopic(): void {
   state.mode = "create";
   state.topic = null;
   state.materialList = null;
-  setStatus("填写专题名称和分析关键词，系统会创建成果目录。");
+  setStatus("填写专题名称和分析口径，系统会创建成果目录。");
   renderApp();
   queueMicrotask(() => document.querySelector<HTMLInputElement>('[name="topicName"]')?.focus());
 }
@@ -902,7 +933,7 @@ function renderOverview(): TemplateResult {
   const topics = state.overview?.topics || [];
   const totalOutputs = topics.reduce((sum, topic) => sum + topic.outputCount, 0);
   const emptyTopics = topics.filter((topic) => topic.outputCount === 0).length;
-  const latest = topics.flatMap((topic) => (topic.latestOutput ? [{ topic, output: topic.latestOutput }] : [])).slice(0, 5);
+  const featured = featuredItems();
   return html`
     <section class="drive-dashboard">
       <div class="drive-page-head">
@@ -919,9 +950,9 @@ function renderOverview(): TemplateResult {
       </div>
       <div class="drive-two-column">
         <section class="drive-panel">
-          <div class="drive-panel-head"><h2>最近成果</h2><span>${latest.length ? "可预览或复制短时链接" : "暂无成果"}</span></div>
-          ${latest.length
-            ? repeat(latest, ({ output }) => output.path, ({ topic, output }) => renderLatestOutput(topic, output))
+          <div class="drive-panel-head"><h2>精选成果</h2><span>${featured.length ? `${featuredIndex + 1} / ${featured.length}` : "暂无精选"}</span></div>
+          ${featured.length
+            ? renderFeaturedCarousel(featured[featuredIndex] || featured[0], featured.length)
             : renderEmpty("ph-tray", "还没有可交付成果", "")}
         </section>
         <section class="drive-panel">
@@ -945,8 +976,8 @@ function renderCreateTopic(): TemplateResult {
           <input data-draft="topicName" name="topicName" type="text" autocomplete="off" .value=${state.drafts.topicName} required />
         </label>
         <label class="drive-field">
-          <span>分析关键词</span>
-          <textarea data-draft="createKeywords" name="analysisKeywords" rows="6" placeholder="填写关注主题、分析维度、资料口径等，可使用多行文本。" .value=${state.drafts.createKeywords} required></textarea>
+          <span>分析口径</span>
+          <textarea data-draft="createKeywords" name="analysisKeywords" rows="6" placeholder="填写关注主题、分析维度、数据范围和判断标准等，可使用多行文本。" .value=${state.drafts.createKeywords} required></textarea>
         </label>
         <div class="drive-form-actions">
           <button class="drive-control" type="button" data-action="cancel-create">取消</button>
@@ -969,7 +1000,7 @@ function renderTopic(): TemplateResult {
       <div class="drive-topic-headline">
         <button class="drive-link-button" type="button" data-action="back-overview"><i class="ph ph-arrow-left" aria-hidden="true"></i>成果概览</button>
         <div class="drive-topic-title-row">
-          <div><h1>${topic.name}</h1><p>${topic.analysisKeywords || "尚未填写分析关键词。"}</p></div>
+          <div><h1>${topic.name}</h1><p>${topic.analysisKeywords || "尚未填写分析口径。"}</p></div>
           <div class="drive-topic-meta">
             <span>创建人 ${topic.createdBy || "-"}</span><span>更新 ${formatDate(topic.updatedAt)}</span><span>${topic.prefix}</span>
           </div>
@@ -1001,8 +1032,9 @@ function renderOutputsTab(): TemplateResult {
 function renderMaterialsTab(): TemplateResult {
   const listing = state.materialList;
   const topicPrefix = state.topic?.topic.prefix || "";
-  const folders = listing?.folders.filter((folder) => folder.name !== "outputs") || [];
+  const folders = visibleMaterialFolders(listing?.folders || []);
   const files = visibleMaterialFiles(listing?.files || []);
+  const isEmpty = listing ? isMaterialDirectoryEmpty(listing.folders, listing.files) : false;
   return html`
     <section class="drive-tab-panel" role="tabpanel" aria-label="资料">
       <div class="drive-material-toolbar">
@@ -1016,7 +1048,11 @@ function renderMaterialsTab(): TemplateResult {
           </label>
         </div>
       </div>
-      ${listing ? html`${renderFolderList(folders)}${renderFileTable(files, { outputMode: false, empty: "当前目录没有资料。" })}` : renderInlineSkeleton()}
+      ${listing
+        ? isEmpty
+          ? renderEmpty("ph-files", "当前目录没有资料。", "")
+          : renderMaterialTable(folders, files)
+        : renderInlineSkeleton()}
     </section>
   `;
 }
@@ -1027,11 +1063,11 @@ function renderAgentTab(): TemplateResult {
     <section class="drive-tab-panel" role="tabpanel" aria-label="Agent">
       ${hasKeywords
         ? nothing
-        : html`<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>请先在设置中填写分析关键词，再执行 Agent 流程。</wa-callout>`}
+        : html`<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>请先由专题创建者在设置中填写分析口径，再执行 Agent 流程。</wa-callout>`}
       <div class="drive-agent-grid">
         <div class="drive-agent-card">
           <h2>1. 获取资料并分析</h2>
-          <p>复制后交给本地 Agent。它会读取短时资料链接，并只按分析关键词完成结构化分析，不生成文件。</p>
+          <p>复制后交给本地 Agent。它会读取短时资料链接，并只按分析口径完成结构化分析，不生成文件。</p>
           <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest" ?disabled=${!hasKeywords || state.busyAction !== null}>
             <i class="ph ph-clipboard-text" aria-hidden="true"></i>${state.busyAction === "agent-manifest" ? "正在生成..." : "复制第一阶段提示词"}
           </button>
@@ -1052,44 +1088,68 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
   if (!state.topic) {
     return nothing;
   }
+  const canEdit = state.topic.canEditAnalysisScope;
   return html`
     <section class="drive-tab-panel" role="tabpanel" aria-label="设置">
       <form class="drive-form drive-settings-form" data-settings-form>
+        <wa-callout class="drive-agent-callout" variant=${canEdit ? "danger" : "warning"}>
+          <i class=${`ph ${canEdit ? "ph-warning-octagon" : "ph-lock"}`} slot="icon" aria-hidden="true"></i>
+          ${canEdit
+            ? "强提醒：修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。保存前请确认内容准确。"
+            : `分析口径由专题创建者 ${state.topic.topic.createdBy || "-"} 维护并展示给所有人，只有创建者可以修改。`}
+        </wa-callout>
         <label class="drive-field">
-          <span>分析关键词</span>
-          <textarea data-draft="settingsKeywords" name="analysisKeywords" rows="6" .value=${state.drafts.settingsKeywords} required></textarea>
+          <span>分析口径</span>
+          <textarea data-draft="settingsKeywords" name="analysisKeywords" rows="6" .value=${state.drafts.settingsKeywords} ?readonly=${!canEdit} required></textarea>
         </label>
         <div class="drive-form-actions">
-          <button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}><i class="ph ph-floppy-disk" aria-hidden="true"></i>保存设置</button>
-          <button class="drive-control drive-control-danger" type="button" data-action="delete-topic"><i class="ph ph-trash" aria-hidden="true"></i>删除专题</button>
+          ${canEdit
+            ? html`<button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}><i class="ph ph-broadcast" aria-hidden="true"></i>确认并发布分析口径</button>`
+            : nothing}
+          ${state.topic.canDeleteTopic
+            ? html`<button class="drive-control drive-control-danger" type="button" data-action="delete-topic"><i class="ph ph-trash" aria-hidden="true"></i>删除专题</button>`
+            : nothing}
         </div>
       </form>
     </section>
   `;
 }
 
-function renderLatestOutput(topic: DriveOverviewTopic, output: NonNullable<DriveOverviewTopic["latestOutput"]>): TemplateResult {
+function renderFeaturedCarousel(item: { topic: DriveOverviewTopic; output: NonNullable<DriveOverviewTopic["featuredOutput"]> }, count: number): TemplateResult {
+  const { topic, output } = item;
   return html`
-    <div class="drive-output-item">
-      <article class="drive-output-card">
+    <div class="drive-featured-carousel" data-featured-carousel aria-roledescription="carousel" aria-label="精选成果">
+      <article class="drive-featured-card">
         <div class="drive-file-symbol"><i class=${`ph ${fileIconName(output)}`} aria-hidden="true"></i></div>
         <div class="drive-output-main">
           <button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${output.name}</button>
-          <p>${topic.name} · ${formatDate(output.uploadedAt || output.lastModified)} · ${formatBytes(output.size || 0)}</p>
+          <p><strong>${topic.name}</strong> · 创建者 ${output.uploadedBy || "-"} · ${formatDate(output.uploadedAt || output.lastModified)}</p>
         </div>
         <div class="drive-row-actions">
-          ${canPreview(output) ? actionButton("预览", "preview", output.path) : nothing}${actionButton("链接", "copy-link", output.path)}${actionButton("下载", "download", output.path)}
+          ${actionButton("链接", "copy-link", output.path)}${actionButton("下载", "download", output.path)}
         </div>
       </article>
       ${renderInlinePdf(output.path)}
+      ${state.preview?.file.path === output.path && state.preview.kind !== "pdf" ? renderFeaturedNonPdfPreview() : nothing}
+      <div class="drive-featured-controls">
+        <button class="drive-icon-button" type="button" data-action="featured-prev" aria-label="上一个精选成果" ?disabled=${count < 2}><i class="ph ph-caret-left"></i></button>
+        <div class="drive-featured-dots" aria-label="选择精选成果">${Array.from({ length: count }, (_, index) => html`<button type="button" data-action="featured-go" data-index=${index} class=${index === featuredIndex ? "is-active" : ""} aria-label=${`第 ${index + 1} 项`} aria-current=${index === featuredIndex ? "true" : "false"}></button>`)}</div>
+        <button class="drive-icon-button" type="button" data-action="featured-next" aria-label="下一个精选成果" ?disabled=${count < 2}><i class="ph ph-caret-right"></i></button>
+      </div>
     </div>
   `;
+}
+
+function renderFeaturedNonPdfPreview(): TemplateResult {
+  const preview = state.preview!;
+  const body = preview.loading ? renderInlineSkeleton() : preview.failed ? renderEmpty("ph-eye-slash", "无法预览", "可继续查看其他精选成果。") : preview.renderedHtml ? html`<article class="drive-preview-markdown">${unsafeHTML(preview.renderedHtml)}</article>` : preview.url ? html`<iframe class="drive-preview-frame" src=${preview.url} title=${preview.title} sandbox referrerpolicy="no-referrer"></iframe>` : nothing;
+  return html`<div class="drive-featured-preview">${body}</div>`;
 }
 
 function renderTopicCard(topic: DriveOverviewTopic): TemplateResult {
   return html`
     <article class="drive-topic-card">
-      <div><button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${topic.name}</button><p>${topic.analysisKeywords || "尚未填写分析关键词。"}</p></div>
+      <div><button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${topic.name}</button><p>${topic.analysisKeywords || "尚未填写分析口径。"}</p></div>
       <div class="drive-topic-card-meta"><span>${topic.outputCount} 个成果</span><span>更新 ${formatDateOnly(topic.updatedAt)}</span></div>
     </article>
   `;
@@ -1111,6 +1171,35 @@ function renderFileTable(files: DriveFile[], options: { outputMode: boolean; emp
   `;
 }
 
+function renderMaterialTable(folders: DriveFolder[], files: DriveFile[]): TemplateResult | typeof nothing {
+  if (!folders.length && !files.length) {
+    return nothing;
+  }
+  return html`
+    <div class="drive-file-table" role="table">
+      <div class="drive-file-row drive-file-row-head" role="row"><span>名称</span><span>类型</span><span>上传者</span><span>更新</span><span>操作</span></div>
+      ${repeat(folders, (folder) => folder.path, renderFolderRow)}
+      ${repeat(
+        files,
+        (file) => file.path,
+        (file) => html`${renderFileRow(file, false)}${renderInlinePdf(file.path, true)}`,
+      )}
+    </div>
+  `;
+}
+
+function renderFolderRow(folder: DriveFolder): TemplateResult {
+  return html`
+    <div class="drive-file-row" role="row">
+      <span class="drive-file-name" data-label="名称"><i class="ph ph-folder" aria-hidden="true"></i><span>${folder.name}</span></span>
+      <span data-label="类型">文件夹</span>
+      <span data-label="上传者">-</span>
+      <span data-label="更新">-</span>
+      <span class="drive-row-actions" data-label="操作">${actionButton("打开", "open-folder", folder.path)}</span>
+    </div>
+  `;
+}
+
 function renderFileRow(file: DriveFile, outputMode: boolean): TemplateResult {
   return html`
     <div class="drive-file-row" role="row">
@@ -1119,6 +1208,8 @@ function renderFileRow(file: DriveFile, outputMode: boolean): TemplateResult {
       <span data-label="上传者">${file.uploadedBy || "-"}</span>
       <span data-label="更新">${formatDate(file.uploadedAt || file.lastModified)}</span>
       <span class="drive-row-actions" data-label="操作">
+        ${outputMode && state.topic?.topic.featuredOutputPath === file.path ? html`<span class="drive-featured-badge"><i class="ph ph-star-fill"></i>精选</span>` : nothing}
+        ${outputMode && state.topic?.canManageFeaturedOutput && canPreview(file) && state.topic.topic.featuredOutputPath !== file.path ? actionButton("设为精选", "set-featured", file.path) : nothing}
         ${canPreview(file) ? actionButton("预览", "preview", file.path) : nothing}${outputMode ? actionButton("链接", "copy-link", file.path) : nothing}${actionButton("下载", "download", file.path)}${actionButton("删除", "delete-file", file.path, file.name, true)}
       </span>
     </div>
@@ -1136,21 +1227,6 @@ function renderInlinePdf(path: string, tableRow = false): TemplateResult | typeo
       ? renderEmpty("ph-eye-slash", "无法预览", "请下载文件后查看。")
       : html`<drive-pdf-preview .url=${preview.url} .title=${preview.title}></drive-pdf-preview>`;
   return html`<div class=${classMap({ "drive-inline-preview": true, "is-table-row": tableRow })}>${body}</div>`;
-}
-
-function renderFolderList(folders: DriveFolder[]): TemplateResult | typeof nothing {
-  if (!folders.length) {
-    return nothing;
-  }
-  return html`
-    <div class="drive-folder-grid">
-      ${repeat(
-        folders,
-        (folder) => folder.path,
-        (folder) => html`<button class="drive-folder-tile" type="button" data-action="open-folder" data-path=${folder.path}><i class="ph ph-folder" aria-hidden="true"></i><span>${folder.name}</span></button>`,
-      )}
-    </div>
-  `;
 }
 
 function renderBreadcrumbs(prefix: string): TemplateResult {
@@ -1173,7 +1249,7 @@ function renderBreadcrumbs(prefix: string): TemplateResult {
 
 function renderPreviewDrawer(): TemplateResult | typeof nothing {
   const preview = state.preview;
-  if (!preview || preview.kind === "pdf") {
+  if (!preview || preview.kind === "pdf" || state.mode === "overview") {
     return nothing;
   }
   const body = preview.loading
@@ -1290,8 +1366,48 @@ function overviewStatus(overview: DriveOverview): string {
 function findFileByPath(path: string): DriveFile | undefined {
   const outputs = state.topic?.outputs || [];
   const materials = state.materialList?.files || [];
-  const overviewOutputs = (state.overview?.topics || []).flatMap((topic) => topic.latestOutput ? [topic.latestOutput] : []);
+  const overviewOutputs = (state.overview?.topics || []).flatMap((topic) => topic.featuredOutput ? [topic.featuredOutput] : []);
   return [...outputs, ...materials, ...overviewOutputs].find((file) => file.path === path);
+}
+
+function featuredItems(): Array<{ topic: DriveOverviewTopic; output: NonNullable<DriveOverviewTopic["featuredOutput"]> }> {
+  return (state.overview?.topics || []).flatMap((topic) => topic.featuredOutput ? [{ topic, output: topic.featuredOutput }] : []);
+}
+
+async function setFeaturedOutput(path: string): Promise<void> {
+  if (!state.topic?.canManageFeaturedOutput) return;
+  try {
+    setStatus("正在更新精选成果...");
+    state.topic = await api<TopicDetail>("/topic", { method: "PUT", body: { prefix: state.topic.topic.prefix, featuredOutputPath: path } });
+    setStatus("精选成果已更新。", "success");
+    renderApp();
+  } catch (error) {
+    showError(error);
+    renderApp();
+  }
+}
+
+async function showFeatured(index: number, trigger?: HTMLElement): Promise<void> {
+  const items = featuredItems();
+  if (!items.length) return;
+  featuredIndex = (index + items.length) % items.length;
+  closePreview(false);
+  renderApp();
+  const carousel = trigger?.isConnected ? trigger : root.querySelector<HTMLElement>("[data-featured-carousel]");
+  if (carousel) await openPreview(items[featuredIndex].output.path, carousel);
+  scheduleFeaturedRotation();
+}
+
+function setFeaturedPaused(paused: boolean): void {
+  featuredPaused = paused;
+  scheduleFeaturedRotation();
+}
+
+function scheduleFeaturedRotation(): void {
+  if (featuredTimer !== null) window.clearTimeout(featuredTimer);
+  featuredTimer = null;
+  if (state.mode !== "overview" || featuredPaused || featuredItems().length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  featuredTimer = window.setTimeout(() => void showFeatured(featuredIndex + 1), 8000);
 }
 
 function isUnauthorized(error: unknown): boolean {

@@ -1,4 +1,5 @@
 import type { DriveOverview, DriveOverviewTopic, TopicDetail, TopicMetadata } from "./topic";
+import { isDriveAdmin } from "./session";
 
 export interface TopicMetadataApiResponse extends TopicMetadata {
   /** @deprecated Use analysisKeywords. */
@@ -7,15 +8,22 @@ export interface TopicMetadataApiResponse extends TopicMetadata {
 
 export interface TopicDetailApiResponse extends Omit<TopicDetail, "topic"> {
   topic: TopicMetadataApiResponse;
+  canEditAnalysisScope: boolean;
+  canManageFeaturedOutput: boolean;
+  canDeleteTopic: boolean;
 }
 
 export interface DriveOverviewApiResponse extends Omit<DriveOverview, "topics"> {
   topics: Array<DriveOverviewTopic & { /** @deprecated Use analysisKeywords. */ description: string }>;
 }
 
-export function toTopicDetailApiResponse(detail: TopicDetail): TopicDetailApiResponse {
+export function toTopicDetailApiResponse(detail: TopicDetail, viewerDisplayName?: string): TopicDetailApiResponse {
+  const canManageTopic = detail.topic.createdBy === viewerDisplayName || Boolean(viewerDisplayName && isDriveAdmin(viewerDisplayName));
   return {
     ...detail,
+    canEditAnalysisScope: canManageTopic,
+    canManageFeaturedOutput: canManageTopic,
+    canDeleteTopic: Boolean(viewerDisplayName && isDriveAdmin(viewerDisplayName)),
     topic: {
       ...detail.topic,
       description: detail.topic.analysisKeywords,

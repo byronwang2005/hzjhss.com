@@ -18,7 +18,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       origin,
     });
     if (!detail.topic.analysisKeywords.trim()) {
-      throw new Error("请先在设置中填写分析关键词");
+      throw new Error("请先在设置中填写分析口径");
     }
     const pdfPath = createAgentOutputPath(detail.topic);
     const capability = await createAgentOutputToken(env, {

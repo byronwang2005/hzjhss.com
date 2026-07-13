@@ -2,7 +2,7 @@ import type { DriveEnv } from "../../../src/drive/config";
 import { toTopicDetailApiResponse } from "../../../src/drive/api-responses";
 import { getDriveConfig } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createTopic, deleteTopic, readTopic, updateTopic } from "../../../src/drive/topic";
+import { createTopic, deleteTopic, readTopic, updateFeaturedOutput, updateTopic } from "../../../src/drive/topic";
 
 export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -16,7 +16,7 @@ export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) =>
       displayName: session.displayName,
       origin: url.origin,
     });
-    return jsonResponse(toTopicDetailApiResponse(detail));
+    return jsonResponse(toTopicDetailApiResponse(detail, session.displayName));
   } catch (error) {
     return errorResponse(error);
   }
@@ -37,7 +37,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       displayName: session.displayName,
       origin: new URL(request.url).origin,
     });
-    return jsonResponse(toTopicDetailApiResponse(detail));
+    return jsonResponse(toTopicDetailApiResponse(detail, session.displayName));
   } catch (error) {
     return errorResponse(error);
   }
@@ -51,14 +51,21 @@ export const onRequestPut: PagesFunction<DriveEnv> = async ({ request, env }) =>
     }
 
     const body = await readJsonBody(request);
-    const detail = await updateTopic(getDriveConfig(env), {
+    const detail = Object.prototype.hasOwnProperty.call(body, "featuredOutputPath")
+      ? await updateFeaturedOutput(getDriveConfig(env), {
+          prefix: body.prefix,
+          path: body.featuredOutputPath,
+          displayName: session.displayName,
+          origin: new URL(request.url).origin,
+        })
+      : await updateTopic(getDriveConfig(env), {
       prefix: body.prefix,
       analysisKeywords: body.analysisKeywords,
       description: body.description,
       displayName: session.displayName,
       origin: new URL(request.url).origin,
-    });
-    return jsonResponse(toTopicDetailApiResponse(detail));
+        });
+    return jsonResponse(toTopicDetailApiResponse(detail, session.displayName));
   } catch (error) {
     return errorResponse(error);
   }

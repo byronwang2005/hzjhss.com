@@ -11,6 +11,7 @@ import {
   putObjectText,
 } from "./cos";
 import { normalizeFolderName, normalizeObjectPath, normalizePrefix } from "./paths";
+import { isDriveAdmin } from "./session";
 
 export const DRIVE_META_FILENAME = "._drive-meta.json";
 export const TOPIC_META_FILENAME = "._topic.json";
@@ -33,7 +34,7 @@ export interface DriveDirectoryMetadata {
 }
 
 export interface TopicMetadata {
-  version: 2;
+  version: 3;
   instanceId: string;
   name: string;
   prefix: string;
@@ -42,6 +43,7 @@ export interface TopicMetadata {
   createdAt: string;
   updatedBy: string;
   updatedAt: string;
+  featuredOutputPath: string | null;
 }
 
 export interface TopicDetail {
@@ -92,6 +94,7 @@ export interface DriveOverviewOutput {
   lastModified: string;
   contentType?: string;
   size: number;
+  uploadedBy?: string;
 }
 
 export interface DriveOverviewTopic {
@@ -101,7 +104,7 @@ export interface DriveOverviewTopic {
   createdBy: string;
   updatedAt: string;
   outputCount: number;
-  latestOutput?: DriveOverviewOutput;
+  featuredOutput?: DriveOverviewOutput;
 }
 
 export interface DriveOverview {
@@ -147,7 +150,7 @@ export async function createTopic(
   const analysisKeywords = normalizeAnalysisKeywords(input.analysisKeywords ?? input.description, true);
   const now = new Date().toISOString();
   const topic: TopicMetadata = {
-    version: 2,
+    version: 3,
     instanceId: createNonce(),
     name,
     prefix,
@@ -156,6 +159,7 @@ export async function createTopic(
     createdAt: now,
     updatedBy: input.displayName,
     updatedAt: now,
+    featuredOutputPath: null,
   };
   const existing = await getObjectText(config, `${prefix}${TOPIC_META_FILENAME}`);
   if (existing) {
@@ -204,12 +208,17 @@ export async function updateTopic(
     displayName: input.displayName,
     origin: input.origin,
   });
+  if (topic.createdBy !== input.displayName && !isDriveAdmin(input.displayName)) {
+    const error = new Error("只有专题创建者可以修改分析口径");
+    error.name = "DriveForbiddenError";
+    throw error;
+  }
   const rawKeywords = input.analysisKeywords ?? input.description;
   const analysisKeywords = rawKeywords == null ? topic.analysisKeywords : normalizeAnalysisKeywords(rawKeywords, true);
   const now = new Date().toISOString();
   const updatedTopic: TopicMetadata = {
     ...topic,
-    version: 2,
+    version: 3,
     analysisKeywords,
     updatedBy: input.displayName,
     updatedAt: now,
@@ -224,6 +233,31 @@ export async function updateTopic(
   return { topic: updatedTopic, outputs: await listOutputsForTopicInstance(config, updatedTopic) };
 }
 
+export async function updateFeaturedOutput(
+  config: DriveConfig,
+  input: { prefix: unknown; path: unknown; displayName: string; origin: string },
+): Promise<TopicDetail> {
+  const prefix = normalizeTopicPrefix(input.prefix);
+  const { topic } = await ensureTopicScaffold(config, prefix, { displayName: input.displayName, origin: input.origin });
+  if (topic.createdBy !== input.displayName && !isDriveAdmin(input.displayName)) {
+    const error = new Error("只有专题创建者或管理员可以设置精选成果");
+    error.name = "DriveForbiddenError";
+    throw error;
+  }
+  const path = normalizeObjectPath(input.path);
+  const outputs = await listOutputsForTopicInstance(config, topic);
+  const selected = outputs.find((file) => file.path === path);
+  if (!selected || !path.startsWith(`${prefix}${OUTPUTS_FOLDER_NAME}/`)) {
+    throw new Error("精选成果不属于当前专题");
+  }
+  if (!isPreviewableOutput(selected)) {
+    throw new Error("该成果格式不支持首页预览");
+  }
+  const updatedTopic = { ...topic, version: 3 as const, featuredOutputPath: path, updatedBy: input.displayName, updatedAt: new Date().toISOString() };
+  await writeTopicMetadata(config, updatedTopic, input.displayName);
+  return { topic: updatedTopic, outputs };
+}
+
 export async function deleteTopic(
   config: DriveConfig,
   input: { prefix: unknown; confirmName: unknown; displayName: string; origin: string },
@@ -233,6 +267,11 @@ export async function deleteTopic(
     displayName: input.displayName,
     origin: input.origin,
   });
+  if (!isDriveAdmin(input.displayName)) {
+    const error = new Error("只有管理员汪旭可以删除专题");
+    error.name = "DriveForbiddenError";
+    throw error;
+  }
   if (typeof input.confirmName !== "string" || input.confirmName.trim() !== topic.name) {
     throw new Error("专题名称确认不一致");
   }
@@ -249,14 +288,14 @@ export async function deleteTopic(
 export async function readDriveOverview(config: DriveConfig, options: TopicScaffoldOptions): Promise<DriveOverview> {
   const root = await listAllDirectoryWithMetadata(config, "");
   const topics = await Promise.all(
-    root.folders.map(async (folder): Promise<DriveOverviewTopic | null> => {
+    root.folders.map(async (folder): Promise<(DriveOverviewTopic & { sortTimestamp: number }) | null> => {
       try {
         const topic = await readTopicMetadataIfExists(config, folder.path);
         if (!topic) {
           return null;
         }
-        const outputs = (await listOutputsForTopicInstance(config, topic)).sort((a, b) => timestampForFile(b) - timestampForFile(a));
-        const latest = outputs[0];
+        const { topic: normalizedTopic, outputs } = await ensureFeaturedOutput(config, topic, options.displayName);
+        const featured = outputs.find((file) => file.path === normalizedTopic.featuredOutputPath);
         return {
           prefix: topic.prefix,
           name: topic.name,
@@ -264,14 +303,16 @@ export async function readDriveOverview(config: DriveConfig, options: TopicScaff
           createdBy: topic.createdBy,
           updatedAt: topic.updatedAt,
           outputCount: outputs.length,
-          latestOutput: latest
+          sortTimestamp: Math.max(timestampForFile(outputs[0] || { lastModified: "" }), Date.parse(topic.updatedAt) || 0),
+          featuredOutput: featured
             ? {
-                name: latest.name,
-                path: latest.path,
-                uploadedAt: latest.uploadedAt,
-                lastModified: latest.lastModified,
-                contentType: latest.contentType,
-                size: latest.size,
+                name: featured.name,
+                path: featured.path,
+                uploadedAt: featured.uploadedAt,
+                lastModified: featured.lastModified,
+                contentType: featured.contentType,
+                size: featured.size,
+                uploadedBy: featured.uploadedBy,
               }
             : undefined,
         };
@@ -283,8 +324,9 @@ export async function readDriveOverview(config: DriveConfig, options: TopicScaff
 
   return {
     topics: topics
-      .filter((topic): topic is DriveOverviewTopic => Boolean(topic))
-      .sort((a, b) => timestampForTopic(b) - timestampForTopic(a) || a.name.localeCompare(b.name, "zh-Hans-CN")),
+      .filter((topic): topic is DriveOverviewTopic & { sortTimestamp: number } => Boolean(topic))
+      .sort((a, b) => b.sortTimestamp - a.sortTimestamp || a.name.localeCompare(b.name, "zh-Hans-CN"))
+      .map(({ sortTimestamp: _sortTimestamp, ...topic }) => topic),
   };
 }
 
@@ -333,6 +375,13 @@ export async function recordUploadComplete(
     kind: normalizeUploadKind(input.kind, path),
   };
   await recordFileMetadata(config, path, meta);
+  if (meta.kind === "output") {
+    const topicPrefix = path.split(`${OUTPUTS_FOLDER_NAME}/`, 1)[0];
+    const topic = await readTopicMetadataIfExists(config, topicPrefix);
+    if (topic && !topic.featuredOutputPath && isPreviewableOutput({ path, name: fileNameFromPath(path), contentType: meta.contentType })) {
+      await writeTopicMetadata(config, { ...topic, version: 3, featuredOutputPath: path }, input.displayName);
+    }
+  }
   return { ...meta, path, name: fileNameFromPath(path) };
 }
 
@@ -346,6 +395,13 @@ export async function removeFileMetadata(config: DriveConfig, rawPath: unknown):
   }
   delete meta.files[name];
   await writeDriveMeta(config, prefix, meta);
+  if (path.includes(`/${OUTPUTS_FOLDER_NAME}/`) || path.startsWith(`${OUTPUTS_FOLDER_NAME}/`)) {
+    const topicPrefix = path.split(`${OUTPUTS_FOLDER_NAME}/`, 1)[0];
+    const topic = await readTopicMetadataIfExists(config, topicPrefix);
+    if (topic?.featuredOutputPath === path) {
+      await ensureFeaturedOutput(config, { ...topic, featuredOutputPath: null }, topic.updatedBy);
+    }
+  }
 }
 
 export async function createAgentManifest(
@@ -435,14 +491,14 @@ ${input.manifestUrl}
 - 有效期：${input.expiresIn} 秒
 - 资料数量：${input.fileCount}
 
-分析关键词（本阶段的分析依据）：
+分析口径（本阶段的分析依据）：
 ${input.topic.analysisKeywords}
 
 读取方法：
 1. 使用终端 curl 下载 manifest JSON。
 2. 遍历 manifest.files，使用终端 curl 下载每个文件的 signedUrl。
 3. 分析 PDF、HTML、Markdown、Word、Excel、PPT、图片等资料；无法解析时记录原因和文件 path。
-4. 围绕分析关键词输出资料索引和结构化分析，至少包含：来源 path、资料类型、作者或机构、发布日期、核心观点、关键数据、冲突观点、风险和待核验问题。
+4. 围绕分析口径输出资料索引和结构化分析，至少包含：来源 path、资料类型、作者或机构、发布日期、核心观点、关键数据、冲突观点、风险和待核验问题。
 5. 每个重要判断必须标注来源 path。此阶段只完成分析，不生成或上传成果文件。
 6. 分析完成后等待用户校正判断和确认最终口径；链接过期后停止读取，并提示用户重新复制第一阶段提示词。
 `;
@@ -473,7 +529,7 @@ export function createAgentOutputPrompt(input: {
 }): string {
   return `# ${input.topic.name}：第二阶段 · 成果生成与回传
 
-你是本地 AI agent。本阶段不再重新分析资料，也不要重新套用第一阶段的分析关键词。
+你是本地 AI agent。本阶段不再重新分析资料，也不要重新套用第一阶段的分析口径。
 
 传输要求：回传 API 和 COS PUT 必须使用终端 HTTP 客户端（优先 \`curl -fL --retry 3 --retry-all-errors\`）；禁止使用 \`web_fetch\`、网页打开、浏览器抓取或搜索工具。HTTP 403 / Error 1010 通常来自浏览器型抓取出口，遇到后直接改用终端 curl。
 
@@ -574,7 +630,7 @@ async function ensureTopicScaffold(
   if (!topic) {
     const name = topicNameFromPrefix(prefix);
     topic = {
-      version: 2,
+      version: 3,
       instanceId: createNonce(),
       name,
       prefix,
@@ -583,6 +639,7 @@ async function ensureTopicScaffold(
       createdAt: now,
       updatedBy: options.displayName,
       updatedAt: now,
+      featuredOutputPath: null,
     };
     await putObjectText(config, `${prefix}${TOPIC_META_FILENAME}`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
   }
@@ -615,7 +672,8 @@ async function ensureTopicScaffold(
     await writeDriveMeta(config, outputsPrefix, { version: 1, files: {} });
   }
 
-  return { topic };
+  const normalized = await ensureFeaturedOutput(config, topic, options.displayName);
+  return { topic: normalized.topic };
 }
 
 async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): Promise<TopicMetadata | null> {
@@ -624,11 +682,11 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
     return null;
   }
   const parsed = JSON.parse(text) as Omit<Partial<TopicMetadata>, "version"> & { version?: number; description?: unknown };
-  if ((parsed.version !== 1 && parsed.version !== 2) || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
+  if (![1, 2, 3].includes(parsed.version || 0) || typeof parsed.name !== "string" || typeof parsed.prefix !== "string") {
     throw new Error("专题元数据无效");
   }
   return {
-    version: 2,
+    version: 3,
     instanceId:
       typeof parsed.instanceId === "string" && /^[a-z0-9]{8,32}$/.test(parsed.instanceId)
         ? parsed.instanceId
@@ -645,6 +703,7 @@ async function readTopicMetadataIfExists(config: DriveConfig, prefix: string): P
     createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : "",
     updatedBy: typeof parsed.updatedBy === "string" ? parsed.updatedBy : "-",
     updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
+    featuredOutputPath: typeof parsed.featuredOutputPath === "string" ? parsed.featuredOutputPath : null,
   };
 }
 
@@ -671,8 +730,27 @@ function legacyTopicInstanceId(prefix: string, createdAt: string): string {
   return `legacy${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function timestampForTopic(topic: Pick<DriveOverviewTopic, "updatedAt" | "latestOutput">): number {
-  return Math.max(Date.parse(topic.latestOutput?.uploadedAt || topic.latestOutput?.lastModified || "") || 0, Date.parse(topic.updatedAt) || 0);
+export function isPreviewableOutput(file: Pick<DriveFile, "name" | "contentType" | "path">): boolean {
+  const name = file.name.toLowerCase();
+  const contentType = (file.contentType || "").toLowerCase();
+  return /\.(pdf|html?|md|markdown|txt)$/i.test(name) || contentType === "application/pdf" || contentType.startsWith("text/");
+}
+
+async function ensureFeaturedOutput(config: DriveConfig, topic: TopicMetadata, actor: string): Promise<{ topic: TopicMetadata; outputs: DriveFile[] }> {
+  const outputs = (await listOutputsForTopicInstance(config, topic)).sort((a, b) => timestampForFile(b) - timestampForFile(a));
+  const eligible = outputs.filter(isPreviewableOutput);
+  const featuredOutputPath = eligible.some((file) => file.path === topic.featuredOutputPath) ? topic.featuredOutputPath : eligible[0]?.path || null;
+  if (topic.version !== 3 || featuredOutputPath !== topic.featuredOutputPath) {
+    topic = { ...topic, version: 3, featuredOutputPath };
+    await writeTopicMetadata(config, topic, actor);
+  }
+  return { topic, outputs };
+}
+
+async function writeTopicMetadata(config: DriveConfig, topic: TopicMetadata, actor: string): Promise<void> {
+  const text = JSON.stringify(topic, null, 2);
+  await putObjectText(config, `${topic.prefix}${TOPIC_META_FILENAME}`, text, "application/json; charset=utf-8");
+  await recordFileMetadata(config, `${topic.prefix}${TOPIC_META_FILENAME}`, fileMetadata(actor, text, "application/json; charset=utf-8", "topic", new Date().toISOString()));
 }
 
 function timestampForFile(file: Pick<DriveFile, "uploadedAt" | "lastModified">): number {
@@ -724,10 +802,10 @@ function fileMetadata(
 
 function normalizeAnalysisKeywords(input: unknown, required = false): string {
   if (typeof input !== "string") {
-    throw new Error("分析关键词无效");
+    throw new Error("分析口径无效");
   }
   if (input.length > 3000) {
-    throw new Error("分析关键词过长");
+    throw new Error("分析口径过长");
   }
   const value = input.trim();
   if (required) {
@@ -738,7 +816,7 @@ function normalizeAnalysisKeywords(input: unknown, required = false): string {
 
 function requireAnalysisKeywords(value: string): void {
   if (!value.trim()) {
-    throw new Error("请填写分析关键词");
+    throw new Error("请填写分析口径");
   }
 }
 

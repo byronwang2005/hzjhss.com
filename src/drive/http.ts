@@ -38,6 +38,11 @@ export async function readDriveSession(context: AuthedContext): Promise<DriveSes
 
 export function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : "请求处理失败";
-  const status = message.includes("Missing required environment variable") ? 500 : 400;
+  const status =
+    error instanceof Error && error.name === "DriveForbiddenError"
+      ? 403
+      : message.includes("Missing required environment variable")
+        ? 500
+        : 400;
   return jsonResponse({ error: message }, status);
 }

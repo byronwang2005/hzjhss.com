@@ -23,7 +23,7 @@ export interface DriveListResult {
 }
 
 export interface TopicMetadata {
-  version: 2;
+  version: 3;
   instanceId: string;
   name: string;
   prefix: string;
@@ -32,11 +32,15 @@ export interface TopicMetadata {
   createdAt: string;
   updatedBy: string;
   updatedAt: string;
+  featuredOutputPath: string | null;
 }
 
 export interface TopicDetail {
   topic: TopicMetadata;
   outputs: DriveFile[];
+  canEditAnalysisScope: boolean;
+  canDeleteTopic: boolean;
+  canManageFeaturedOutput: boolean;
 }
 
 export interface DriveOverviewOutput {
@@ -46,6 +50,7 @@ export interface DriveOverviewOutput {
   lastModified: string;
   contentType?: string;
   size: number;
+  uploadedBy?: string;
 }
 
 export interface DriveOverviewTopic {
@@ -55,7 +60,7 @@ export interface DriveOverviewTopic {
   createdBy: string;
   updatedAt: string;
   outputCount: number;
-  latestOutput?: DriveOverviewOutput;
+  featuredOutput?: DriveOverviewOutput;
 }
 
 export interface DriveOverview {
