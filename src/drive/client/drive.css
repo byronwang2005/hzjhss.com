@@ -748,12 +748,9 @@ a {
   cursor: pointer;
 }
 
-.drive-upload-trigger input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+.drive-upload-actions > [data-file-input],
+.drive-upload-actions > [data-folder-input] {
+  display: none;
 }
 
 .drive-breadcrumbs {

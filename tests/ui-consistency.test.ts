@@ -60,6 +60,17 @@ describe("shared UI system", () => {
     expect(mobileCss).toMatch(/\.drive-row-actions \{[\s\S]*?justify-content: flex-start;/);
   });
 
+  it("keeps native file and folder inputs hidden behind the upload actions", () => {
+    const driveCss = readFileSync("src/drive/client/drive.css", "utf8");
+    const hiddenUploadInputs = driveCss.match(
+      /\.drive-upload-actions > \[data-file-input\],\s*\.drive-upload-actions > \[data-folder-input\] \{([^}]*)\}/,
+    );
+
+    expect(hiddenUploadInputs).not.toBeNull();
+    expect(hiddenUploadInputs?.[1]).toContain("display: none;");
+    expect(driveCss).not.toContain(".drive-upload-trigger input");
+  });
+
   it("locks interaction motion to shared nonlinear curves", () => {
     const declarations = cssSource.match(/(?:transition|animation)\s*:[^;]+;/g) || [];
     for (const declaration of declarations) {
