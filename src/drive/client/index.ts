@@ -130,6 +130,7 @@ if (!rootElement) {
 
 const root = rootElement;
 
+root.replaceChildren();
 root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
 root.addEventListener("change", (event) => void handleChange(event));

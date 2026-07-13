@@ -1852,12 +1852,6 @@ pre code {
   align-items: center;
 }
 
-.home-gxy-lockup.is-gxy-hidden .header-portrait {
-  visibility: visible;
-  opacity: 1;
-  transform: none;
-}
-
 .home-gxy-lockup.is-gxy-hidden .header-speech {
   visibility: hidden;
   opacity: 0;
