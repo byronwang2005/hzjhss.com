@@ -103,4 +103,20 @@ describe("drive client topic navigation", () => {
     expect(source).toContain('if (tab === "settings" && !canViewSettings())');
     expect(source).toContain('if (!canViewSettings()) {\n      state.activeTab = "agent";');
   });
+
+  it("uses an in-app confirmation dialog when publishing analysis settings", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source).toContain('data-settings-confirm-dialog open label="确认发布分析口径"');
+    expect(source).toContain('data-action="confirm-settings-publish"');
+    expect(source).not.toContain("强提醒：");
+    expect(source).not.toContain('window.confirm("修改后的分析口径');
+  });
+
+  it("labels the global analysis scope and provides methodology guidance", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source.match(/全局分析口径（他人不可修改）/g)).toHaveLength(2);
+    expect(source).toContain("应尽可能详细说明分析该专题的方法论");
+    expect(source).not.toContain("事实与推断须分开标注");
+    expect(source).not.toContain("反向证据、敏感变量、潜在偏差和待核验事项");
+  });
 });

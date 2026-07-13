@@ -81,6 +81,7 @@ interface AppState {
   upload: { active: boolean; name: string; percent: number; total: number };
   preview: PreviewState | null;
   pendingDelete: { type: "file" | "topic"; path?: string; prefix?: string; name: string } | null;
+  pendingSettingsPublish: boolean;
   deleteConfirmText: string;
   busyAction: "agent-manifest" | "agent-output-task" | null;
   ownerCandidates: OwnerCandidatesResponse | null;
@@ -116,6 +117,7 @@ const state: AppState = {
   upload: { active: false, name: "", percent: 0, total: 0 },
   preview: null,
   pendingDelete: null,
+  pendingSettingsPublish: false,
   deleteConfirmText: "",
   busyAction: null,
   ownerCandidates: null,
@@ -165,6 +167,10 @@ root.addEventListener("wa-after-hide", (event) => {
   if (target.matches("[data-delete-dialog]")) {
     state.pendingDelete = null;
     state.deleteConfirmText = "";
+    renderApp();
+  }
+  if (target.matches("[data-settings-confirm-dialog]")) {
+    state.pendingSettingsPublish = false;
     renderApp();
   }
 });
@@ -229,6 +235,10 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await confirmDelete();
   } else if (action === "cancel-delete") {
     closeDeleteDialog();
+  } else if (action === "confirm-settings-publish") {
+    await publishTopicSettings();
+  } else if (action === "cancel-settings-publish") {
+    closeSettingsPublishDialog();
   } else if (action === "agent-manifest") {
     await copyAgentManifest();
   } else if (action === "agent-output-task") {
@@ -333,10 +343,14 @@ async function submitTopicSettings(): Promise<void> {
   if (!state.topic || !state.topic.canEditAnalysisScope) {
     return;
   }
-  if (!window.confirm("修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。确认发布本次修改吗？")) {
-    return;
-  }
+  state.pendingSettingsPublish = true;
+  renderApp();
+}
+
+async function publishTopicSettings(): Promise<void> {
+  if (!state.topic || !state.topic.canEditAnalysisScope || !state.pendingSettingsPublish) return;
   try {
+    state.pendingSettingsPublish = false;
     setLoading(true, "正在发布分析口径...");
     state.topic = await api<TopicDetail>("/topic", {
       method: "PUT",
@@ -354,6 +368,11 @@ async function submitTopicSettings(): Promise<void> {
   } finally {
     setLoading(false);
   }
+}
+
+function closeSettingsPublishDialog(): void {
+  state.pendingSettingsPublish = false;
+  renderApp();
 }
 
 async function transferTopicOwner(): Promise<void> {
@@ -418,6 +437,7 @@ async function loadOverview(successMessage = ""): Promise<void> {
     state.mode = "overview";
     state.loading = true;
     state.topic = null;
+    state.pendingSettingsPublish = false;
     state.materialList = null;
     state.materialPrefix = "";
     renderApp();
@@ -564,6 +584,7 @@ async function logout(): Promise<void> {
   state.mode = "login";
   state.overview = null;
   state.topic = null;
+  state.pendingSettingsPublish = false;
   state.ownerCandidates = null;
   setStatus("已退出登录。");
   renderApp();
@@ -573,6 +594,7 @@ function showCreateTopic(): void {
   closePreview(false);
   state.mode = "create";
   state.topic = null;
+  state.pendingSettingsPublish = false;
   state.materialList = null;
   setStatus("填写专题名称和分析口径，系统会创建成果目录。");
   renderApp();
@@ -941,7 +963,7 @@ function renderApp(): void {
           ${state.mode === "create" ? renderCreateTopic() : nothing}
           ${state.mode === "topic" ? renderTopic() : nothing}
         </main>
-        ${renderPreviewDrawer()} ${renderDeleteDialogMarkup()}
+        ${renderPreviewDrawer()} ${renderDeleteDialogMarkup()} ${renderSettingsPublishDialogMarkup()}
       </div>
     `,
     root,
@@ -1057,8 +1079,9 @@ function renderCreateTopic(): TemplateResult {
           <input data-draft="topicName" name="topicName" type="text" autocomplete="off" .value=${state.drafts.topicName} required />
         </label>
         <label class="drive-field">
-          <span>分析口径</span>
-          <textarea data-draft="createKeywords" name="analysisKeywords" rows="6" placeholder="填写关注主题、分析维度、数据范围和判断标准等，可使用多行文本。" .value=${state.drafts.createKeywords} required></textarea>
+          <span>全局分析口径（他人不可修改）</span>
+          ${renderAnalysisScopeGuidance()}
+          <textarea data-draft="createKeywords" name="analysisKeywords" rows="10" .value=${state.drafts.createKeywords} required></textarea>
         </label>
         <div class="drive-form-actions">
           <button class="drive-control" type="button" data-action="cancel-create">取消</button>
@@ -1109,7 +1132,7 @@ function renderOutputsTab(): TemplateResult {
       <div class="drive-panel-head"><h2>专题成果</h2><span>${outputs.length} 个文件</span></div>
       ${outputs.length
         ? renderFileTable(outputs, { outputMode: true, empty: "" })
-        : renderEmpty("ph-package", "这个专题还没有成果", "依次执行 Agent 两个阶段，确认最终口径后回传 PDF。")}
+        : renderEmpty("ph-package", "这个专题还没有成果", "请先依次执行Agent的两个阶段")}
     </section>
   `;
 }
@@ -1178,15 +1201,10 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
   return html`
     <section class="drive-tab-panel" role="tabpanel" aria-label="设置">
       <form class="drive-form drive-settings-form" data-settings-form>
-        <wa-callout class="drive-agent-callout" variant=${canEdit ? "danger" : "warning"}>
-          <i class=${`ph ${canEdit ? "ph-warning-octagon" : "ph-lock"}`} slot="icon" aria-hidden="true"></i>
-          ${canEdit
-            ? "强提醒：修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。保存前请确认内容准确。"
-            : `分析口径由专题负责人 ${state.topic.topic.owner || "-"} 维护并展示给所有人，只有负责人或管理员可以修改。`}
-        </wa-callout>
         <label class="drive-field">
-          <span>分析口径</span>
-          <textarea data-draft="settingsKeywords" name="analysisKeywords" rows="6" .value=${state.drafts.settingsKeywords} ?readonly=${!canEdit} required></textarea>
+          <span>全局分析口径（他人不可修改）</span>
+          ${renderAnalysisScopeGuidance()}
+          <textarea data-draft="settingsKeywords" name="analysisKeywords" rows="10" .value=${state.drafts.settingsKeywords} ?readonly=${!canEdit} required></textarea>
         </label>
         <div class="drive-form-actions">
           ${canEdit
@@ -1419,6 +1437,23 @@ function renderDeleteDialogMarkup(): TemplateResult | typeof nothing {
   `;
 }
 
+function renderSettingsPublishDialogMarkup(): TemplateResult | typeof nothing {
+  if (!state.pendingSettingsPublish || !canViewSettings()) {
+    return nothing;
+  }
+  return html`
+    <wa-dialog data-settings-confirm-dialog open label="确认发布分析口径" style="--width: min(520px, 94vw);">
+      <div class="drive-delete-body">
+        <p>修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。保存前请确认内容准确。</p>
+      </div>
+      <div slot="footer" class="drive-dialog-actions">
+        <button class="drive-control" type="button" data-action="cancel-settings-publish">取消</button>
+        <button class="drive-control drive-control-primary" type="button" data-action="confirm-settings-publish">确认发布</button>
+      </div>
+    </wa-dialog>
+  `;
+}
+
 function renderUploadProgress(): TemplateResult | typeof nothing {
   if (!state.upload.active) {
     return nothing;
@@ -1442,6 +1477,10 @@ function renderPageHeadSkeleton(): TemplateResult {
 
 function renderInlineSkeleton(): TemplateResult {
   return html`<div class="drive-inline-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>`;
+}
+
+function renderAnalysisScopeGuidance(): TemplateResult {
+  return html`<small>应尽可能详细说明分析该专题的方法论</small>`;
 }
 
 function renderEmpty(icon: string, title: string, body: string): TemplateResult {
