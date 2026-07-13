@@ -138,7 +138,7 @@ describe("drive client topic navigation", () => {
 
   it("uses the same copy icon for both Agent prompt buttons", () => {
     const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
-    expect(source.match(/ph ph-clipboard-text/g)).toHaveLength(2);
-    expect(source).not.toContain("ph ph-file-arrow-up");
+    expect(source.match(/renderDriveIcon\("clipboard-text", "bold"\)/g)).toHaveLength(2);
+    expect(source).not.toContain('renderDriveIcon("file-arrow-up"');
   });
 });

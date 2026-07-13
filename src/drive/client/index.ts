@@ -5,7 +5,6 @@ import "@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js";
 import "@awesome.me/webawesome/dist/components/tooltip/tooltip.js";
 import "@awesome.me/webawesome/dist/components/callout/callout.js";
 import "pdfjs-dist/web/pdf_viewer.css";
-import "./phosphor-drive.css";
 import "./drive.css";
 
 import Uppy from "@uppy/core";
@@ -17,6 +16,7 @@ import { classMap } from "lit/directives/class-map.js";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import MarkdownIt from "markdown-it";
+import { renderIcon as renderDriveIcon } from "./icons";
 import type {
   DriveFile,
   DriveFolder,
@@ -984,7 +984,7 @@ function renderTopbar(): TemplateResult {
         </a>
         ${state.mode !== "login" ? controlButton("退出登录", "ph-sign-out", "logout", false, "", "drive-logout-button") : nothing}
       </div>
-      <nav class="drive-nav" aria-label="专题资料库导航"><a href="./index.html">返回首页</a></nav>
+      <nav class="drive-nav" aria-label="专题资料库导航"><a href="./index.html">${renderDriveIcon("house")}返回首页</a></nav>
     </header>
   `;
 }
@@ -1002,7 +1002,7 @@ function renderStatus(): TemplateResult | typeof nothing {
           "is-success": state.statusTone === "success",
         })}
       >
-        <i class=${`ph ${state.loading ? "ph-circle-notch drive-spin" : "ph-info"}`} aria-hidden="true"></i>
+        ${renderDriveIcon(state.loading ? "circle-notch" : "info", "regular", state.loading ? "drive-spin" : "")}
         <span>${state.status || "正在处理..."}</span>
       </div>
       ${renderUploadProgress()}
@@ -1026,7 +1026,7 @@ function renderLogin(): TemplateResult {
           <small>登录态会定时失效，请勿在公共设备保存访问码。</small>
         </label>
         <button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}>
-          <i class="ph ph-arrow-right" aria-hidden="true"></i>进入资料库
+          ${renderDriveIcon("arrow-right", "bold")}进入资料库
         </button>
       </form>
     </section>
@@ -1088,9 +1088,9 @@ function renderCreateTopic(): TemplateResult {
           <textarea data-draft="createKeywords" name="analysisKeywords" rows="10" .value=${state.drafts.createKeywords} required></textarea>
         </label>
         <div class="drive-form-actions">
-          <button class="drive-control" type="button" data-action="cancel-create">取消</button>
+          <button class="drive-control" type="button" data-action="cancel-create">${renderDriveIcon("x-circle")}取消</button>
           <button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}>
-            <i class="ph ph-check" aria-hidden="true"></i>创建专题
+            ${renderDriveIcon("check", "bold")}创建专题
           </button>
         </div>
       </form>
@@ -1106,7 +1106,7 @@ function renderTopic(): TemplateResult {
   return html`
     <section class="drive-topic-workbench">
       <div class="drive-topic-headline">
-        <button class="drive-link-button" type="button" data-action="back-overview"><i class="ph ph-arrow-left" aria-hidden="true"></i>成果概览</button>
+        <button class="drive-link-button" type="button" data-action="back-overview">${renderDriveIcon("arrow-left")}成果概览</button>
         <div class="drive-topic-title-row">
           <div><h1>${topic.name}</h1><p>${topic.analysisKeywords || "尚未填写分析口径。"}</p></div>
           <div class="drive-topic-meta">
@@ -1153,10 +1153,10 @@ function renderMaterialsTab(): TemplateResult {
         <div><h2>资料库</h2>${renderBreadcrumbs(state.materialPrefix || topicPrefix)}</div>
         <div class="drive-upload-actions">
           <label class="drive-control drive-control-primary drive-upload-trigger">
-            <i class="ph ph-upload-simple" aria-hidden="true"></i>上传文件<input data-file-input type="file" multiple />
+            ${renderDriveIcon("upload-simple", "bold")}上传文件<input data-file-input type="file" multiple />
           </label>
           <label class="drive-control drive-upload-trigger">
-            <i class="ph ph-folder-simple-plus" aria-hidden="true"></i>上传文件夹<input data-folder-input type="file" webkitdirectory multiple />
+            ${renderDriveIcon("folder-simple-plus")}上传文件夹<input data-folder-input type="file" webkitdirectory multiple />
           </label>
         </div>
       </div>
@@ -1175,7 +1175,7 @@ function renderAgentTab(): TemplateResult {
     <section class="drive-tab-panel" role="tabpanel" aria-label="Agent">
       ${hasKeywords
         ? nothing
-        : html`<wa-callout class="drive-agent-callout" variant="warning"><i class="ph ph-warning" slot="icon" aria-hidden="true"></i>请先由专题负责人在设置中填写分析口径，再执行 Agent 流程。</wa-callout>`}
+        : html`<wa-callout class="drive-agent-callout" variant="warning"><span slot="icon">${renderDriveIcon("warning")}</span>请先由专题负责人在设置中填写分析口径，再执行 Agent 流程。</wa-callout>`}
       <div class="drive-agent-grid">
         <div class="drive-agent-card">
           <h2>1. 获取资料并分析</h2>
@@ -1193,14 +1193,14 @@ function renderAgentTab(): TemplateResult {
             />
           </label>
           <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest" ?disabled=${!hasKeywords || state.busyAction !== null}>
-            <i class="ph ph-clipboard-text" aria-hidden="true"></i>${state.busyAction === "agent-manifest" ? "正在生成..." : "复制第一阶段提示词"}
+            ${renderDriveIcon("clipboard-text", "bold")}${state.busyAction === "agent-manifest" ? "正在生成..." : "复制第一阶段提示词"}
           </button>
         </div>
         <div class="drive-agent-card">
           <h2>2. 转换格式并回传</h2>
           <p>请先在同一会话中校正判断并确认最终口径。第二阶段只转换为 PDF，并使用无 Cookie 的短时授权回传。</p>
           <button class="drive-control drive-control-primary" type="button" data-action="agent-output-task" ?disabled=${!hasKeywords || state.busyAction !== null}>
-            <i class="ph ph-clipboard-text" aria-hidden="true"></i>${state.busyAction === "agent-output-task" ? "正在生成..." : "复制第二阶段提示词"}
+            ${renderDriveIcon("clipboard-text", "bold")}${state.busyAction === "agent-output-task" ? "正在生成..." : "复制第二阶段提示词"}
           </button>
         </div>
       </div>
@@ -1224,10 +1224,10 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
         </label>
         <div class="drive-form-actions">
           ${canEdit
-            ? html`<button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}><i class="ph ph-broadcast" aria-hidden="true"></i>确认并发布分析口径</button>`
+            ? html`<button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}>${renderDriveIcon("broadcast", "bold")}确认并发布分析口径</button>`
             : nothing}
           ${state.topic.canDeleteTopic
-            ? html`<button class="drive-control drive-control-danger" type="button" data-action="delete-topic"><i class="ph ph-trash" aria-hidden="true"></i>删除专题</button>`
+            ? html`<button class="drive-control drive-control-danger" type="button" data-action="delete-topic">${renderDriveIcon("trash")}删除专题</button>`
             : nothing}
         </div>
         <section class="drive-owner-settings" aria-label="专题负责人设置">
@@ -1246,7 +1246,7 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
                   <input data-draft="ownerConfirmName" .value=${state.drafts.ownerConfirmName} placeholder=${state.topic.topic.name} />
                 </label>
                 <button class="drive-control drive-control-primary" type="button" data-action="transfer-owner" ?disabled=${state.loading}>
-                  <i class="ph ph-user-switch" aria-hidden="true"></i>转交负责人
+                  ${renderDriveIcon("user-switch", "bold")}转交负责人
                 </button>
               `
             : nothing}
@@ -1262,7 +1262,7 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
                       <span class="drive-owner-candidate">
                         <span>${candidate}</span>
                         ${candidate !== "汪旭" && candidate !== state.topic?.topic.owner
-                          ? html`<button class="drive-icon-button" type="button" data-action="remove-owner-candidate" data-name=${candidate} aria-label=${`移除候选 ${candidate}`}><i class="ph ph-x"></i></button>`
+                          ? html`<button class="drive-icon-button" type="button" data-action="remove-owner-candidate" data-name=${candidate} aria-label=${`移除候选 ${candidate}`}>${renderDriveIcon("x")}</button>`
                           : nothing}
                       </span>
                     `,
@@ -1281,7 +1281,7 @@ function renderFeaturedCarousel(item: { topic: DriveOverviewTopic; output: NonNu
   return html`
     <div class="drive-featured-carousel" data-featured-carousel aria-roledescription="carousel" aria-label="精选成果">
       <article class="drive-featured-card">
-        <div class="drive-file-symbol"><i class=${`ph ${fileIconName(output)}`} aria-hidden="true"></i></div>
+        <div class="drive-file-symbol">${renderDriveIcon(fileIconName(output))}</div>
         <div class="drive-output-main">
           <button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${output.name}</button>
           <p><strong>${topic.name}</strong> · 成果创建者 ${output.uploadedBy || "-"} · 专题负责人 ${topic.owner || "-"} · ${formatDate(output.uploadedAt || output.lastModified)}</p>
@@ -1293,9 +1293,9 @@ function renderFeaturedCarousel(item: { topic: DriveOverviewTopic; output: NonNu
       ${renderInlinePdf(output.path)}
       ${state.preview?.file.path === output.path && state.preview.kind !== "pdf" ? renderFeaturedNonPdfPreview() : nothing}
       <div class="drive-featured-controls">
-        <button class="drive-icon-button" type="button" data-action="featured-prev" aria-label="上一个精选成果" ?disabled=${count < 2}><i class="ph ph-caret-left"></i></button>
+        <button class="drive-icon-button" type="button" data-action="featured-prev" aria-label="上一个精选成果" ?disabled=${count < 2}>${renderDriveIcon("caret-left")}</button>
         <div class="drive-featured-dots" aria-label="选择精选成果">${Array.from({ length: count }, (_, index) => html`<button type="button" data-action="featured-go" data-index=${index} class=${index === featuredIndex ? "is-active" : ""} aria-label=${`第 ${index + 1} 项`} aria-current=${index === featuredIndex ? "true" : "false"}></button>`)}</div>
-        <button class="drive-icon-button" type="button" data-action="featured-next" aria-label="下一个精选成果" ?disabled=${count < 2}><i class="ph ph-caret-right"></i></button>
+        <button class="drive-icon-button" type="button" data-action="featured-next" aria-label="下一个精选成果" ?disabled=${count < 2}>${renderDriveIcon("caret-right")}</button>
       </div>
     </div>
   `;
@@ -1352,7 +1352,7 @@ function renderMaterialTable(folders: DriveFolder[], files: DriveFile[]): Templa
 function renderFolderRow(folder: DriveFolder): TemplateResult {
   return html`
     <div class="drive-file-row" role="row">
-      <span class="drive-file-name" data-label="名称"><i class="ph ph-folder" aria-hidden="true"></i><span>${folder.name}</span></span>
+      <span class="drive-file-name" data-label="名称">${renderDriveIcon("folder")}<span>${folder.name}</span></span>
       <span data-label="类型">文件夹</span>
       <span data-label="上传者">-</span>
       <span data-label="更新">-</span>
@@ -1364,12 +1364,12 @@ function renderFolderRow(folder: DriveFolder): TemplateResult {
 function renderFileRow(file: DriveFile, outputMode: boolean): TemplateResult {
   return html`
     <div class="drive-file-row" role="row">
-      <span class="drive-file-name" data-label="名称"><i class=${`ph ${fileIconName(file)}`} aria-hidden="true"></i><span>${file.name}</span></span>
+      <span class="drive-file-name" data-label="名称">${renderDriveIcon(fileIconName(file))}<span>${file.name}</span></span>
       <span data-label="类型">${fileKindLabel(file)}</span>
       <span data-label=${outputMode ? "成果创建者" : "上传者"}>${file.uploadedBy || "-"}</span>
       <span data-label="更新">${formatDate(file.uploadedAt || file.lastModified)}</span>
       <span class="drive-row-actions" data-label="操作">
-        ${outputMode && state.topic?.topic.featuredOutputPath === file.path ? html`<span class="drive-featured-badge"><i class="ph ph-star-fill"></i>精选</span>` : nothing}
+        ${outputMode && state.topic?.topic.featuredOutputPath === file.path ? html`<span class="drive-featured-badge">${renderDriveIcon("star-fill")}精选</span>` : nothing}
         ${outputMode && state.topic?.canManageFeaturedOutput && canPreview(file) && state.topic.topic.featuredOutputPath !== file.path ? actionButton("设为精选", "set-featured", file.path) : nothing}
         ${canPreview(file) ? actionButton("预览", "preview", file.path) : nothing}${outputMode ? actionButton("链接", "copy-link", file.path) : nothing}${actionButton("下载", "download", file.path)}${actionButton("删除", "delete-file", file.path, file.name, true)}
       </span>
@@ -1446,8 +1446,8 @@ function renderDeleteDialogMarkup(): TemplateResult | typeof nothing {
         <label class="drive-field"><span>请输入完整${target.type === "topic" ? "专题名" : "文件名"}以确认删除</span><input data-delete-confirm-input type="text" autocomplete="off" .value=${state.deleteConfirmText} /></label>
       </div>
       <div slot="footer" class="drive-dialog-actions">
-        <button class="drive-control" type="button" data-action="cancel-delete">取消</button>
-        <button class="drive-control drive-control-danger" type="button" data-action="confirm-delete" ?disabled=${state.deleteConfirmText !== target.name}>永久删除</button>
+        <button class="drive-control" type="button" data-action="cancel-delete">${renderDriveIcon("x-circle")}取消</button>
+        <button class="drive-control drive-control-danger" type="button" data-action="confirm-delete" ?disabled=${state.deleteConfirmText !== target.name}>${renderDriveIcon("trash", "bold")}永久删除</button>
       </div>
     </wa-dialog>
   `;
@@ -1463,8 +1463,8 @@ function renderSettingsPublishDialogMarkup(): TemplateResult | typeof nothing {
         <p>修改后的分析口径将立即推送并展示给所有人，同时用于后续 Agent 分析。保存前请确认内容准确。</p>
       </div>
       <div slot="footer" class="drive-dialog-actions">
-        <button class="drive-control" type="button" data-action="cancel-settings-publish">取消</button>
-        <button class="drive-control drive-control-primary" type="button" data-action="confirm-settings-publish">确认发布</button>
+        <button class="drive-control" type="button" data-action="cancel-settings-publish">${renderDriveIcon("x-circle")}取消</button>
+        <button class="drive-control drive-control-primary" type="button" data-action="confirm-settings-publish">${renderDriveIcon("check", "bold")}确认发布</button>
       </div>
     </wa-dialog>
   `;
@@ -1500,7 +1500,7 @@ function renderAnalysisScopeGuidance(): TemplateResult {
 }
 
 function renderEmpty(icon: string, title: string, body: string): TemplateResult {
-  return html`<div class="drive-empty"><i class=${`ph ${icon}`} aria-hidden="true"></i><h3>${title}</h3>${body ? html`<p>${body}</p>` : nothing}</div>`;
+  return html`<div class="drive-empty">${renderDriveIcon(icon, "duotone", "ui-icon-lg")}<h3>${title}</h3>${body ? html`<p>${body}</p>` : nothing}</div>`;
 }
 
 function metricCard(label: string, value: string, detail: string): TemplateResult {
@@ -1509,15 +1509,23 @@ function metricCard(label: string, value: string, detail: string): TemplateResul
 
 function tabButton(tab: TopicTab, label: string, icon: string): TemplateResult {
   const active = state.activeTab === tab;
-  return html`<button class=${classMap({ "drive-tab": true, "is-active": active })} type="button" role="tab" aria-selected=${String(active)} tabindex=${active ? "0" : "-1"} data-action="tab" data-tab=${tab}><i class=${`ph ${icon}`} aria-hidden="true"></i>${label}</button>`;
+  return html`<button class=${classMap({ "drive-tab": true, "is-active": active })} type="button" role="tab" aria-selected=${String(active)} tabindex=${active ? "0" : "-1"} data-action="tab" data-tab=${tab}>${renderDriveIcon(icon)}${label}</button>`;
 }
 
 function controlButton(label: string, icon: string, action: string, primary = false, path = "", extraClass = ""): TemplateResult {
-  return html`<button class=${`drive-control ${primary ? "drive-control-primary" : ""} ${extraClass}`} type="button" data-action=${action} data-path=${path}><i class=${`ph ${icon}`} aria-hidden="true"></i>${label}</button>`;
+  return html`<button class=${`drive-control ${primary ? "drive-control-primary" : ""} ${extraClass}`} type="button" data-action=${action} data-path=${path}>${renderDriveIcon(icon, primary ? "bold" : "regular")}${label}</button>`;
 }
 
 function actionButton(label: string, action: string, path: string, name = "", danger = false): TemplateResult {
-  return html`<button class=${classMap({ "drive-table-action": true, "is-danger": danger })} type="button" data-action=${action} data-path=${path} data-name=${name}>${label}</button>`;
+  const icons: Record<string, string> = {
+    "open-folder": "folder-open",
+    preview: "eye",
+    "copy-link": "link",
+    download: "download-simple",
+    "delete-file": "trash",
+    "set-featured": "star",
+  };
+  return html`<button class=${classMap({ "drive-table-action": true, "is-danger": danger })} type="button" data-action=${action} data-path=${path} data-name=${name}>${renderDriveIcon(icons[action] || "arrow-right")}${label}</button>`;
 }
 
 function setStatus(message: string, tone: AppState["statusTone"] = "neutral"): void {

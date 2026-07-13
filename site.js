@@ -1,9 +1,47 @@
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const faviconUrl = document.querySelector('link[rel="icon"]')?.href || document.baseURI;
+const iconSpriteUrl = new URL("phosphor-sprite.svg", faviconUrl).href;
 
+initIcons();
 initCopyButtons();
 initArticleToc();
 initSetupTabs();
 initGxy();
+
+function createIcon(name, weight = "regular", className = "") {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg.setAttribute("class", `ui-icon ${className}`.trim());
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  use.setAttribute("href", `${iconSpriteUrl}#ph-${weight}-${name}`);
+  svg.append(use);
+  return svg;
+}
+
+function addIcon(element, name, { weight = "regular", position = "prepend", className = "" } = {}) {
+  if (!element || element.querySelector(":scope > .ui-icon")) {
+    return;
+  }
+  element[position](createIcon(name, weight, className));
+}
+
+function initIcons() {
+  document.querySelectorAll(".top-nav a").forEach((link, index) => {
+    addIcon(link, index === 0 ? "database" : "arrow-square-out", { position: "append", className: "ui-icon-sm" });
+  });
+  document.querySelectorAll(".back-link").forEach((link) => addIcon(link, "arrow-left"));
+  document.querySelectorAll(".footer a").forEach((link) => addIcon(link, "house"));
+  document.querySelectorAll(".article-list-item em").forEach((label) => addIcon(label, "arrow-right", { position: "append" }));
+  document.querySelectorAll(".toc-toggle").forEach((button) => addIcon(button, "caret-down", { position: "append", className: "toc-caret" }));
+  document.querySelectorAll(".copy-button").forEach((button) => {
+    button.prepend(createIcon("copy", "regular", "icon-copy"), createIcon("check", "bold", "icon-check"));
+  });
+  document.querySelectorAll(".system-tab[data-system]").forEach((button) => {
+    addIcon(button, button.dataset.system === "macos" ? "apple-logo" : "windows-logo");
+  });
+  document.querySelectorAll(".architecture-tab").forEach((button) => addIcon(button, "cpu", { className: "ui-icon-sm" }));
+}
 
 function initCopyButtons() {
   const resetTimers = new WeakMap();
@@ -27,7 +65,10 @@ function initCopyButtons() {
 
       let result = "已复制";
       try {
-        await navigator.clipboard.writeText(code.textContent || "");
+        await Promise.race([
+          navigator.clipboard.writeText(code.textContent || ""),
+          new Promise((_, reject) => window.setTimeout(() => reject(new Error("clipboard-timeout")), 800)),
+        ]);
       } catch {
         const selection = window.getSelection();
         const range = document.createRange();

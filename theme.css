@@ -1,0 +1,100 @@
+:root {
+  color-scheme: light dark;
+
+  --jh-color-page: #f5f7f9;
+  --jh-color-surface: #fcfdfe;
+  --jh-color-surface-muted: #edf1f5;
+  --jh-color-surface-subtle: #f8fafb;
+  --jh-color-text: #17202a;
+  --jh-color-text-secondary: #465363;
+  --jh-color-text-muted: #697586;
+  --jh-color-brand: #1b365d;
+  --jh-color-brand-hover: #294f7d;
+  --jh-color-brand-soft: #e7eef6;
+  --jh-color-on-brand: #f3f6fa;
+  --jh-color-border: #d9e0e7;
+  --jh-color-border-soft: #e7ecf1;
+  --jh-color-success: #286348;
+  --jh-color-success-soft: #e7f2ec;
+  --jh-color-danger: #963b36;
+  --jh-color-danger-soft: #f7eae8;
+  --jh-color-warning: #765817;
+  --jh-color-warning-soft: #f6f0df;
+  --jh-color-code: #252b33;
+  --jh-color-code-raised: #303842;
+  --jh-color-code-control: #46515e;
+  --jh-color-code-border: #596574;
+  --jh-color-code-text: #f1f4f7;
+  --jh-color-code-muted: #b9c2cc;
+
+  --jh-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --jh-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --jh-radius-control: 6px;
+  --jh-radius-panel: 8px;
+  --jh-shadow-raised: 0 12px 32px rgb(35 51 72 / 8%);
+  --jh-shadow-floating: 0 18px 48px rgb(35 51 72 / 12%);
+  --jh-focus-ring: 0 0 0 3px color-mix(in srgb, var(--jh-color-brand) 24%, transparent);
+
+  --jh-motion-control: cubic-bezier(0.2, 0, 0, 1);
+  --jh-motion-enter: cubic-bezier(0.32, 0.72, 0, 1);
+  --jh-motion-exit: cubic-bezier(0.32, 0, 0.67, 0);
+  --jh-duration-fast: 160ms;
+  --jh-duration-medium: 300ms;
+  --jh-duration-slow: 460ms;
+}
+
+.ui-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  overflow: visible;
+  color: currentColor;
+  fill: currentColor;
+  vertical-align: -0.2em;
+  pointer-events: none;
+}
+
+.ui-icon-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ui-icon-lg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --jh-color-page: #14191f;
+    --jh-color-surface: #1b222a;
+    --jh-color-surface-muted: #242d37;
+    --jh-color-surface-subtle: #181f26;
+    --jh-color-text: #edf1f5;
+    --jh-color-text-secondary: #c5cdd6;
+    --jh-color-text-muted: #98a4b1;
+    --jh-color-brand: #91afd3;
+    --jh-color-brand-hover: #adc5e0;
+    --jh-color-brand-soft: #21354d;
+    --jh-color-border: #37414c;
+    --jh-color-border-soft: #2b343e;
+    --jh-color-success: #83c5a6;
+    --jh-color-success-soft: #1d392d;
+    --jh-color-danger: #e49a94;
+    --jh-color-danger-soft: #462726;
+    --jh-color-warning: #e0c074;
+    --jh-color-warning-soft: #3c321c;
+    --jh-shadow-raised: 0 16px 38px rgb(0 0 0 / 24%);
+    --jh-shadow-floating: 0 22px 56px rgb(0 0 0 / 32%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --jh-duration-fast: 1ms;
+    --jh-duration-medium: 1ms;
+    --jh-duration-slow: 1ms;
+  }
+}

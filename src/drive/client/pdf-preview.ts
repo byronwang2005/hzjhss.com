@@ -1,4 +1,5 @@
 import { LitElement, html, nothing } from "lit";
+import { renderIcon } from "./icons";
 
 type PdfCore = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 type PdfViewerModule = typeof import("pdfjs-dist/legacy/web/pdf_viewer.mjs");
@@ -116,7 +117,7 @@ export class DrivePdfPreview extends LitElement {
         <div class="drive-pdf-stage ${this.loading ? "is-loading" : ""}" data-pdf-container tabindex="0">
           ${this.loading ? this.renderSkeleton() : nothing}
           ${this.failed
-            ? html`<div class="drive-empty drive-pdf-error"><i class="ph ph-eye-slash" aria-hidden="true"></i><h3>无法预览</h3><p>请下载文件后查看。</p></div>`
+            ? html`<div class="drive-empty drive-pdf-error">${renderIcon("eye-slash", "duotone", "ui-icon-lg")}<h3>无法预览</h3><p>请下载文件后查看。</p></div>`
             : nothing}
           <div class="pdfViewer" data-pdf-viewer ?hidden=${this.failed}></div>
         </div>
@@ -127,7 +128,7 @@ export class DrivePdfPreview extends LitElement {
   private iconButton(icon: string, label: string, handler: () => void, disabled = false) {
     return html`
       <button class="drive-icon-button" type="button" aria-label=${label} title=${label} ?disabled=${disabled} @click=${handler}>
-        <i class="ph ${icon}" aria-hidden="true"></i>
+        ${renderIcon(icon)}
       </button>
     `;
   }

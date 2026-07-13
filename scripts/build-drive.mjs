@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -7,6 +7,45 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const assetsDir = path.join(root, "assets");
 const generatedAssetsDir = path.join(assetsDir, "drive-assets");
 const pdfPackageDir = path.join(root, "node_modules", "pdfjs-dist");
+const phosphorPackageDir = path.join(root, "node_modules", "@phosphor-icons", "core", "assets");
+
+const iconSets = {
+  regular: [
+    "apple-logo", "arrow-clockwise", "arrow-left", "arrow-right", "arrow-square-out",
+    "arrows-out-line-horizontal", "article", "book-open", "broadcast", "caret-down",
+    "caret-left", "caret-right", "check", "check-circle", "circle-notch", "clipboard-text",
+    "copy", "cpu", "database", "download-simple", "eye", "eye-slash", "file", "file-arrow-up",
+    "file-doc", "file-html", "file-image", "file-pdf", "file-ppt", "file-text", "file-xls",
+    "files", "floppy-disk", "folder", "folder-open", "folder-plus", "folder-simple-plus",
+    "house", "info", "link", "list", "minus", "package", "plus", "sign-out",
+    "sliders-horizontal", "star", "terminal-window", "trash", "tray", "upload-simple",
+    "user-switch", "warning", "windows-logo", "x", "x-circle",
+  ],
+  bold: [
+    "arrow-right", "broadcast", "check", "clipboard-text", "copy", "download-simple",
+    "file-arrow-up", "floppy-disk", "folder-plus", "folder-simple-plus", "link", "plus",
+    "trash", "upload-simple", "user-switch",
+  ],
+  fill: ["check-circle", "star"],
+  duotone: ["eye-slash", "files", "folder-plus", "package", "tray"],
+};
+
+async function buildIconSprite() {
+  const symbols = [];
+  for (const [weight, icons] of Object.entries(iconSets)) {
+    for (const icon of icons) {
+      const suffix = weight === "regular" ? "" : `-${weight}`;
+      const source = await readFile(path.join(phosphorPackageDir, weight, `${icon}${suffix}.svg`), "utf8");
+      const viewBox = source.match(/viewBox="([^"]+)"/)?.[1] || "0 0 256 256";
+      const body = source.replace(/^.*?<svg[^>]*>/s, "").replace(/<\/svg>\s*$/s, "");
+      symbols.push(`<symbol id="ph-${weight}-${icon}" viewBox="${viewBox}">${body}</symbol>`);
+    }
+  }
+  const sprite = `<svg xmlns="http://www.w3.org/2000/svg">${symbols.join("")}</svg>\n`;
+  await writeFile(path.join(assetsDir, "phosphor-sprite.svg"), sprite);
+}
+
+await buildIconSprite();
 
 await Promise.all([
   rm(path.join(assetsDir, "drive.js"), { force: true }),
