@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import Uppy from "@uppy/core";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   isMaterialDirectoryEmpty,
@@ -68,6 +69,61 @@ describe("drive client state refresh policy", () => {
     expect(shouldRefreshAfterMutation("outputs", "新能源/outputs/summary.md", "新能源/")).toBe("topic");
     expect(shouldRefreshAfterMutation("materials", "新能源/reports/a.pdf", "新能源/")).toBe("directory");
     expect(shouldRefreshAfterMutation("materials", "其他/a.pdf", "新能源/")).toBe("overview");
+  });
+});
+
+describe("drive client upload progress", () => {
+  it("uses Uppy progress weighted by uploaded bytes across differently sized files", async () => {
+    vi.useFakeTimers();
+    const uppy = new Uppy();
+
+    try {
+      uppy.addFile({ name: "small.bin", type: "application/octet-stream", data: new Blob([new Uint8Array(100)]) });
+      uppy.addFile({ name: "large.bin", type: "application/octet-stream", data: new Blob([new Uint8Array(300)]) });
+      const [smallFile, largeFile] = uppy.getFiles();
+      const overallProgress: number[] = [];
+      uppy.on("progress", (percent) => overallProgress.push(percent));
+      uppy.emit("upload-start", [smallFile, largeFile]);
+
+      uppy.emit("upload-progress", uppy.getFile(largeFile.id), { uploadStarted: Date.now(), bytesUploaded: 0, bytesTotal: 300 });
+      uppy.emit("upload-progress", uppy.getFile(smallFile.id), { uploadStarted: Date.now(), bytesUploaded: 50, bytesTotal: 100 });
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(overallProgress.at(-1)).toBe(13);
+
+      uppy.emit("upload-progress", uppy.getFile(largeFile.id), { uploadStarted: Date.now(), bytesUploaded: 150, bytesTotal: 300 });
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(overallProgress.at(-1)).toBe(50);
+    } finally {
+      uppy.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it("tracks Uppy byte-weighted overall progress separately from the current file", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+
+    expect(source).toContain('uppy.on("upload-progress", (file, progress) =>');
+    expect(source).toContain('uppy.on("progress", (overallPercent) =>');
+    expect(source).toContain("state.upload = { ...state.upload, overallPercent };");
+    expect(source).toContain("overallPercent: 0");
+  });
+
+  it("shows overall progress only for multi-file uploads and labels both progress bars", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("state.upload.total > 1");
+    expect(source).toContain('aria-label="当前文件上传进度"');
+    expect(source).toContain('aria-label="总体上传进度"');
+    expect(source).toContain("${state.upload.overallPercent}% · ${state.upload.total} 个文件");
+  });
+
+  it("clears current and overall upload progress after success or failure", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    const reset = 'state.upload = { active: false, name: "", percent: 0, overallPercent: 0, total: 0 };';
+
+    expect(source.match(new RegExp(reset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))).toHaveLength(2);
   });
 });
 

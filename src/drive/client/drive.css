@@ -1051,7 +1051,7 @@ drive-pdf-preview {
 
 .drive-upload-progress {
   display: grid;
-  gap: 7px;
+  gap: 12px;
   max-width: 620px;
   padding: 10px 12px;
   background: var(--drive-surface-raised);
@@ -1059,7 +1059,12 @@ drive-pdf-preview {
   border-radius: var(--jh-radius-control);
 }
 
-.drive-upload-progress > div {
+.drive-upload-progress-item {
+  display: grid;
+  gap: 7px;
+}
+
+.drive-upload-progress-label {
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -1067,13 +1072,13 @@ drive-pdf-preview {
   font-size: 12px;
 }
 
-.drive-upload-progress strong {
+.drive-upload-progress-label strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.drive-upload-progress span {
+.drive-upload-progress-label span {
   flex: 0 0 auto;
   color: var(--drive-muted);
 }

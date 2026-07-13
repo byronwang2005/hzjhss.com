@@ -79,7 +79,7 @@ interface AppState {
   status: string;
   statusTone: "neutral" | "danger" | "success";
   loading: boolean;
-  upload: { active: boolean; name: string; percent: number; total: number };
+  upload: { active: boolean; name: string; percent: number; overallPercent: number; total: number };
   preview: PreviewState | null;
   pendingDelete: { type: "file" | "topic"; path?: string; prefix?: string; name: string } | null;
   pendingSettingsPublish: boolean;
@@ -115,7 +115,7 @@ const state: AppState = {
   status: "",
   statusTone: "neutral",
   loading: false,
-  upload: { active: false, name: "", percent: 0, total: 0 },
+  upload: { active: false, name: "", percent: 0, overallPercent: 0, total: 0 },
   preview: null,
   pendingDelete: null,
   pendingSettingsPublish: false,
@@ -804,7 +804,7 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
     if (conflicts.length && !window.confirm(`将覆盖 ${conflicts.length} 个同路径同名文件。是否继续上传？`)) {
       return;
     }
-    state.upload = { active: true, name: "准备上传...", percent: 0, total: entries.length };
+    state.upload = { active: true, name: "准备上传...", percent: 0, overallPercent: 0, total: entries.length };
     renderApp();
 
     const signedUploads = new Map<string, PresignedUpload>();
@@ -840,11 +840,17 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
         return;
       }
       state.upload = {
-        active: true,
+        ...state.upload,
         name: String(file.meta.relativePath || file.name),
         percent: Math.round((progress.bytesUploaded / progress.bytesTotal) * 100),
-        total: entries.length,
       };
+      renderApp();
+    });
+    uppy.on("progress", (overallPercent) => {
+      if (!state.upload.active) {
+        return;
+      }
+      state.upload = { ...state.upload, overallPercent };
       renderApp();
     });
     uppy.on("upload-success", (file) => {
@@ -882,7 +888,7 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
     if (result?.failed?.length) {
       throw new Error(`${result.failed.length} 个文件上传失败。`);
     }
-    state.upload = { active: false, name: "", percent: 0, total: 0 };
+    state.upload = { active: false, name: "", percent: 0, overallPercent: 0, total: 0 };
     setStatus(`上传完成，已登记 ${entries.length} 个文件。`, "success");
     const currentTopicPrefix = state.topic?.topic.prefix;
     const currentMaterialPrefix = state.materialPrefix || currentTopicPrefix;
@@ -892,7 +898,7 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
       renderApp();
     }
   } catch (error) {
-    state.upload = { active: false, name: "", percent: 0, total: 0 };
+    state.upload = { active: false, name: "", percent: 0, overallPercent: 0, total: 0 };
     showError(error);
     renderApp();
   } finally {
@@ -1179,7 +1185,7 @@ function renderAgentTab(): TemplateResult {
       <div class="drive-agent-grid">
         <div class="drive-agent-card">
           <h2>1. 获取资料并分析</h2>
-          <p>复制后交给本地 Agent。它会读取短时资料链接，并只按分析口径完成结构化分析，不生成文件。</p>
+          <p>复制后交给本地 Agent。</p>
           <label class="drive-field drive-agent-question">
             <span>您想了解什么？（留空将以推荐口径分析）</span>
             <input
@@ -1198,7 +1204,7 @@ function renderAgentTab(): TemplateResult {
         </div>
         <div class="drive-agent-card">
           <h2>2. 转换格式并回传</h2>
-          <p>请先在同一会话中校正判断并确认最终口径。第二阶段只转换为 PDF，并使用无 Cookie 的短时授权回传。</p>
+          <p>请先在同一会话中校正判断并确认最终口径。Agent会把成果文件回传到系统。</p>
           <button class="drive-control drive-control-primary" type="button" data-action="agent-output-task" ?disabled=${!hasKeywords || state.busyAction !== null}>
             ${renderDriveIcon("clipboard-text", "bold")}${state.busyAction === "agent-output-task" ? "正在生成..." : "复制第二阶段提示词"}
           </button>
@@ -1475,7 +1481,20 @@ function renderUploadProgress(): TemplateResult | typeof nothing {
     return nothing;
   }
   return html`
-    <div class="drive-upload-progress"><div><strong>${state.upload.name}</strong><span>${state.upload.percent}% · ${state.upload.total} 个文件</span></div><wa-progress-bar .value=${state.upload.percent}></wa-progress-bar></div>
+    <div class="drive-upload-progress">
+      <div class="drive-upload-progress-item">
+        <div class="drive-upload-progress-label"><strong>当前文件 · ${state.upload.name}</strong><span>${state.upload.percent}%</span></div>
+        <wa-progress-bar aria-label="当前文件上传进度" .value=${state.upload.percent}></wa-progress-bar>
+      </div>
+      ${state.upload.total > 1
+        ? html`
+            <div class="drive-upload-progress-item">
+              <div class="drive-upload-progress-label"><strong>总体进度</strong><span>${state.upload.overallPercent}% · ${state.upload.total} 个文件</span></div>
+              <wa-progress-bar aria-label="总体上传进度" .value=${state.upload.overallPercent}></wa-progress-bar>
+            </div>
+          `
+        : nothing}
+    </div>
   `;
 }
 
