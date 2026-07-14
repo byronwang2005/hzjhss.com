@@ -4,7 +4,7 @@ import { headObject } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody } from "../../../src/drive/http";
 import { normalizeObjectPath } from "../../../src/drive/paths";
 import { allowsAgentOutputPath, getAgentOutputCapability } from "../../../src/drive/session";
-import { isExpectedAgentOutput, readExistingTopicMetadata, recordUploadComplete } from "../../../src/drive/topic";
+import { isExpectedAgentOutput, readExistingTopicMetadata, recordUploadComplete, setCurrentContextOutput } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -16,7 +16,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     }
     const config = getDriveConfig(env);
     const topic = await readExistingTopicMetadata(config, capability.topicPrefix);
-    if (!topic || topic.instanceId !== capability.topicInstanceId) {
+    if (!topic || topic.instanceId !== capability.topicInstanceId || topic.owner !== capability.displayName) {
       return jsonResponse({ error: "专题已删除或回传授权已失效" }, 401);
     }
     const contentType = typeof body.contentType === "string" ? body.contentType : "";
@@ -46,6 +46,11 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       kind: "output",
       displayName: capability.displayName,
     });
+    const latestTopic = await readExistingTopicMetadata(config, capability.topicPrefix);
+    if (!latestTopic || latestTopic.instanceId !== capability.topicInstanceId || latestTopic.owner !== capability.displayName) {
+      return jsonResponse({ error: "专题负责人已变更，Context 已上传但未设为当前版本" }, 409);
+    }
+    await setCurrentContextOutput(config, latestTopic, path, capability.displayName);
     return jsonResponse({ ok: true, file });
   } catch (error) {
     return errorResponse(error);

@@ -17,7 +17,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
 
     const config = getDriveConfig(env);
     const topic = await readExistingTopicMetadata(config, capability.topicPrefix);
-    if (!topic || topic.instanceId !== capability.topicInstanceId) {
+    if (!topic || topic.instanceId !== capability.topicInstanceId || topic.owner !== capability.displayName) {
       return jsonResponse({ error: "专题已删除或回传授权已失效" }, 401);
     }
     const size = typeof body.size === "number" ? body.size : Number(body.size ?? 0);

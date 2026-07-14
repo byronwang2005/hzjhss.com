@@ -3,7 +3,7 @@ import { getDriveConfig } from "../../../src/drive/config";
 import { presignObjectUrl } from "../../../src/drive/cos";
 import { errorResponse, jsonResponse, readJsonBody, requireDriveSession } from "../../../src/drive/http";
 import { normalizeFileName, normalizePrefix, normalizeRelativeFilePath } from "../../../src/drive/paths";
-import { hasSystemPathSegment } from "../../../src/drive/topic";
+import { assertExistingTopicMaterialPath, hasSystemPathSegment } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -28,7 +28,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     }
 
     const contentType = typeof body.contentType === "string" && body.contentType ? body.contentType : "application/octet-stream";
-    const path = `${prefix}${relativePath}`;
+    const path = await assertExistingTopicMaterialPath(config, `${prefix}${relativePath}`);
     const url = await presignObjectUrl(config, "PUT", path, { "content-type": contentType });
     return jsonResponse({
       url,

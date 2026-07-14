@@ -11,6 +11,17 @@ export interface DriveEnv {
   /** @deprecated Short-lived COS URLs are fixed at 30 minutes. */
   DRIVE_SIGN_EXPIRES_SECONDS?: string;
   DRIVE_SESSION_MAX_AGE_SECONDS?: string;
+  AI_API_KEY?: string;
+  AI_BASE_URL?: string;
+  AI_MODEL?: string;
+  AI_MAX_OUTPUT_TOKENS?: string;
+}
+
+export interface AiConfig {
+  apiKey: string;
+  baseURL: string;
+  model: string;
+  maxOutputTokens: number;
 }
 
 export interface DriveConfig {
@@ -29,6 +40,7 @@ const DEFAULT_ROOT_PREFIX = "cloud-drive/";
 const DEFAULT_MAX_FILE_MB = 512;
 const SIGN_EXPIRES_SECONDS = 30 * 60;
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
+const DEFAULT_AI_MAX_OUTPUT_TOKENS = 2500;
 
 export function getRequiredEnv(env: DriveEnv, key: keyof DriveEnv): string {
   const value = env[key];
@@ -64,6 +76,25 @@ export function getDriveConfig(env: DriveEnv): DriveConfig {
     signExpiresSeconds: SIGN_EXPIRES_SECONDS,
     sessionMaxAgeSeconds: parsePositiveInt(env.DRIVE_SESSION_MAX_AGE_SECONDS, DEFAULT_SESSION_MAX_AGE_SECONDS),
   };
+}
+
+export function getAiConfig(env: DriveEnv): AiConfig {
+  return {
+    apiKey: getRequiredEnv(env, "AI_API_KEY"),
+    baseURL: normalizeAiBaseUrl(getRequiredEnv(env, "AI_BASE_URL")),
+    model: getRequiredEnv(env, "AI_MODEL"),
+    maxOutputTokens: parsePositiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULT_AI_MAX_OUTPUT_TOKENS),
+  };
+}
+
+function normalizeAiBaseUrl(value: string): string {
+  const url = new URL(value);
+  if (!/^https?:$/.test(url.protocol)) {
+    throw new Error("AI_BASE_URL 必须使用 HTTP 或 HTTPS");
+  }
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/, "");
 }
 
 function normalizeEndpoint(value: string): string {

@@ -12,6 +12,8 @@ export interface TopicDetailApiResponse extends Omit<TopicDetail, "topic"> {
   canManageFeaturedOutput: boolean;
   canTransferTopicOwner: boolean;
   canDeleteTopic: boolean;
+  canGenerateContext: boolean;
+  hasCurrentContext: boolean;
 }
 
 export interface DriveOverviewApiResponse extends Omit<DriveOverview, "topics"> {
@@ -26,6 +28,8 @@ export function toTopicDetailApiResponse(detail: TopicDetail, viewerDisplayName?
     canManageFeaturedOutput: canManageTopic,
     canTransferTopicOwner: canManageTopic,
     canDeleteTopic: Boolean(viewerDisplayName && isDriveAdmin(viewerDisplayName)),
+    canGenerateContext: detail.topic.owner === viewerDisplayName,
+    hasCurrentContext: Boolean(detail.topic.contextOutputPath),
     topic: {
       ...detail.topic,
       description: detail.topic.analysisKeywords,

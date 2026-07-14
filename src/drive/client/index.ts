@@ -63,9 +63,18 @@ interface DraftState {
   topicName: string;
   createKeywords: string;
   settingsKeywords: string;
-  agentQuestion: string;
+  qaQuestion: string;
   owner: string;
   ownerConfirmName: string;
+}
+
+interface QaChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  pending?: boolean;
+  error?: boolean;
+  excludeFromHistory?: boolean;
 }
 
 interface AppState {
@@ -84,7 +93,9 @@ interface AppState {
   pendingSettingsPublish: boolean;
   pendingUploadSelection: "file" | "folder" | null;
   deleteConfirmText: string;
-  busyAction: "agent-manifest" | "agent-output-task" | null;
+  busyAction: "agent-context-task" | null;
+  qaMessages: QaChatMessage[];
+  qaStreaming: boolean;
   ownerCandidates: OwnerCandidatesResponse | null;
   drafts: DraftState;
 }
@@ -119,7 +130,7 @@ const requestControllers = new Map<RequestKey, AbortController>();
 
 const state: AppState = {
   mode: "login",
-  activeTab: "agent",
+  activeTab: "qa",
   overview: null,
   topic: null,
   materialList: null,
@@ -134,6 +145,8 @@ const state: AppState = {
   pendingUploadSelection: null,
   deleteConfirmText: "",
   busyAction: null,
+  qaMessages: [],
+  qaStreaming: false,
   ownerCandidates: null,
   drafts: {
     loginName: "",
@@ -141,7 +154,7 @@ const state: AppState = {
     topicName: "",
     createKeywords: "",
     settingsKeywords: "",
-    agentQuestion: "",
+    qaQuestion: "",
     owner: "",
     ownerConfirmName: "",
   },
@@ -152,6 +165,7 @@ let previewReturnFocus: HTMLElement | null = null;
 let featuredIndex = 0;
 let featuredTimer: number | null = null;
 let featuredPaused = false;
+let qaAbortController: AbortController | null = null;
 
 if (!rootElement) {
   throw new Error("Missing [data-drive-root] mount element.");
@@ -205,7 +219,7 @@ async function boot(): Promise<void> {
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
   const form = event.target as HTMLFormElement;
-  if (!form.matches("[data-login-form], [data-create-form], [data-settings-form]")) {
+  if (!form.matches("[data-login-form], [data-create-form], [data-settings-form], [data-qa-form]")) {
     return;
   }
   event.preventDefault();
@@ -213,6 +227,8 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
     await submitLogin();
   } else if (form.matches("[data-create-form]")) {
     await submitCreateTopic();
+  } else if (form.matches("[data-qa-form]")) {
+    await submitQa();
   } else {
     await submitTopicSettings();
   }
@@ -235,7 +251,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
   } else if (action === "cancel-create" || action === "back-overview") {
     await loadOverview();
   } else if (action === "open-topic") {
-    await openTopic(prefix || path, "agent");
+    await openTopic(prefix || path, "qa");
   } else if (action === "tab") {
     setActiveTab(target.dataset.tab as TopicTab);
   } else if (action === "open-folder") {
@@ -266,10 +282,14 @@ async function handleClick(event: MouseEvent): Promise<void> {
     continueUploadSelection();
   } else if (action === "cancel-upload") {
     closeUploadReminder();
-  } else if (action === "agent-manifest") {
-    await copyAgentManifest();
-  } else if (action === "agent-output-task") {
-    await copyAgentOutputTask();
+  } else if (action === "agent-context-task") {
+    await copyAgentContextTask();
+  } else if (action === "qa-stop") {
+    stopQa();
+  } else if (action === "qa-clear") {
+    clearQa();
+  } else if (action === "qa-retry") {
+    await retryQa(target.dataset.messageId || "");
   } else if (action === "refresh") {
     await refreshCurrent();
   } else if (action === "set-featured") {
@@ -357,7 +377,7 @@ async function submitCreateTopic(): Promise<void> {
     state.drafts.topicName = "";
     state.drafts.createKeywords = "";
     setStatus("专题已创建，分析口径已发布并展示给所有人。", "success");
-    await openTopic(detail.topic.prefix, "agent");
+    await openTopic(detail.topic.prefix, "qa");
   } catch (error) {
     showError(error);
     renderApp();
@@ -442,7 +462,7 @@ async function transferTopicOwner(): Promise<void> {
       body: { prefix: state.topic.topic.prefix, owner, confirmName: state.drafts.ownerConfirmName },
     });
     if (!canViewSettings()) {
-      state.activeTab = "agent";
+      state.activeTab = "qa";
     }
     state.drafts.owner = state.topic.topic.owner;
     state.drafts.ownerConfirmName = "";
@@ -480,6 +500,7 @@ async function loadOverview(successMessage = ""): Promise<void> {
   cancelRequest("topic");
   cancelRequest("materials");
   closePreview(false);
+  clearQa(false);
   try {
     state.mode = "overview";
     state.loading = true;
@@ -517,7 +538,7 @@ async function loadOverview(successMessage = ""): Promise<void> {
   }
 }
 
-async function openTopic(prefix: string, tab: TopicTab = "agent"): Promise<void> {
+async function openTopic(prefix: string, tab: TopicTab = "qa"): Promise<void> {
   const signal = beginRequest("topic");
   cancelRequest("materials");
   closePreview(false);
@@ -526,7 +547,9 @@ async function openTopic(prefix: string, tab: TopicTab = "agent"): Promise<void>
     state.activeTab = tab;
     state.loading = true;
     state.materialPrefix = prefix;
-    state.drafts.agentQuestion = "";
+    if (state.topic?.topic.prefix !== prefix) {
+      clearQa(false);
+    }
     renderApp();
     const [topic, materialList, ownerCandidates] = await Promise.all([
       api<TopicDetail>(`/topic?${new URLSearchParams({ prefix }).toString()}`, { signal }),
@@ -538,7 +561,10 @@ async function openTopic(prefix: string, tab: TopicTab = "agent"): Promise<void>
     }
     state.topic = topic;
     if (state.activeTab === "settings" && !canViewSettings(topic)) {
-      state.activeTab = "agent";
+      state.activeTab = "qa";
+    }
+    if (state.activeTab === "agent" && !topic.canGenerateContext) {
+      state.activeTab = "qa";
     }
     state.ownerCandidates = ownerCandidates;
     state.materialList = materialList;
@@ -602,10 +628,13 @@ async function listAllDirectory(prefix: string, signal?: AbortSignal): Promise<D
 }
 
 function setActiveTab(tab: TopicTab): void {
-  if (!["outputs", "materials", "agent", "settings"].includes(tab)) {
+  if (!["qa", "outputs", "materials", "agent", "settings"].includes(tab)) {
     return;
   }
   if (tab === "settings" && !canViewSettings()) {
+    return;
+  }
+  if (tab === "agent" && !state.topic?.canGenerateContext) {
     return;
   }
   closePreview(false);
@@ -628,6 +657,7 @@ async function refreshCurrent(): Promise<void> {
 async function logout(): Promise<void> {
   await api("/logout", { method: "POST" }).catch(() => null);
   requestControllers.forEach((controller) => controller.abort());
+  clearQa(false);
   closePreview(false);
   state.mode = "login";
   state.overview = null;
@@ -649,21 +679,20 @@ function showCreateTopic(): void {
   queueMicrotask(() => document.querySelector<HTMLInputElement>('[name="topicName"]')?.focus());
 }
 
-async function copyAgentManifest(): Promise<void> {
-  if (!state.topic) {
+async function copyAgentContextTask(): Promise<void> {
+  if (!state.topic?.canGenerateContext) {
     return;
   }
   try {
-    state.busyAction = "agent-manifest";
-    setStatus("正在生成 agent 分析提示词...");
+    state.busyAction = "agent-context-task";
+    setStatus("正在生成完整 Context 任务...");
     renderApp();
-    const data = await api<{ prompt: string; fileCount: number; expiresIn: number }>("/agent-manifest", {
+    const data = await api<{ prompt: string; fileCount: number; uploadExpiresIn: number }>("/agent-context-task", {
       method: "POST",
-      body: { prefix: state.topic.topic.prefix, userQuestion: state.drafts.agentQuestion },
+      body: { prefix: state.topic.topic.prefix },
     });
     await writeClipboard(data.prompt);
-    state.drafts.agentQuestion = "";
-    setStatus(`分析提示词已复制。资料 ${data.fileCount || 0} 个，链接 ${data.expiresIn || 0} 秒内有效。`, "success");
+    setStatus(`完整 Context 任务已复制。稳定资料 ${data.fileCount || 0} 个，回传授权 ${data.uploadExpiresIn || 0} 秒内有效。`, "success");
   } catch (error) {
     showError(error);
   } finally {
@@ -672,26 +701,158 @@ async function copyAgentManifest(): Promise<void> {
   }
 }
 
-async function copyAgentOutputTask(): Promise<void> {
-  if (!state.topic) {
+async function submitQa(questionOverride?: string): Promise<void> {
+  if (!state.topic?.hasCurrentContext || state.qaStreaming) {
     return;
   }
-  try {
-    state.busyAction = "agent-output-task";
-    setStatus("正在生成成果回传授权...");
+  const question = (questionOverride ?? state.drafts.qaQuestion).trim();
+  if (!question) {
+    setStatus("请输入问题。", "danger");
     renderApp();
-    const data = await api<{ prompt: string; expiresIn: number; paths: string[] }>("/agent-output-task", {
+    return;
+  }
+  if (question.length > 3000) {
+    setStatus("问题不能超过 3000 字。", "danger");
+    renderApp();
+    return;
+  }
+
+  const completedHistory = completedQaHistory();
+  const userMessage: QaChatMessage = { id: qaMessageId(), role: "user", content: question };
+  const assistantMessage: QaChatMessage = { id: qaMessageId(), role: "assistant", content: "", pending: true };
+  state.qaMessages.push(userMessage, assistantMessage);
+  state.drafts.qaQuestion = "";
+  state.qaStreaming = true;
+  const controller = new AbortController();
+  qaAbortController = controller;
+  setStatus("正在生成回答...");
+  renderApp();
+
+  try {
+    const response = await fetch(`${apiBase}/qa`, {
       method: "POST",
-      body: { prefix: state.topic.topic.prefix },
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      signal: controller.signal,
+      body: JSON.stringify({
+        prefix: state.topic.topic.prefix,
+        messages: [...completedHistory, userMessage].map(({ role, content }) => ({ role, content })),
+      }),
     });
-    await writeClipboard(data.prompt);
-    setStatus(`成果生成与回传提示词已复制。授权 ${data.expiresIn || 0} 秒内有效。`, "success");
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: unknown };
+      throw new Error(typeof data.error === "string" ? data.error : `问答请求失败（${response.status}）`);
+    }
+    if (!response.body) {
+      throw new Error("模型没有返回流式响应");
+    }
+    await consumeQaStream(response.body, assistantMessage);
+    if (qaAbortController !== controller) {
+      return;
+    }
+    if (!assistantMessage.content) {
+      throw new Error("模型没有返回可显示的流式内容");
+    }
+    assistantMessage.pending = false;
+    setStatus("回答完成。", "success");
   } catch (error) {
-    showError(error);
+    if (qaAbortController !== controller) {
+      return;
+    }
+    assistantMessage.pending = false;
+    if (isAbort(error)) {
+      if (!assistantMessage.content) {
+        state.qaMessages = state.qaMessages.filter((message) => message.id !== assistantMessage.id && message.id !== userMessage.id);
+      } else {
+        assistantMessage.excludeFromHistory = true;
+      }
+      setStatus("已停止生成。", "neutral");
+    } else {
+      assistantMessage.error = true;
+      setStatus(error instanceof Error ? error.message : "问答请求失败", "danger");
+    }
   } finally {
-    state.busyAction = null;
+    if (qaAbortController === controller) {
+      qaAbortController = null;
+      state.qaStreaming = false;
+      renderApp();
+    }
+  }
+}
+
+async function consumeQaStream(stream: ReadableStream<Uint8Array>, assistantMessage: QaChatMessage): Promise<void> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const event = /^event:\s*(.+)$/m.exec(block)?.[1]?.trim();
+      const dataText = block
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      const data = dataText ? (JSON.parse(dataText) as { content?: unknown; error?: unknown }) : {};
+      if (event === "delta" && typeof data.content === "string") {
+        assistantMessage.content += data.content;
+        renderApp();
+      } else if (event === "error") {
+        throw new Error(typeof data.error === "string" ? data.error : "模型流式输出失败");
+      }
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) {
+      break;
+    }
+  }
+}
+
+function stopQa(): void {
+  qaAbortController?.abort();
+}
+
+function clearQa(shouldRender = true): void {
+  qaAbortController?.abort();
+  qaAbortController = null;
+  state.qaMessages = [];
+  state.qaStreaming = false;
+  state.drafts.qaQuestion = "";
+  if (shouldRender) {
+    setStatus("当前浏览器会话已清空。", "success");
     renderApp();
   }
+}
+
+async function retryQa(messageId: string): Promise<void> {
+  if (state.qaStreaming) return;
+  const failedIndex = state.qaMessages.findIndex((message) => message.id === messageId && message.role === "assistant" && message.error);
+  if (failedIndex < 1) return;
+  const question = state.qaMessages[failedIndex - 1];
+  if (question.role !== "user") return;
+  state.qaMessages.splice(failedIndex - 1, 2);
+  await submitQa(question.content);
+}
+
+function completedQaHistory(): QaChatMessage[] {
+  const completed: QaChatMessage[] = [];
+  for (let index = 0; index + 1 < state.qaMessages.length; index += 2) {
+    const user = state.qaMessages[index];
+    const assistant = state.qaMessages[index + 1];
+    if (user.role !== "user" || assistant.role !== "assistant" || assistant.pending || assistant.error || assistant.excludeFromHistory) {
+      continue;
+    }
+    completed.push(user, assistant);
+  }
+  return completed.slice(-12);
+}
+
+function qaMessageId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 async function copySignedLink(path: string): Promise<void> {
@@ -841,6 +1002,11 @@ async function uploadFiles(files: File[], relativePathForFile: (file: File) => s
   }
   const topicPrefix = state.topic.topic.prefix;
   const targetPrefix = state.activeTab === "materials" ? state.materialPrefix || topicPrefix : topicPrefix;
+  if (!targetPrefix.startsWith(`${topicPrefix}资料/`) && !targetPrefix.startsWith(`${topicPrefix}周报/`)) {
+    setStatus("请先进入“资料”或“周报”目录再上传。", "danger");
+    renderApp();
+    return;
+  }
   const entries = files.map((file) => ({ file, relativePath: normalizeClientRelativePath(relativePathForFile(file)) }));
   let uppy: Uppy<UppyMeta, UppyBody> | null = null;
 
@@ -1166,9 +1332,10 @@ function renderTopic(): TemplateResult {
         </div>
       </div>
       <div class="drive-tabs" role="tablist" aria-label="专题工作区">
-        ${tabButton("agent", "Agent", "ph-terminal-window")}${tabButton("materials", "资料", "ph-files")}${tabButton("outputs", "成果", "ph-package")}${canViewSettings() ? tabButton("settings", "设置", "ph-sliders-horizontal") : nothing}
+        ${tabButton("qa", "问答", "ph-chat-circle-dots")}${tabButton("materials", "资料", "ph-files")}${tabButton("outputs", "成果", "ph-package")}${state.topic.canGenerateContext ? tabButton("agent", "Agent", "ph-terminal-window") : nothing}${canViewSettings() ? tabButton("settings", "设置", "ph-sliders-horizontal") : nothing}
       </div>
-      ${state.activeTab === "agent" ? renderAgentTab() : nothing}
+      ${state.activeTab === "qa" ? renderQaTab() : nothing}
+      ${state.activeTab === "agent" && state.topic.canGenerateContext ? renderAgentTab() : nothing}
       ${state.activeTab === "materials" ? renderMaterialsTab() : nothing}
       ${state.activeTab === "outputs" ? renderOutputsTab() : nothing}
       ${state.activeTab === "settings" && canViewSettings() ? renderSettingsTab() : nothing}
@@ -1187,7 +1354,7 @@ function renderOutputsTab(): TemplateResult {
       <div class="drive-panel-head"><h2>专题成果</h2><span>${outputs.length} 个文件</span></div>
       ${outputs.length
         ? renderFileTable(outputs, { outputMode: true, empty: "" })
-        : renderEmpty("ph-package", "这个专题还没有成果", "请先依次执行Agent的两个阶段")}
+        : renderEmpty("ph-package", "这个专题还没有成果", "专题负责人可在 Agent 中复制单一任务，生成 Markdown Context。")}
     </section>
   `;
 }
@@ -1198,21 +1365,42 @@ function renderMaterialsTab(): TemplateResult {
   const folders = visibleMaterialFolders(listing?.folders || []);
   const files = visibleMaterialFiles(listing?.files || []);
   const isEmpty = listing ? isMaterialDirectoryEmpty(listing.folders, listing.files) : false;
+  const currentPrefix = state.materialPrefix || topicPrefix;
+  const isRoot = currentPrefix === topicPrefix;
+  const isMaterials = currentPrefix.startsWith(`${topicPrefix}资料/`);
+  const isWeekly = currentPrefix.startsWith(`${topicPrefix}周报/`);
+  const canUpload = isMaterials || isWeekly;
   return html`
     <section class="drive-tab-panel" role="tabpanel" aria-label="资料">
       <div class="drive-material-toolbar">
         <div><h2>资料库</h2>${renderBreadcrumbs(state.materialPrefix || topicPrefix)}</div>
-        <div class="drive-upload-actions">
-          <button class="drive-control drive-control-primary drive-upload-trigger" type="button" data-action="request-file-upload">
-            ${renderDriveIcon("upload-simple", "bold")}上传文件
-          </button>
-          <button class="drive-control drive-upload-trigger" type="button" data-action="request-folder-upload">
-            ${renderDriveIcon("folder-simple-plus")}上传文件夹
-          </button>
-          <input data-file-input type="file" multiple hidden />
-          <input data-folder-input type="file" webkitdirectory multiple hidden />
-        </div>
+        ${canUpload
+          ? html`<div class="drive-upload-actions">
+              <button class="drive-control drive-control-primary drive-upload-trigger" type="button" data-action="request-file-upload">
+                ${renderDriveIcon("upload-simple", "bold")}上传文件
+              </button>
+              <button class="drive-control drive-upload-trigger" type="button" data-action="request-folder-upload">
+                ${renderDriveIcon("folder-simple-plus")}上传文件夹
+              </button>
+              <input data-file-input type="file" multiple hidden />
+              <input data-folder-input type="file" webkitdirectory multiple hidden />
+            </div>`
+          : nothing}
       </div>
+      ${isRoot
+        ? html`<div class="drive-category-grid">
+            <button type="button" class="drive-category-card" data-action="open-folder" data-path=${`${topicPrefix}资料/`}>
+              ${renderDriveIcon("books", "duotone", "ui-icon-lg")}<span><strong>资料</strong><small>稳定资料，纳入 Context 方法论生成</small></span>${renderDriveIcon("arrow-right")}
+            </button>
+            <button type="button" class="drive-category-card" data-action="open-folder" data-path=${`${topicPrefix}周报/`}>
+              ${renderDriveIcon("calendar-dots", "duotone", "ui-icon-lg")}<span><strong>周报</strong><small>持续更新，首版不参与网页 AI 问答</small></span>${renderDriveIcon("arrow-right")}
+            </button>
+          </div>
+          <wa-callout class="drive-agent-callout" variant="neutral"><span slot="icon">${renderDriveIcon("info")}</span>根目录历史文件继续按稳定资料兼容读取；新上传请先进入“资料”或“周报”。</wa-callout>`
+        : nothing}
+      ${isWeekly
+        ? html`<wa-callout class="drive-agent-callout" variant="warning"><span slot="icon">${renderDriveIcon("warning")}</span>周报当前仅用于资料维护，暂未纳入网页 AI 问答。</wa-callout>`
+        : nothing}
       ${listing
         ? isEmpty
           ? renderEmpty("ph-files", "当前目录没有资料。", "")
@@ -1229,35 +1417,70 @@ function renderAgentTab(): TemplateResult {
       ${hasKeywords
         ? nothing
         : html`<wa-callout class="drive-agent-callout" variant="warning"><span slot="icon">${renderDriveIcon("warning")}</span>请先由专题负责人在设置中填写分析口径，再执行 Agent 流程。</wa-callout>`}
-      <div class="drive-agent-grid">
+      <div class="drive-agent-grid drive-agent-grid-single">
         <div class="drive-agent-card">
-          <h2>1. 获取资料并分析</h2>
-          <p>复制后交给本地 Agent。</p>
-          <label class="drive-field drive-agent-question">
-            <span>您想了解什么？（留空将以推荐口径分析）</span>
-            <input
-              data-draft="agentQuestion"
-              name="agentQuestion"
-              type="text"
-              maxlength="3000"
-              placeholder="例如：最新周报信息、库存情况......"
-              .value=${state.drafts.agentQuestion}
-              ?disabled=${state.busyAction !== null}
-            />
-          </label>
-          <button class="drive-control drive-control-primary" type="button" data-action="agent-manifest" ?disabled=${!hasKeywords || state.busyAction !== null}>
-            ${renderDriveIcon("clipboard-text", "bold")}${state.busyAction === "agent-manifest" ? "正在生成..." : "复制第一阶段提示词"}
-          </button>
-        </div>
-        <div class="drive-agent-card">
-          <h2>2. 转换格式并回传</h2>
-          <p>请先在同一会话中校正判断并确认最终口径。Agent会把成果文件回传到系统。</p>
-          <button class="drive-control drive-control-primary" type="button" data-action="agent-output-task" ?disabled=${!hasKeywords || state.busyAction !== null}>
-            ${renderDriveIcon("clipboard-text", "bold")}${state.busyAction === "agent-output-task" ? "正在生成..." : "复制第二阶段提示词"}
+          <h2>生成完整网页 Context</h2>
+          <p>复制后交给本地 Agent。任务会读取全部稳定资料，直接生成、验证并回传一份详尽的 UTF-8 Markdown Context；周报不会进入本次分析。</p>
+          <button class="drive-control drive-control-primary" type="button" data-action="agent-context-task" ?disabled=${!hasKeywords || state.busyAction !== null}>
+            ${renderDriveIcon("clipboard-text", "bold")}${state.busyAction === "agent-context-task" ? "正在生成..." : "复制完整 Context 任务"}
           </button>
         </div>
       </div>
     </section>
+  `;
+}
+
+function renderQaTab(): TemplateResult {
+  const ready = Boolean(state.topic?.hasCurrentContext);
+  return html`
+    <section class="drive-tab-panel drive-qa-panel" role="tabpanel" aria-label="问答">
+      <div class="drive-panel-head">
+        <div><h2>专题问答</h2><p>回答只依据当前最新版 Markdown Context；对话仅保存在本页面，刷新后清空。</p></div>
+        ${state.qaMessages.length
+          ? html`<button class="drive-control" type="button" data-action="qa-clear" ?disabled=${state.qaStreaming}>${renderDriveIcon("trash")}清空会话</button>`
+          : nothing}
+      </div>
+      ${ready
+        ? nothing
+        : html`<wa-callout class="drive-agent-callout" variant="warning"><span slot="icon">${renderDriveIcon("warning")}</span>当前专题还没有可用的最新版 Context。请联系专题负责人生成并回传。</wa-callout>`}
+      <div class="drive-qa-messages" aria-live="polite">
+        ${state.qaMessages.length
+          ? repeat(state.qaMessages, (message) => message.id, renderQaMessage)
+          : renderEmpty("ph-chat-circle-dots", "可以开始提问", ready ? "答案将严格限定在当前 Context 内。" : "Context 准备完成后即可使用。")}
+      </div>
+      <form class="drive-qa-form" data-qa-form>
+        <label class="drive-field">
+          <span>您的问题</span>
+          <textarea data-draft="qaQuestion" name="qaQuestion" rows="3" maxlength="3000" placeholder="请输入关于该专题的问题" .value=${state.drafts.qaQuestion} ?disabled=${!ready || state.qaStreaming}></textarea>
+        </label>
+        <div class="drive-form-actions">
+          ${state.qaStreaming
+            ? html`<button class="drive-control drive-control-danger" type="button" data-action="qa-stop">${renderDriveIcon("stop-circle")}停止生成</button>`
+            : html`<button class="drive-control drive-control-primary" type="submit" ?disabled=${!ready || !state.drafts.qaQuestion.trim()}>${renderDriveIcon("paper-plane-tilt", "bold")}发送问题</button>`}
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function renderQaMessage(message: QaChatMessage): TemplateResult {
+  const rendered = message.role === "assistant" && message.content
+    ? DOMPurify.sanitize(markdown.render(message.content))
+    : "";
+  return html`
+    <article class=${classMap({ "drive-qa-message": true, "is-user": message.role === "user", "is-error": Boolean(message.error) })}>
+      <header>${message.role === "user" ? "您" : "AI"}${message.pending ? html`<span>生成中</span>` : nothing}</header>
+      ${message.role === "assistant"
+        ? message.content
+          ? html`<div class="drive-preview-markdown">${unsafeHTML(rendered)}</div>`
+          : message.pending
+            ? renderInlineSkeleton()
+            : nothing
+        : html`<p>${message.content}</p>`}
+      ${message.error
+        ? html`<div class="drive-qa-error"><span>本次生成失败，可重试。</span><button class="drive-table-action" type="button" data-action="qa-retry" data-message-id=${message.id}>${renderDriveIcon("arrow-clockwise")}重试</button></div>`
+        : nothing}
+    </article>
   `;
 }
 

@@ -23,7 +23,7 @@ export interface DriveListResult {
 }
 
 export interface TopicMetadata {
-  version: 4;
+  version: 5;
   instanceId: string;
   name: string;
   prefix: string;
@@ -34,6 +34,7 @@ export interface TopicMetadata {
   updatedBy: string;
   updatedAt: string;
   featuredOutputPath: string | null;
+  contextOutputPath: string | null;
 }
 
 export interface TopicDetail {
@@ -43,6 +44,8 @@ export interface TopicDetail {
   canDeleteTopic: boolean;
   canManageFeaturedOutput: boolean;
   canTransferTopicOwner: boolean;
+  canGenerateContext: boolean;
+  hasCurrentContext: boolean;
 }
 
 export interface DriveOverviewOutput {
@@ -81,5 +84,5 @@ export interface OwnerCandidatesResponse {
 }
 
 export type ViewMode = "login" | "overview" | "topic" | "create";
-export type TopicTab = "outputs" | "materials" | "agent" | "settings";
+export type TopicTab = "qa" | "outputs" | "materials" | "agent" | "settings";
 export type PreviewKind = "html" | "pdf" | "markdown" | "text" | "none";

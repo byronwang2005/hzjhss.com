@@ -161,17 +161,20 @@ describe("drive client responsibility labels", () => {
 });
 
 describe("drive client topic navigation", () => {
-  it("opens topics on Agent and orders Agent before materials and outputs", () => {
+  it("opens topics on Q&A and keeps Agent owner-only", () => {
     const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
-    expect(source).toContain('activeTab: "agent"');
-    expect(source).toContain('openTopic(prefix: string, tab: TopicTab = "agent")');
+    expect(source).toContain('activeTab: "qa"');
+    expect(source).toContain('openTopic(prefix: string, tab: TopicTab = "qa")');
 
+    const qaTab = source.indexOf('tabButton("qa", "问答"');
     const agentTab = source.indexOf('tabButton("agent", "Agent"');
     const materialsTab = source.indexOf('tabButton("materials", "资料"');
     const outputsTab = source.indexOf('tabButton("outputs", "成果"');
+    expect(qaTab).toBeGreaterThan(-1);
     expect(agentTab).toBeGreaterThan(-1);
-    expect(agentTab).toBeLessThan(materialsTab);
+    expect(qaTab).toBeLessThan(materialsTab);
     expect(materialsTab).toBeLessThan(outputsTab);
+    expect(source).toContain('state.topic.canGenerateContext ? tabButton("agent", "Agent"');
   });
 
   it("only renders settings for topic managers and falls back after permission loss", () => {
@@ -179,7 +182,7 @@ describe("drive client topic navigation", () => {
     expect(source).toContain('canViewSettings() ? tabButton("settings", "设置"');
     expect(source).toContain('state.activeTab === "settings" && canViewSettings() ? renderSettingsTab()');
     expect(source).toContain('if (tab === "settings" && !canViewSettings())');
-    expect(source).toContain('if (!canViewSettings()) {\n      state.activeTab = "agent";');
+    expect(source).toContain('if (!canViewSettings()) {\n      state.activeTab = "qa";');
   });
 
   it("uses an in-app confirmation dialog when publishing analysis settings", () => {
@@ -198,25 +201,23 @@ describe("drive client topic navigation", () => {
     expect(source).not.toContain("反向证据、敏感变量、潜在偏差和待核验事项");
   });
 
-  it("collects a one-time first-stage question and clears it only after a successful copy", () => {
+  it("uses one owner prompt without a one-time question or stage split", () => {
     const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
-    expect(source).toContain("您想了解什么？（留空将以推荐口径分析）");
-    expect(source).toContain("例如：最新周报信息、库存情况......");
-    expect(source).toContain('body: { prefix: state.topic.topic.prefix, userQuestion: state.drafts.agentQuestion }');
-
-    const requestIndex = source.indexOf('body: { prefix: state.topic.topic.prefix, userQuestion: state.drafts.agentQuestion }');
-    const clearIndex = source.indexOf('state.drafts.agentQuestion = "";', requestIndex);
-    const successIndex = source.indexOf("分析提示词已复制", requestIndex);
-    const catchIndex = source.indexOf("} catch (error) {", requestIndex);
-    expect(clearIndex).toBeGreaterThan(requestIndex);
-    expect(clearIndex).toBeLessThan(successIndex);
-    expect(clearIndex).toBeLessThan(catchIndex);
-    expect(source.slice(catchIndex, source.indexOf("} finally {", catchIndex))).not.toContain('state.drafts.agentQuestion = "";');
+    expect(source).toContain('api<{ prompt: string; fileCount: number; uploadExpiresIn: number }>("/agent-context-task"');
+    expect(source).toContain("复制完整 Context 任务");
+    expect(source).not.toContain("您想了解什么？");
+    expect(source).not.toContain("第一阶段提示词");
+    expect(source).not.toContain("第二阶段提示词");
+    expect(source).not.toContain("userQuestion");
   });
 
-  it("uses the same copy icon for both Agent prompt buttons", () => {
+  it("supports streaming Q&A controls and safe Markdown rendering", () => {
     const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
-    expect(source.match(/renderDriveIcon\("clipboard-text", "bold"\)/g)).toHaveLength(2);
-    expect(source).not.toContain('renderDriveIcon("file-arrow-up"');
+    expect(source).toContain('fetch(`${apiBase}/qa`');
+    expect(source).toContain('data-action="qa-stop"');
+    expect(source).toContain('data-action="qa-clear"');
+    expect(source).toContain('data-action="qa-retry"');
+    expect(source).toContain("DOMPurify.sanitize(markdown.render(message.content))");
+    expect(source).toContain("completed.slice(-12)");
   });
 });
