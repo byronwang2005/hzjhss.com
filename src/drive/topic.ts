@@ -135,11 +135,19 @@ export interface DriveOverviewTopic {
   createdBy: string;
   updatedAt: string;
   outputCount: number;
+  hasCurrentContext: boolean;
   featuredOutput?: DriveOverviewOutput;
 }
 
 export interface DriveOverview {
   topics: DriveOverviewTopic[];
+}
+
+export interface GlobalContextEntry {
+  topicName: string;
+  topicPrefix: string;
+  contextPath: string;
+  content: string;
 }
 
 export interface TopicScaffoldOptions {
@@ -396,6 +404,7 @@ export async function readDriveOverview(config: DriveConfig, options: TopicScaff
           createdBy: topic.createdBy,
           updatedAt: topic.updatedAt,
           outputCount: outputs.length,
+          hasCurrentContext: Boolean(normalizedTopic.contextOutputPath),
           sortTimestamp: Math.max(timestampForFile(outputs[0] || { lastModified: "" }), Date.parse(topic.updatedAt) || 0),
           featuredOutput: featured
             ? {
@@ -544,6 +553,39 @@ export async function readCurrentContext(config: DriveConfig, topic: TopicMetada
     return null;
   }
   return getObjectText(config, topic.contextOutputPath);
+}
+
+export async function readGlobalContexts(config: DriveConfig): Promise<GlobalContextEntry[]> {
+  const root = await listAllDirectoryWithMetadata(config, "");
+  const entries = await Promise.all(
+    root.folders.map(async (folder): Promise<GlobalContextEntry | null> => {
+      let topic: TopicMetadata | null;
+      try {
+        topic = await readTopicMetadataIfExists(config, folder.path);
+      } catch (error) {
+        if (error instanceof SyntaxError || (error instanceof Error && error.message === "专题元数据无效")) {
+          return null;
+        }
+        throw error;
+      }
+      if (!topic?.contextOutputPath) {
+        return null;
+      }
+      const content = await getObjectText(config, topic.contextOutputPath);
+      if (!content?.trim()) {
+        return null;
+      }
+      return {
+        topicName: topic.name,
+        topicPrefix: topic.prefix,
+        contextPath: topic.contextOutputPath,
+        content,
+      };
+    }),
+  );
+  return entries
+    .filter((entry): entry is GlobalContextEntry => Boolean(entry))
+    .sort((a, b) => a.topicName.localeCompare(b.topicName, "zh-Hans-CN") || a.topicPrefix.localeCompare(b.topicPrefix));
 }
 
 export async function createAgentManifest(

@@ -33,6 +33,7 @@ import {
   mergeListMetadata,
   normalizeTopicPrefix,
   readDriveOverview,
+  readGlobalContexts,
   readTopic,
   removeFileMetadata,
   recordUploadsComplete,
@@ -1102,6 +1103,28 @@ describe("drive overview", () => {
       const overview = await readDriveOverview(testConfig, { displayName: "管理员", origin: "https://example.com" });
       expect(overview.topics).toEqual([]);
     });
+  });
+});
+
+describe("global Context aggregation", () => {
+  it("collects readable current Contexts in stable topic order and skips unavailable entries", async () => {
+    const energyContextPath = "新能源/outputs/新能源-context.md";
+    const chipContextPath = "半导体/outputs/半导体-context.md";
+    await withMockCos(
+      [
+        [`新能源/${TOPIC_META_FILENAME}`, JSON.stringify({ ...testTopicMetadata(), name: "新能源", prefix: "新能源/", contextOutputPath: energyContextPath })],
+        [energyContextPath, "新能源正文"],
+        [`半导体/${TOPIC_META_FILENAME}`, JSON.stringify({ ...testTopicMetadata(), instanceId: "topicinstance2", name: "半导体", prefix: "半导体/", contextOutputPath: chipContextPath })],
+        [chipContextPath, "半导体正文"],
+        [`空专题/${TOPIC_META_FILENAME}`, JSON.stringify({ ...testTopicMetadata(), instanceId: "topicinstance3", name: "空专题", prefix: "空专题/", contextOutputPath: null })],
+      ],
+      async () => {
+        expect(await readGlobalContexts(testConfig)).toEqual([
+          { topicName: "半导体", topicPrefix: "半导体/", contextPath: chipContextPath, content: "半导体正文" },
+          { topicName: "新能源", topicPrefix: "新能源/", contextPath: energyContextPath, content: "新能源正文" },
+        ]);
+      },
+    );
   });
 });
 

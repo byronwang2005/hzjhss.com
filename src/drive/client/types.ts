@@ -66,6 +66,7 @@ export interface DriveOverviewTopic {
   createdBy: string;
   updatedAt: string;
   outputCount: number;
+  hasCurrentContext: boolean;
   featuredOutput?: DriveOverviewOutput;
 }
 

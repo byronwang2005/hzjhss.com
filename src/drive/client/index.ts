@@ -17,6 +17,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import MarkdownIt from "markdown-it";
 import { renderIcon as renderDriveIcon } from "./icons";
+import "./qa-chat";
 import type {
   DriveFile,
   DriveFolder,
@@ -63,18 +64,8 @@ interface DraftState {
   topicName: string;
   createKeywords: string;
   settingsKeywords: string;
-  qaQuestion: string;
   owner: string;
   ownerConfirmName: string;
-}
-
-interface QaChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  pending?: boolean;
-  error?: boolean;
-  excludeFromHistory?: boolean;
 }
 
 interface AppState {
@@ -94,8 +85,6 @@ interface AppState {
   pendingUploadSelection: "file" | "folder" | null;
   deleteConfirmText: string;
   busyAction: "agent-context-task" | null;
-  qaMessages: QaChatMessage[];
-  qaStreaming: boolean;
   ownerCandidates: OwnerCandidatesResponse | null;
   drafts: DraftState;
 }
@@ -145,8 +134,6 @@ const state: AppState = {
   pendingUploadSelection: null,
   deleteConfirmText: "",
   busyAction: null,
-  qaMessages: [],
-  qaStreaming: false,
   ownerCandidates: null,
   drafts: {
     loginName: "",
@@ -154,7 +141,6 @@ const state: AppState = {
     topicName: "",
     createKeywords: "",
     settingsKeywords: "",
-    qaQuestion: "",
     owner: "",
     ownerConfirmName: "",
   },
@@ -162,10 +148,6 @@ const state: AppState = {
 
 let previewVersion = 0;
 let previewReturnFocus: HTMLElement | null = null;
-let featuredIndex = 0;
-let featuredTimer: number | null = null;
-let featuredPaused = false;
-let qaAbortController: AbortController | null = null;
 
 if (!rootElement) {
   throw new Error("Missing [data-drive-root] mount element.");
@@ -178,16 +160,6 @@ root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
 root.addEventListener("change", (event) => void handleChange(event));
 root.addEventListener("input", handleInput);
-root.addEventListener("pointerover", (event) => setFeaturedPaused(Boolean((event.target as HTMLElement).closest("[data-featured-carousel]"))));
-root.addEventListener("pointerout", (event) => {
-  const carousel = (event.target as HTMLElement).closest("[data-featured-carousel]");
-  if (carousel && !carousel.contains(event.relatedTarget as Node | null)) setFeaturedPaused(false);
-});
-root.addEventListener("focusin", (event) => { if ((event.target as HTMLElement).closest("[data-featured-carousel]")) setFeaturedPaused(true); });
-root.addEventListener("focusout", (event) => {
-  const carousel = (event.target as HTMLElement).closest("[data-featured-carousel]");
-  if (carousel && !carousel.contains(event.relatedTarget as Node | null)) setFeaturedPaused(false);
-});
 root.addEventListener("wa-after-hide", (event) => {
   const target = event.target as HTMLElement;
   if (target.matches("[data-preview-drawer]") && state.preview?.kind !== "pdf") {
@@ -219,7 +191,7 @@ async function boot(): Promise<void> {
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
   const form = event.target as HTMLFormElement;
-  if (!form.matches("[data-login-form], [data-create-form], [data-settings-form], [data-qa-form]")) {
+  if (!form.matches("[data-login-form], [data-create-form], [data-settings-form]")) {
     return;
   }
   event.preventDefault();
@@ -227,8 +199,6 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
     await submitLogin();
   } else if (form.matches("[data-create-form]")) {
     await submitCreateTopic();
-  } else if (form.matches("[data-qa-form]")) {
-    await submitQa();
   } else {
     await submitTopicSettings();
   }
@@ -284,12 +254,6 @@ async function handleClick(event: MouseEvent): Promise<void> {
     closeUploadReminder();
   } else if (action === "agent-context-task") {
     await copyAgentContextTask();
-  } else if (action === "qa-stop") {
-    stopQa();
-  } else if (action === "qa-clear") {
-    clearQa();
-  } else if (action === "qa-retry") {
-    await retryQa(target.dataset.messageId || "");
   } else if (action === "refresh") {
     await refreshCurrent();
   } else if (action === "set-featured") {
@@ -298,12 +262,6 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await transferTopicOwner();
   } else if (action === "remove-owner-candidate") {
     await removeOwnerCandidate(name);
-  } else if (action === "featured-prev") {
-    await showFeatured(featuredIndex - 1, target);
-  } else if (action === "featured-next") {
-    await showFeatured(featuredIndex + 1, target);
-  } else if (action === "featured-go") {
-    await showFeatured(Number(target.dataset.index || 0), target);
   }
 }
 
@@ -500,7 +458,6 @@ async function loadOverview(successMessage = ""): Promise<void> {
   cancelRequest("topic");
   cancelRequest("materials");
   closePreview(false);
-  clearQa(false);
   try {
     state.mode = "overview";
     state.loading = true;
@@ -514,14 +471,9 @@ async function loadOverview(successMessage = ""): Promise<void> {
       return;
     }
     state.overview = overview;
-    featuredIndex = 0;
     state.loading = false;
     setStatus(successMessage || overviewStatus(overview), successMessage ? "success" : "neutral");
     renderApp();
-    const first = featuredItems()[0];
-    const trigger = root.querySelector<HTMLElement>("[data-featured-carousel]");
-    if (first && trigger) await openPreview(first.output.path, trigger);
-    scheduleFeaturedRotation();
   } catch (error) {
     if (isAbort(error)) {
       return;
@@ -547,9 +499,6 @@ async function openTopic(prefix: string, tab: TopicTab = "qa"): Promise<void> {
     state.activeTab = tab;
     state.loading = true;
     state.materialPrefix = prefix;
-    if (state.topic?.topic.prefix !== prefix) {
-      clearQa(false);
-    }
     renderApp();
     const [topic, materialList, ownerCandidates] = await Promise.all([
       api<TopicDetail>(`/topic?${new URLSearchParams({ prefix }).toString()}`, { signal }),
@@ -657,7 +606,6 @@ async function refreshCurrent(): Promise<void> {
 async function logout(): Promise<void> {
   await api("/logout", { method: "POST" }).catch(() => null);
   requestControllers.forEach((controller) => controller.abort());
-  clearQa(false);
   closePreview(false);
   state.mode = "login";
   state.overview = null;
@@ -699,160 +647,6 @@ async function copyAgentContextTask(): Promise<void> {
     state.busyAction = null;
     renderApp();
   }
-}
-
-async function submitQa(questionOverride?: string): Promise<void> {
-  if (!state.topic?.hasCurrentContext || state.qaStreaming) {
-    return;
-  }
-  const question = (questionOverride ?? state.drafts.qaQuestion).trim();
-  if (!question) {
-    setStatus("请输入问题。", "danger");
-    renderApp();
-    return;
-  }
-  if (question.length > 3000) {
-    setStatus("问题不能超过 3000 字。", "danger");
-    renderApp();
-    return;
-  }
-
-  const completedHistory = completedQaHistory();
-  const userMessage: QaChatMessage = { id: qaMessageId(), role: "user", content: question };
-  const assistantMessage: QaChatMessage = { id: qaMessageId(), role: "assistant", content: "", pending: true };
-  state.qaMessages.push(userMessage, assistantMessage);
-  state.drafts.qaQuestion = "";
-  state.qaStreaming = true;
-  const controller = new AbortController();
-  qaAbortController = controller;
-  setStatus("正在生成回答...");
-  renderApp();
-
-  try {
-    const response = await fetch(`${apiBase}/qa`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      signal: controller.signal,
-      body: JSON.stringify({
-        prefix: state.topic.topic.prefix,
-        messages: [...completedHistory, userMessage].map(({ role, content }) => ({ role, content })),
-      }),
-    });
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: unknown };
-      throw new Error(typeof data.error === "string" ? data.error : `问答请求失败（${response.status}）`);
-    }
-    if (!response.body) {
-      throw new Error("模型没有返回流式响应");
-    }
-    await consumeQaStream(response.body, assistantMessage);
-    if (qaAbortController !== controller) {
-      return;
-    }
-    if (!assistantMessage.content) {
-      throw new Error("模型没有返回可显示的流式内容");
-    }
-    assistantMessage.pending = false;
-    setStatus("回答完成。", "success");
-  } catch (error) {
-    if (qaAbortController !== controller) {
-      return;
-    }
-    assistantMessage.pending = false;
-    if (isAbort(error)) {
-      if (!assistantMessage.content) {
-        state.qaMessages = state.qaMessages.filter((message) => message.id !== assistantMessage.id && message.id !== userMessage.id);
-      } else {
-        assistantMessage.excludeFromHistory = true;
-      }
-      setStatus("已停止生成。", "neutral");
-    } else {
-      assistantMessage.error = true;
-      setStatus(error instanceof Error ? error.message : "问答请求失败", "danger");
-    }
-  } finally {
-    if (qaAbortController === controller) {
-      qaAbortController = null;
-      state.qaStreaming = false;
-      renderApp();
-    }
-  }
-}
-
-async function consumeQaStream(stream: ReadableStream<Uint8Array>, assistantMessage: QaChatMessage): Promise<void> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
-    let boundary = buffer.indexOf("\n\n");
-    while (boundary >= 0) {
-      const block = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const event = /^event:\s*(.+)$/m.exec(block)?.[1]?.trim();
-      const dataText = block
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      const data = dataText ? (JSON.parse(dataText) as { content?: unknown; error?: unknown }) : {};
-      if (event === "delta" && typeof data.content === "string") {
-        assistantMessage.content += data.content;
-        renderApp();
-      } else if (event === "error") {
-        throw new Error(typeof data.error === "string" ? data.error : "模型流式输出失败");
-      }
-      boundary = buffer.indexOf("\n\n");
-    }
-    if (done) {
-      break;
-    }
-  }
-}
-
-function stopQa(): void {
-  qaAbortController?.abort();
-}
-
-function clearQa(shouldRender = true): void {
-  qaAbortController?.abort();
-  qaAbortController = null;
-  state.qaMessages = [];
-  state.qaStreaming = false;
-  state.drafts.qaQuestion = "";
-  if (shouldRender) {
-    setStatus("当前浏览器会话已清空。", "success");
-    renderApp();
-  }
-}
-
-async function retryQa(messageId: string): Promise<void> {
-  if (state.qaStreaming) return;
-  const failedIndex = state.qaMessages.findIndex((message) => message.id === messageId && message.role === "assistant" && message.error);
-  if (failedIndex < 1) return;
-  const question = state.qaMessages[failedIndex - 1];
-  if (question.role !== "user") return;
-  state.qaMessages.splice(failedIndex - 1, 2);
-  await submitQa(question.content);
-}
-
-function completedQaHistory(): QaChatMessage[] {
-  const completed: QaChatMessage[] = [];
-  for (let index = 0; index + 1 < state.qaMessages.length; index += 2) {
-    const user = state.qaMessages[index];
-    const assistant = state.qaMessages[index + 1];
-    if (user.role !== "user" || assistant.role !== "assistant" || assistant.pending || assistant.error || assistant.excludeFromHistory) {
-      continue;
-    }
-    completed.push(user, assistant);
-  }
-  return completed.slice(-12);
-}
-
-function qaMessageId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 async function copySignedLink(path: string): Promise<void> {
@@ -1257,7 +1051,7 @@ function renderOverview(): TemplateResult {
   const topics = state.overview?.topics || [];
   const totalOutputs = topics.reduce((sum, topic) => sum + topic.outputCount, 0);
   const emptyTopics = topics.filter((topic) => topic.outputCount === 0).length;
-  const featured = featuredItems();
+  const contextCount = topics.filter((topic) => topic.hasCurrentContext).length;
   return html`
     <section class="drive-dashboard">
       <div class="drive-page-head">
@@ -1273,12 +1067,7 @@ function renderOverview(): TemplateResult {
         ${metricCard("待交付", String(emptyTopics), "无成果的专题数")}
       </div>
       <div class="drive-two-column">
-        <section class="drive-panel">
-          <div class="drive-panel-head"><h2>精选成果</h2><span>${featured.length ? `${featuredIndex + 1} / ${featured.length}` : "暂无精选"}</span></div>
-          ${featured.length
-            ? renderFeaturedCarousel(featured[featuredIndex] || featured[0], featured.length)
-            : renderEmpty("ph-tray", "还没有可交付成果", "")}
-        </section>
+        <drive-ai-qa scope="global" .ready=${contextCount > 0} .contextCount=${contextCount}></drive-ai-qa>
         <section class="drive-panel">
           <div class="drive-panel-head"><h2>专题队列</h2><span>${topics.length ? "按最近交付排序" : "等待创建"}</span></div>
           ${topics.length
@@ -1432,56 +1221,10 @@ function renderAgentTab(): TemplateResult {
 
 function renderQaTab(): TemplateResult {
   const ready = Boolean(state.topic?.hasCurrentContext);
-  return html`
-    <section class="drive-tab-panel drive-qa-panel" role="tabpanel" aria-label="问答">
-      <div class="drive-panel-head">
-        <div><h2>专题问答</h2><p>回答只依据当前最新版 Markdown Context；对话仅保存在本页面，刷新后清空。</p></div>
-        ${state.qaMessages.length
-          ? html`<button class="drive-control" type="button" data-action="qa-clear" ?disabled=${state.qaStreaming}>${renderDriveIcon("trash")}清空会话</button>`
-          : nothing}
-      </div>
-      ${ready
-        ? nothing
-        : html`<wa-callout class="drive-agent-callout" variant="warning"><span slot="icon">${renderDriveIcon("warning")}</span>当前专题还没有可用的最新版 Context。请联系专题负责人生成并回传。</wa-callout>`}
-      <div class="drive-qa-messages" aria-live="polite">
-        ${state.qaMessages.length
-          ? repeat(state.qaMessages, (message) => message.id, renderQaMessage)
-          : renderEmpty("ph-chat-circle-dots", "可以开始提问", ready ? "答案将严格限定在当前 Context 内。" : "Context 准备完成后即可使用。")}
-      </div>
-      <form class="drive-qa-form" data-qa-form>
-        <label class="drive-field">
-          <span>您的问题</span>
-          <textarea data-draft="qaQuestion" name="qaQuestion" rows="3" maxlength="3000" placeholder="请输入关于该专题的问题" .value=${state.drafts.qaQuestion} ?disabled=${!ready || state.qaStreaming}></textarea>
-        </label>
-        <div class="drive-form-actions">
-          ${state.qaStreaming
-            ? html`<button class="drive-control drive-control-danger" type="button" data-action="qa-stop">${renderDriveIcon("stop-circle")}停止生成</button>`
-            : html`<button class="drive-control drive-control-primary" type="submit" ?disabled=${!ready || !state.drafts.qaQuestion.trim()}>${renderDriveIcon("paper-plane-tilt", "bold")}发送问题</button>`}
-        </div>
-      </form>
-    </section>
-  `;
-}
-
-function renderQaMessage(message: QaChatMessage): TemplateResult {
-  const rendered = message.role === "assistant" && message.content
-    ? DOMPurify.sanitize(markdown.render(message.content))
-    : "";
-  return html`
-    <article class=${classMap({ "drive-qa-message": true, "is-user": message.role === "user", "is-error": Boolean(message.error) })}>
-      <header>${message.role === "user" ? "您" : "AI"}${message.pending ? html`<span>生成中</span>` : nothing}</header>
-      ${message.role === "assistant"
-        ? message.content
-          ? html`<div class="drive-preview-markdown">${unsafeHTML(rendered)}</div>`
-          : message.pending
-            ? renderInlineSkeleton()
-            : nothing
-        : html`<p>${message.content}</p>`}
-      ${message.error
-        ? html`<div class="drive-qa-error"><span>本次生成失败，可重试。</span><button class="drive-table-action" type="button" data-action="qa-retry" data-message-id=${message.id}>${renderDriveIcon("arrow-clockwise")}重试</button></div>`
-        : nothing}
-    </article>
-  `;
+  const topic = state.topic?.topic;
+  return html`<section class="drive-tab-panel drive-qa-panel" role="tabpanel" aria-label="问答">
+    <drive-ai-qa scope="topic" .prefix=${topic?.prefix || ""} .topicName=${topic?.name || ""} .ready=${ready}></drive-ai-qa>
+  </section>`;
 }
 
 function renderSettingsTab(): TemplateResult | typeof nothing {
@@ -1550,37 +1293,6 @@ function renderSettingsTab(): TemplateResult | typeof nothing {
       </form>
     </section>
   `;
-}
-
-function renderFeaturedCarousel(item: { topic: DriveOverviewTopic; output: NonNullable<DriveOverviewTopic["featuredOutput"]> }, count: number): TemplateResult {
-  const { topic, output } = item;
-  return html`
-    <div class="drive-featured-carousel" data-featured-carousel aria-roledescription="carousel" aria-label="精选成果">
-      <article class="drive-featured-card">
-        <div class="drive-file-symbol">${renderDriveIcon(fileIconName(output))}</div>
-        <div class="drive-output-main">
-          <button class="drive-title-button" type="button" data-action="open-topic" data-prefix=${topic.prefix}>${output.name}</button>
-          <p><strong>${topic.name}</strong> · 成果创建者 ${output.uploadedBy || "-"} · 专题负责人 ${topic.owner || "-"} · ${formatDate(output.uploadedAt || output.lastModified)}</p>
-        </div>
-        <div class="drive-row-actions">
-          ${actionButton("链接", "copy-link", output.path)}${actionButton("下载", "download", output.path)}
-        </div>
-      </article>
-      ${renderInlinePdf(output.path)}
-      ${state.preview?.file.path === output.path && state.preview.kind !== "pdf" ? renderFeaturedNonPdfPreview() : nothing}
-      <div class="drive-featured-controls">
-        <button class="drive-icon-button" type="button" data-action="featured-prev" aria-label="上一个精选成果" ?disabled=${count < 2}>${renderDriveIcon("caret-left")}</button>
-        <div class="drive-featured-dots" aria-label="选择精选成果">${Array.from({ length: count }, (_, index) => html`<button type="button" data-action="featured-go" data-index=${index} class=${index === featuredIndex ? "is-active" : ""} aria-label=${`第 ${index + 1} 项`} aria-current=${index === featuredIndex ? "true" : "false"}></button>`)}</div>
-        <button class="drive-icon-button" type="button" data-action="featured-next" aria-label="下一个精选成果" ?disabled=${count < 2}>${renderDriveIcon("caret-right")}</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderFeaturedNonPdfPreview(): TemplateResult {
-  const preview = state.preview!;
-  const body = preview.loading ? renderInlineSkeleton() : preview.failed ? renderEmpty("ph-eye-slash", "无法预览", "可继续查看其他精选成果。") : preview.renderedHtml ? html`<article class="drive-preview-markdown">${unsafeHTML(preview.renderedHtml)}</article>` : preview.url ? html`<iframe class="drive-preview-frame" src=${preview.url} title=${preview.title} sandbox referrerpolicy="no-referrer"></iframe>` : nothing;
-  return html`<div class="drive-featured-preview">${body}</div>`;
 }
 
 function renderTopicCard(topic: DriveOverviewTopic): TemplateResult {
@@ -1866,10 +1578,6 @@ function findFileByPath(path: string): DriveFile | undefined {
   return [...outputs, ...materials, ...overviewOutputs].find((file) => file.path === path);
 }
 
-function featuredItems(): Array<{ topic: DriveOverviewTopic; output: NonNullable<DriveOverviewTopic["featuredOutput"]> }> {
-  return (state.overview?.topics || []).flatMap((topic) => topic.featuredOutput ? [{ topic, output: topic.featuredOutput }] : []);
-}
-
 async function setFeaturedOutput(path: string): Promise<void> {
   if (!state.topic?.canManageFeaturedOutput) return;
   try {
@@ -1881,29 +1589,6 @@ async function setFeaturedOutput(path: string): Promise<void> {
     showError(error);
     renderApp();
   }
-}
-
-async function showFeatured(index: number, trigger?: HTMLElement): Promise<void> {
-  const items = featuredItems();
-  if (!items.length) return;
-  featuredIndex = (index + items.length) % items.length;
-  closePreview(false);
-  renderApp();
-  const carousel = trigger?.isConnected ? trigger : root.querySelector<HTMLElement>("[data-featured-carousel]");
-  if (carousel) await openPreview(items[featuredIndex].output.path, carousel);
-  scheduleFeaturedRotation();
-}
-
-function setFeaturedPaused(paused: boolean): void {
-  featuredPaused = paused;
-  scheduleFeaturedRotation();
-}
-
-function scheduleFeaturedRotation(): void {
-  if (featuredTimer !== null) window.clearTimeout(featuredTimer);
-  featuredTimer = null;
-  if (state.mode !== "overview" || featuredPaused || featuredItems().length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  featuredTimer = window.setTimeout(() => void showFeatured(featuredIndex + 1), 8000);
 }
 
 function isUnauthorized(error: unknown): boolean {

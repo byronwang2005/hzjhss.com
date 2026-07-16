@@ -49,7 +49,7 @@ Variables:
 
 回传仍使用无 Cookie 的 `agent-output-upload-*` 接口，且只接受本次授权路径与 `text/markdown; charset=utf-8`。成功登记后会保留历史成果，把 `contextOutputPath` 指向最新版并设为精选成果；删除当前 Context 会清空该指针，不自动回退到历史版本。旧 PDF 成果继续保留、预览和下载。
 
-网页“问答”对所有已登录用户开放。`POST /api/drive/qa` 每次从 COS 完整读取 `contextOutputPath`，携带最近最多 6 轮浏览器内对话，通过官方 `openai` Node SDK 调用自定义 `AI_BASE_URL` 的 `/chat/completions`，并把模型 `choices[].delta.content` 转为 SSE。服务端不会截断 Context、做关键词切片、调用 Files/File Search/Vector Store、Embedding 或向量数据库。上游上下文窗口不足时会直接显示明确错误。
+网页“问答”对所有已登录用户开放。`POST /api/drive/qa` 支持 `scope: "topic"` 与 `scope: "global"`：专题模式完整读取指定专题的 `contextOutputPath`；全局模式汇总所有专题当前可读且非空的最新版 Context，并为每段数据附加专题名称、前缀和 Context path。请求携带最近最多 6 轮浏览器内对话，通过官方 `openai` Node SDK 调用自定义 `AI_BASE_URL` 的 `/chat/completions`，并把模型 `choices[].delta.content` 转为 SSE。服务端不会截断 Context、做关键词切片、调用 Files/File Search/Vector Store、Embedding 或向量数据库。上游上下文窗口不足时会直接显示明确错误。
 
 每个 v5 专题带有不可复用的 `instanceId`。Agent 回传授权绑定该实例和签发时的负责人；专题删除重建或负责人变更后，旧授权失效。没有 `._topic.json` 的残留对象前缀不会出现在专题概览。
 

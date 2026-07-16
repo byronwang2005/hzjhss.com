@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const htmlFiles = ["index.html", ...globSync("articles/*.html")];
 const publicMarkup = htmlFiles.map((file) => readFileSync(file, "utf8")).join("\n");
-const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts"]
+const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts"]
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
 const cssSource = ["theme.css", "styles.css", "src/drive/client/drive.css"]
@@ -19,6 +19,23 @@ describe("shared UI system", () => {
     expect(sprite).toContain('id="ph-regular-copy"');
     expect(sprite).toContain('id="ph-bold-check"');
     expect(sprite).toContain('id="ph-duotone-files"');
+  });
+
+  it("includes every SVG symbol used by the AI Q&A component", () => {
+    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    for (const symbol of [
+      "ph-regular-arrow-clockwise",
+      "ph-regular-chat-circle-dots",
+      "ph-regular-database",
+      "ph-regular-files",
+      "ph-regular-link",
+      "ph-regular-stop-circle",
+      "ph-regular-trash",
+      "ph-regular-warning",
+      "ph-bold-paper-plane-tilt",
+    ]) {
+      expect(sprite).toContain(`id="${symbol}"`);
+    }
   });
 
   it("covers public page controls through the shared icon initializer", () => {
@@ -37,8 +54,7 @@ describe("shared UI system", () => {
     const buttons = driveSource.match(/<button\b[\s\S]*?<\/button>/g) || [];
     for (const button of buttons) {
       const isTextLink = /drive-title-button|drive-breadcrumbs|data-action="open-folder"/.test(button);
-      const isCarouselDot = /data-action="featured-go"/.test(button);
-      if (!isTextLink && !isCarouselDot) {
+      if (!isTextLink) {
         expect(button).toMatch(/render(?:Drive)?Icon/);
       }
     }

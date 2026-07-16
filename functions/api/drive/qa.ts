@@ -2,8 +2,8 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import type { DriveEnv } from "../../../src/drive/config";
 import { getAiConfig, getDriveConfig } from "../../../src/drive/config";
 import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createQaClient, createQaSystemMessage, encodeSse, normalizeQaMessages, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/qa";
-import { readCurrentContext, readTopic } from "../../../src/drive/topic";
+import { createGlobalQaSystemMessage, createQaClient, createQaSystemMessage, encodeSse, normalizeQaMessages, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/qa";
+import { readCurrentContext, readGlobalContexts, readTopic } from "../../../src/drive/topic";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
@@ -14,19 +14,28 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     const body = await readJsonBody(request);
     const origin = new URL(request.url).origin;
     const driveConfig = getDriveConfig(env);
-    const detail = await readTopic(driveConfig, body.prefix, { displayName: session.displayName, origin });
-    const context = await readCurrentContext(driveConfig, detail.topic);
-    if (!detail.topic.contextOutputPath || context === null) {
-      return jsonResponse({ error: "该专题尚未准备可用的 Markdown Context" }, 409);
-    }
-    if (!context.trim()) {
-      return jsonResponse({ error: "当前 Markdown Context 为空，问答已禁用" }, 409);
-    }
-
     const qaMessages = normalizeQaMessages(body.messages);
     const aiConfig = getAiConfig(env);
+    let systemMessage: string;
+    if (body.scope === "global") {
+      const contexts = await readGlobalContexts(driveConfig);
+      if (!contexts.length) {
+        return jsonResponse({ error: "当前没有可用于全局问答的 Markdown Context" }, 409);
+      }
+      systemMessage = createGlobalQaSystemMessage(contexts);
+    } else {
+      const detail = await readTopic(driveConfig, body.prefix, { displayName: session.displayName, origin });
+      const context = await readCurrentContext(driveConfig, detail.topic);
+      if (!detail.topic.contextOutputPath || context === null) {
+        return jsonResponse({ error: "该专题尚未准备可用的 Markdown Context" }, 409);
+      }
+      if (!context.trim()) {
+        return jsonResponse({ error: "当前 Markdown Context 为空，问答已禁用" }, 409);
+      }
+      systemMessage = createQaSystemMessage(context);
+    }
     const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: createQaSystemMessage(context) },
+      { role: "system", content: systemMessage },
       ...qaMessages,
     ];
 

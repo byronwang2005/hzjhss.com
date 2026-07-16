@@ -152,7 +152,6 @@ describe("drive client upload progress", () => {
 describe("drive client responsibility labels", () => {
   it("distinguishes output creators from topic owners while keeping material uploaders", () => {
     const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
-    expect(source).toContain("成果创建者 ${output.uploadedBy");
     expect(source).toContain("专题负责人 ${topic.owner");
     expect(source).toContain('<span>成果创建者</span><span>更新</span>');
     expect(source).toContain('<span>上传者</span><span>更新</span>');
@@ -212,12 +211,20 @@ describe("drive client topic navigation", () => {
   });
 
   it("supports streaming Q&A controls and safe Markdown rendering", () => {
-    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
-    expect(source).toContain('fetch(`${apiBase}/qa`');
-    expect(source).toContain('data-action="qa-stop"');
-    expect(source).toContain('data-action="qa-clear"');
-    expect(source).toContain('data-action="qa-retry"');
+    const source = readFileSync(new URL("../src/drive/client/qa-chat.ts", import.meta.url), "utf8");
+    expect(source).toContain('fetch("/api/drive/qa"');
+    expect(source).toContain("this.abortController?.abort()");
+    expect(source).toContain("this.clearConversation()");
+    expect(source).toContain("this.retry(message.id)");
     expect(source).toContain("DOMPurify.sanitize(markdown.render(message.content))");
     expect(source).toContain("completed.slice(-12)");
+  });
+
+  it("reuses the Q&A component for global and topic contexts", () => {
+    const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+    expect(source).toContain('<drive-ai-qa scope="global"');
+    expect(source).toContain('<drive-ai-qa scope="topic"');
+    expect(source).not.toContain("精选成果</h2>");
+    expect(source).not.toContain("data-featured-carousel");
   });
 });
