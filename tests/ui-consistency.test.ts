@@ -38,6 +38,17 @@ describe("shared UI system", () => {
     }
   });
 
+  it("includes every statically referenced drive icon at its requested weight", () => {
+    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    const iconCalls = driveSource.matchAll(/render(?:Drive)?Icon\("([^"]+)"(?:,\s*"(regular|bold|fill|duotone)")?/g);
+
+    for (const [, rawName, requestedWeight] of iconCalls) {
+      const name = rawName.replace(/^ph-/, "").replace(/-fill$/, "");
+      const weight = rawName.endsWith("-fill") ? "fill" : requestedWeight || "regular";
+      expect(sprite, `missing ph-${weight}-${name}`).toContain(`id="ph-${weight}-${name}"`);
+    }
+  });
+
   it("covers public page controls through the shared icon initializer", () => {
     const siteScript = readFileSync("site.js", "utf8");
     for (const selector of [".top-nav a", ".back-link", ".footer a", ".article-list-item em", ".toc-toggle", ".copy-button", ".system-tab[data-system]", ".architecture-tab"]) {
