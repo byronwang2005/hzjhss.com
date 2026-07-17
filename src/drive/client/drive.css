@@ -419,49 +419,6 @@ a {
   gap: 9px;
 }
 
-.drive-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 20px;
-  border-top: 1px solid var(--drive-line);
-  border-bottom: 1px solid var(--drive-line);
-}
-
-.drive-metric {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 3px 16px;
-  min-width: 0;
-  padding: 18px 20px;
-  border-right: 1px solid var(--drive-line);
-}
-
-.drive-metric:last-child {
-  border-right: 0;
-}
-
-.drive-metric > span,
-.drive-metric small {
-  color: var(--drive-muted);
-}
-
-.drive-metric > span {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.drive-metric strong {
-  grid-row: 1 / 3;
-  grid-column: 2;
-  font-family: var(--drive-mono);
-  font-size: clamp(26px, 3vw, 38px);
-  line-height: 1;
-}
-
-.drive-metric small {
-  font-size: 12px;
-}
-
 .drive-two-column {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
@@ -1556,19 +1513,6 @@ drive-pdf-preview {
 
   .drive-topic-meta {
     justify-items: start;
-  }
-
-  .drive-metrics {
-    grid-template-columns: 1fr;
-  }
-
-  .drive-metric {
-    border-right: 0;
-    border-bottom: 1px solid var(--drive-line);
-  }
-
-  .drive-metric:last-child {
-    border-bottom: 0;
   }
 
   .drive-tabs {

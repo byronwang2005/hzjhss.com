@@ -1049,8 +1049,6 @@ function renderOverview(): TemplateResult {
     return renderOverviewSkeleton();
   }
   const topics = state.overview?.topics || [];
-  const totalOutputs = topics.reduce((sum, topic) => sum + topic.outputCount, 0);
-  const emptyTopics = topics.filter((topic) => topic.outputCount === 0).length;
   const contextCount = topics.filter((topic) => topic.hasCurrentContext).length;
   return html`
     <section class="drive-dashboard">
@@ -1060,11 +1058,6 @@ function renderOverview(): TemplateResult {
           ${controlButton("刷新", "ph-arrow-clockwise", "refresh")}
           ${controlButton("新建专题", "ph-folder-plus", "create-view", true)}
         </div>
-      </div>
-      <div class="drive-metrics" aria-label="专题资料库概览">
-        ${metricCard("专题", String(topics.length), "已建专题数")}
-        ${metricCard("成果", String(totalOutputs), "成果文件数")}
-        ${metricCard("待交付", String(emptyTopics), "无成果的专题数")}
       </div>
       <div class="drive-two-column">
         <drive-ai-qa scope="global" .ready=${contextCount > 0} .contextCount=${contextCount}></drive-ai-qa>
@@ -1498,7 +1491,7 @@ function renderUploadProgress(): TemplateResult | typeof nothing {
 }
 
 function renderOverviewSkeleton(): TemplateResult {
-  return html`<section class="drive-dashboard">${renderPageHeadSkeleton()}<div class="drive-metrics">${[1, 2, 3].map(() => html`<div class="drive-skeleton drive-skeleton-metric"></div>`)}</div><div class="drive-two-column">${[1, 2].map(() => html`<div class="drive-skeleton drive-skeleton-panel"></div>`)}</div></section>`;
+  return html`<section class="drive-dashboard">${renderPageHeadSkeleton()}<div class="drive-two-column">${[1, 2].map(() => html`<div class="drive-skeleton drive-skeleton-panel"></div>`)}</div></section>`;
 }
 
 function renderTopicSkeleton(): TemplateResult {
@@ -1519,10 +1512,6 @@ function renderAnalysisScopeGuidance(): TemplateResult {
 
 function renderEmpty(icon: string, title: string, body: string): TemplateResult {
   return html`<div class="drive-empty">${renderDriveIcon(icon, "duotone", "ui-icon-lg")}<h3>${title}</h3>${body ? html`<p>${body}</p>` : nothing}</div>`;
-}
-
-function metricCard(label: string, value: string, detail: string): TemplateResult {
-  return html`<article class="drive-metric"><span>${label}</span><strong>${value}</strong><small>${detail}</small></article>`;
 }
 
 function tabButton(tab: TopicTab, label: string, icon: string): TemplateResult {
