@@ -21,6 +21,7 @@ export class DriveAiQa extends LitElement {
   static properties = {
     scope: { type: String },
     prefix: { type: String },
+    topicName: { type: String, attribute: "topic-name" },
     ready: { type: Boolean },
     question: { state: true },
     messages: { state: true },
@@ -31,6 +32,7 @@ export class DriveAiQa extends LitElement {
 
   accessor scope: "global" | "topic" = "topic";
   accessor prefix = "";
+  accessor topicName = "";
   accessor ready = false;
   private accessor question = "";
   private accessor messages: QaChatMessage[] = [];
@@ -126,6 +128,7 @@ export class DriveAiQa extends LitElement {
   }
 
   private renderEmptyState(): TemplateResult {
+    const readyTitle = this.scope === "global" ? "在全资料库内提问" : `对${this.topicName || "当前专题"}提问`;
     const suggestions = this.scope === "global"
       ? [
           ["database", "汇总重点", "请汇总各专题当前最重要的结论，并标明来源。"],
@@ -139,7 +142,7 @@ export class DriveAiQa extends LitElement {
         ];
     return html`
       <div class="drive-ai-qa-empty">
-        <div><h3>${this.ready ? "从 Context 开始提问" : "等待 Context"}</h3><p>${this.ready ? "选择一个方向，或直接输入您关心的问题。" : "准备完成后，这里会提供基于资料的可追溯回答。"}</p></div>
+        <div><h3>${this.ready ? readyTitle : "等待 Context"}</h3><p>${this.ready ? "选择一个方向，或直接输入您关心的问题。" : "准备完成后，这里会提供基于资料的可追溯回答。"}</p></div>
         ${this.ready
           ? html`<div class="drive-ai-qa-suggestions" aria-label="问题建议">
               ${suggestions.map(([icon, label, prompt]) => html`

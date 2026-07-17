@@ -12,6 +12,7 @@ async function mountQa(scope: "global" | "topic" = "global"): Promise<DriveAiQa>
   const qa = new DriveAiQa();
   qa.scope = scope;
   qa.prefix = scope === "topic" ? "新能源/" : "";
+  qa.topicName = scope === "topic" ? "新能源" : "";
   qa.ready = true;
   document.body.appendChild(qa);
   await qa.updateComplete;
@@ -61,8 +62,18 @@ describe("drive AI Q&A component", () => {
     expect(qa.textContent).toContain("专题回答");
 
     qa.prefix = "半导体/";
+    qa.topicName = "半导体";
     await qa.updateComplete;
     expect(qa.textContent).not.toContain("专题回答");
+    expect(qa.textContent).toContain("对半导体提问");
     expect(qa.querySelector(".drive-ai-qa-heading p")).toBeNull();
+  });
+
+  it("uses scope-specific empty-state titles", async () => {
+    const globalQa = await mountQa("global");
+    const topicQa = await mountQa("topic");
+
+    expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("在全资料库内提问");
+    expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("对新能源提问");
   });
 });

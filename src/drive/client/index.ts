@@ -1216,7 +1216,7 @@ function renderQaTab(): TemplateResult {
   const ready = Boolean(state.topic?.hasCurrentContext);
   const topic = state.topic?.topic;
   return html`<section class="drive-tab-panel drive-qa-panel" role="tabpanel" aria-label="问答">
-    <drive-ai-qa scope="topic" .prefix=${topic?.prefix || ""} .ready=${ready}></drive-ai-qa>
+    <drive-ai-qa scope="topic" .prefix=${topic?.prefix || ""} .topicName=${topic?.name || ""} .ready=${ready}></drive-ai-qa>
   </section>`;
 }
 
