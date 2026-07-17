@@ -76,4 +76,62 @@ describe("drive AI Q&A component", () => {
     expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("在全资料库内提问");
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("对新能源提问");
   });
+
+  it("renders an integrated composer and submits with Enter on fine pointers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('event: delta\ndata: {"content":"回答"}\n\n')));
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    const submit = qa.querySelector<HTMLButtonElement>('.drive-ai-qa-action[type="submit"]')!;
+
+    expect(qa.querySelector(".drive-ai-qa-field")).toBeNull();
+    expect(textarea.getAttribute("aria-label")).toBe("您的问题");
+    expect(submit.textContent?.trim()).toBe("");
+
+    textarea.value = "使用回车发送";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    textarea.dispatchEvent(event);
+    await waitForAnswer(qa);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(qa.textContent).toContain("回答");
+  });
+
+  it("keeps newlines for Shift+Enter, composition, and coarse pointers", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "多行问题";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+
+    textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
+    textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("auto-grows the composer and resets it after submission", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('event: delta\ndata: {"content":"回答"}\n\n')));
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    Object.defineProperty(textarea, "scrollHeight", { configurable: true, get: () => textarea.value ? 240 : 52 });
+
+    textarea.value = "很长的问题";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    await Promise.resolve();
+    expect(textarea.style.height).toBe("156px");
+
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+    await Promise.resolve();
+    expect(textarea.style.height).toBe("52px");
+  });
 });

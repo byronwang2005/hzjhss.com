@@ -68,6 +68,9 @@ export class DriveAiQa extends LitElement {
     if (changed.has("messages")) {
       this.scrollToLatest();
     }
+    if (changed.has("question")) {
+      this.syncTextareaHeight();
+    }
   }
 
   protected render(): TemplateResult {
@@ -99,29 +102,28 @@ export class DriveAiQa extends LitElement {
             : this.renderEmptyState()}
         </div>
 
-        <form class="drive-ai-qa-form" @submit=${this.handleSubmit}>
-          <label class="drive-field drive-ai-qa-field">
-            <span>您的问题</span>
+        <form class=${classMap({ "drive-ai-qa-form": true, "is-danger": this.statusTone === "danger" })} @submit=${this.handleSubmit}>
+          <div class="drive-ai-qa-composer">
             <textarea
               name="qaQuestion"
-              rows="3"
+              rows="2"
               maxlength="3000"
+              aria-label="您的问题"
               placeholder=${isGlobal ? "询问跨专题结论、风险或来源" : "请输入关于该专题的问题"}
               .value=${this.question}
               @input=${this.handleInput}
+              @keydown=${this.handleKeydown}
               ?disabled=${!this.ready || this.streaming}
             ></textarea>
-          </label>
-          <div class="drive-ai-qa-form-footer">
-            <span class="drive-ai-qa-status ${this.statusTone === "danger" ? "is-danger" : this.statusTone === "success" ? "is-success" : ""}" role="status">
-              ${this.status || (this.ready ? "对话仅保存在当前页面，刷新后清空。" : "Context 准备完成后即可使用。")}
-            </span>
             ${this.streaming
-              ? html`<button class="drive-control drive-control-danger" type="button" @click=${this.stop}>${renderIcon("stop-circle")}停止生成</button>`
-              : html`<button class="drive-control drive-control-primary" type="submit" ?disabled=${!this.ready || !this.question.trim()}>
-                  ${renderIcon("paper-plane-tilt", "bold")}发送问题
+              ? html`<button class="drive-ai-qa-action is-stop" type="button" aria-label="停止生成" title="停止生成" @click=${this.stop}>${renderIcon("stop-circle")}</button>`
+              : html`<button class="drive-ai-qa-action" type="submit" aria-label="发送问题" title="发送问题" ?disabled=${!this.ready || !this.question.trim()}>
+                  ${renderIcon("paper-plane-tilt", "bold")}
                 </button>`}
           </div>
+          <span class="drive-ai-qa-status ${this.statusTone === "danger" ? "is-danger" : this.statusTone === "success" ? "is-success" : ""}" role="status">
+            ${this.status || (this.ready ? "对话仅保存在当前页面，刷新后清空。" : "Context 准备完成后即可使用。")}
+          </span>
         </form>
       </section>
     `;
@@ -181,6 +183,12 @@ export class DriveAiQa extends LitElement {
 
   private handleInput = (event: Event): void => {
     this.question = (event.target as HTMLTextAreaElement).value;
+  };
+
+  private handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229 || this.hasCoarsePointer()) return;
+    event.preventDefault();
+    void this.submitQuestion();
   };
 
   private handleSubmit = (event: SubmitEvent): void => {
@@ -320,6 +328,21 @@ export class DriveAiQa extends LitElement {
   private useSuggestion(prompt: string): void {
     this.question = prompt;
     void this.updateComplete.then(() => this.querySelector<HTMLTextAreaElement>("textarea")?.focus());
+  }
+
+  private syncTextareaHeight(): void {
+    void this.updateComplete.then(() => {
+      const textarea = this.querySelector<HTMLTextAreaElement>("textarea");
+      if (!textarea) return;
+      textarea.style.height = "auto";
+      if (textarea.scrollHeight > 0) {
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 156)}px`;
+      }
+    });
+  }
+
+  private hasCoarsePointer(): boolean {
+    return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
   }
 
   private setStatus(status: string, tone: "neutral" | "danger" | "success" = "neutral"): void {

@@ -950,34 +950,144 @@ a {
 
 .drive-ai-qa-form {
   display: grid;
-  gap: 10px;
-  padding: 14px 18px 16px;
-  background: var(--drive-surface-muted);
+  gap: 8px;
+  justify-items: center;
+  padding: 18px clamp(14px, 3vw, 28px) 14px;
+  background: color-mix(in srgb, var(--drive-surface-raised) 64%, transparent);
   border-top: 1px solid var(--drive-line);
 }
 
-.drive-ai-qa-field textarea {
-  min-height: 86px;
-  max-height: 180px;
-  resize: vertical;
-  background: var(--drive-surface-raised);
+.drive-ai-qa-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(100%, 920px);
+  min-height: 70px;
+  padding: 8px 9px 8px 20px;
+  background: color-mix(in srgb, var(--drive-surface-raised) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--drive-accent) 74%, white 26%);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 76%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--drive-accent) 18%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--drive-accent) 22%, transparent),
+    0 0 18px color-mix(in srgb, var(--drive-accent) 42%, transparent),
+    0 10px 30px color-mix(in srgb, var(--drive-accent) 24%, transparent);
+  backdrop-filter: blur(18px) saturate(132%);
+  -webkit-backdrop-filter: blur(18px) saturate(132%);
+  transition: border-color var(--jh-duration-medium) var(--jh-motion-control), box-shadow var(--jh-duration-medium) var(--jh-motion-control), background-color var(--jh-duration-medium) var(--jh-motion-control), transform var(--jh-duration-medium) var(--jh-motion-control);
 }
 
-.drive-ai-qa-field textarea::placeholder {
+.drive-ai-qa-composer:hover {
+  border-color: color-mix(in srgb, var(--drive-accent) 88%, white 12%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 82%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--drive-accent) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--drive-accent) 30%, transparent),
+    0 0 24px color-mix(in srgb, var(--drive-accent) 50%, transparent),
+    0 12px 34px color-mix(in srgb, var(--drive-accent) 28%, transparent);
+}
+
+.drive-ai-qa-composer:focus-within {
+  background: color-mix(in srgb, var(--drive-surface-raised) 78%, transparent);
+  border-color: color-mix(in srgb, var(--drive-accent) 90%, white 10%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 88%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--drive-accent) 28%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--drive-accent) 34%, transparent),
+    0 0 30px color-mix(in srgb, var(--drive-accent) 58%, transparent),
+    0 14px 38px color-mix(in srgb, var(--drive-accent) 32%, transparent);
+  transform: translateY(-1px);
+}
+
+.drive-ai-qa-form.is-danger .drive-ai-qa-composer {
+  border-color: color-mix(in srgb, var(--drive-danger) 82%, white 18%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 74%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--drive-danger) 24%, transparent),
+    0 0 22px color-mix(in srgb, var(--drive-danger) 46%, transparent),
+    0 10px 30px color-mix(in srgb, var(--drive-danger) 22%, transparent);
+}
+
+.drive-ai-qa-composer textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 52px;
+  max-height: 156px;
+  margin: 0;
+  padding: 13px 2px 11px;
+  overflow-y: auto;
+  color: var(--drive-ink);
+  line-height: 1.5;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  resize: none;
+  scrollbar-width: thin;
+}
+
+.drive-ai-qa-composer textarea:focus {
+  outline: 0;
+  box-shadow: none;
+}
+
+.drive-ai-qa-composer textarea::placeholder {
   color: var(--drive-muted);
   opacity: 1;
 }
 
-.drive-ai-qa-form-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+.drive-ai-qa-action {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  color: var(--jh-color-on-brand);
+  background: var(--drive-accent);
+  border: 1px solid color-mix(in srgb, white 24%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--drive-accent) 38%, transparent);
+  cursor: pointer;
+  transition: background-color var(--jh-duration-fast) var(--jh-motion-control), box-shadow var(--jh-duration-fast) var(--jh-motion-control), transform var(--jh-duration-fast) var(--jh-motion-control), opacity var(--jh-duration-fast) var(--jh-motion-control);
+}
+
+.drive-ai-qa-action .ui-icon {
+  font-size: 21px;
+}
+
+.drive-ai-qa-action:hover:not(:disabled) {
+  background: var(--drive-accent-hover);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--drive-accent) 50%, transparent);
+  transform: translateY(-1px);
+}
+
+.drive-ai-qa-action:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.drive-ai-qa-action:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.drive-ai-qa-action.is-stop {
+  color: var(--drive-danger);
+  background: var(--drive-danger-soft);
+  border-color: color-mix(in srgb, var(--drive-danger) 28%, transparent);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--drive-danger) 34%, transparent);
 }
 
 .drive-ai-qa-status {
+  display: block;
+  width: min(100%, 920px);
+  min-height: 18px;
+  padding: 0 14px;
   color: var(--drive-muted);
   font-size: 12px;
+  line-height: 1.5;
 }
 
 .drive-ai-qa-status.is-danger,
@@ -1535,8 +1645,7 @@ drive-pdf-preview {
     min-height: 520px;
   }
 
-  .drive-ai-qa-head,
-  .drive-ai-qa-form-footer {
+  .drive-ai-qa-head {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1558,8 +1667,24 @@ drive-pdf-preview {
     border-bottom: 0;
   }
 
-  .drive-ai-qa-form-footer .drive-control {
-    align-self: flex-end;
+  .drive-ai-qa-form {
+    padding: 15px 10px 11px;
+  }
+
+  .drive-ai-qa-composer {
+    min-height: 64px;
+    padding: 6px 7px 6px 16px;
+  }
+
+  .drive-ai-qa-composer textarea {
+    min-height: 50px;
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .drive-ai-qa-action {
+    width: 50px;
+    height: 50px;
   }
 
   .drive-file-row-head {
