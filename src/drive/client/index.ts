@@ -1049,7 +1049,7 @@ function renderOverview(): TemplateResult {
     return renderOverviewSkeleton();
   }
   const topics = state.overview?.topics || [];
-  const contextCount = topics.filter((topic) => topic.hasCurrentContext).length;
+  const hasContext = topics.some((topic) => topic.hasCurrentContext);
   return html`
     <section class="drive-dashboard">
       <div class="drive-page-head">
@@ -1060,7 +1060,7 @@ function renderOverview(): TemplateResult {
         </div>
       </div>
       <div class="drive-two-column">
-        <drive-ai-qa scope="global" .ready=${contextCount > 0} .contextCount=${contextCount}></drive-ai-qa>
+        <drive-ai-qa scope="global" .ready=${hasContext}></drive-ai-qa>
         <section class="drive-panel">
           <div class="drive-panel-head"><h2>专题队列</h2><span>${topics.length ? "按最近交付排序" : "等待创建"}</span></div>
           ${topics.length
@@ -1216,7 +1216,7 @@ function renderQaTab(): TemplateResult {
   const ready = Boolean(state.topic?.hasCurrentContext);
   const topic = state.topic?.topic;
   return html`<section class="drive-tab-panel drive-qa-panel" role="tabpanel" aria-label="问答">
-    <drive-ai-qa scope="topic" .prefix=${topic?.prefix || ""} .topicName=${topic?.name || ""} .ready=${ready}></drive-ai-qa>
+    <drive-ai-qa scope="topic" .prefix=${topic?.prefix || ""} .ready=${ready}></drive-ai-qa>
   </section>`;
 }
 

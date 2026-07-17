@@ -21,9 +21,7 @@ export class DriveAiQa extends LitElement {
   static properties = {
     scope: { type: String },
     prefix: { type: String },
-    topicName: { type: String, attribute: "topic-name" },
     ready: { type: Boolean },
-    contextCount: { type: Number, attribute: "context-count" },
     question: { state: true },
     messages: { state: true },
     streaming: { state: true },
@@ -33,9 +31,7 @@ export class DriveAiQa extends LitElement {
 
   accessor scope: "global" | "topic" = "topic";
   accessor prefix = "";
-  accessor topicName = "";
   accessor ready = false;
-  accessor contextCount = 0;
   private accessor question = "";
   private accessor messages: QaChatMessage[] = [];
   private accessor streaming = false;
@@ -75,15 +71,12 @@ export class DriveAiQa extends LitElement {
   protected render(): TemplateResult {
     const isGlobal = this.scope === "global";
     const title = isGlobal ? "全局 AI 问答" : "专题问答";
-    const description = isGlobal
-      ? `基于 ${this.contextCount} 个专题的最新版 Markdown Context 回答，并保留可追溯来源。`
-      : `只依据${this.topicName ? `“${this.topicName}”` : "当前专题"}的最新版 Markdown Context 回答。`;
     return html`
       <section class=${classMap({ "drive-ai-qa": true, "is-global": isGlobal })} aria-label=${title} aria-busy=${String(this.streaming)}>
         <header class="drive-ai-qa-head">
           <div class="drive-ai-qa-heading">
             <span class="drive-ai-qa-symbol">${renderIcon("chat-circle-dots")}</span>
-            <div><h2>${title}</h2><p>${description}</p></div>
+            <h2>${title}</h2>
           </div>
           ${this.messages.length
             ? html`<button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>

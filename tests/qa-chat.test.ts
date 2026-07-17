@@ -12,8 +12,6 @@ async function mountQa(scope: "global" | "topic" = "global"): Promise<DriveAiQa>
   const qa = new DriveAiQa();
   qa.scope = scope;
   qa.prefix = scope === "topic" ? "新能源/" : "";
-  qa.topicName = scope === "topic" ? "新能源" : "";
-  qa.contextCount = scope === "global" ? 2 : 0;
   qa.ready = true;
   document.body.appendChild(qa);
   await qa.updateComplete;
@@ -48,6 +46,7 @@ describe("drive AI Q&A component", () => {
     expect(requestBody).toMatchObject({ scope: "global" });
     expect(requestBody).not.toHaveProperty("prefix");
     expect(qa.querySelector("strong")?.textContent).toBe("可追溯回答");
+    expect(qa.querySelector(".drive-ai-qa-heading p")).toBeNull();
   });
 
   it("sends the topic prefix and resets when the topic changes", async () => {
@@ -62,9 +61,8 @@ describe("drive AI Q&A component", () => {
     expect(qa.textContent).toContain("专题回答");
 
     qa.prefix = "半导体/";
-    qa.topicName = "半导体";
     await qa.updateComplete;
     expect(qa.textContent).not.toContain("专题回答");
-    expect(qa.textContent).toContain("半导体");
+    expect(qa.querySelector(".drive-ai-qa-heading p")).toBeNull();
   });
 });
