@@ -2438,7 +2438,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
                   ${P("paper-plane-tilt","bold")}
                 </button>`}
           </div>
-          <span class="drive-ai-qa-status ${this.statusTone==="danger"?"is-danger":this.statusTone==="success"?"is-success":""}" role="status">
+          <span class="drive-ai-qa-status" role="status">
             ${this.status||(this.ready?"\u5BF9\u8BDD\u4EC5\u4FDD\u5B58\u5728\u5F53\u524D\u9875\u9762\uFF0C\u5237\u65B0\u540E\u6E05\u7A7A\u3002":"Context \u51C6\u5907\u5B8C\u6210\u540E\u5373\u53EF\u4F7F\u7528\u3002")}
           </span>
         </form>

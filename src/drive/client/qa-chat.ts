@@ -121,7 +121,7 @@ export class DriveAiQa extends LitElement {
                   ${renderIcon("paper-plane-tilt", "bold")}
                 </button>`}
           </div>
-          <span class="drive-ai-qa-status ${this.statusTone === "danger" ? "is-danger" : this.statusTone === "success" ? "is-success" : ""}" role="status">
+          <span class="drive-ai-qa-status" role="status">
             ${this.status || (this.ready ? "对话仅保存在当前页面，刷新后清空。" : "Context 准备完成后即可使用。")}
           </span>
         </form>
