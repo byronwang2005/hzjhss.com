@@ -19,6 +19,12 @@ describe("shared UI system", () => {
     expect(driveBundle).toContain(workerPath.replace(/^assets\//, ""));
   });
 
+  it("loads the shared icon sprite from its deployed assets path", () => {
+    const iconSource = readFileSync("src/drive/client/icons.ts", "utf8");
+    expect(iconSource).toContain('"/assets/phosphor-sprite.svg');
+    expect(iconSource).not.toContain('"../phosphor-sprite.svg"');
+  });
+
   it("publishes only the explicit static-site allowlist", () => {
     const buildScript = readFileSync("scripts/build-pages.mjs", "utf8");
     expect(buildScript).toContain('["assets", "docs"]');

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { directoryPrefix, fileIconName, formatBytes, normalizeClientRelativePath } from "../src/drive/client/utils";
+import { directoryPrefix, fileIconName, formatBytes, normalizeClientRelativePath, processingDisplay } from "../src/drive/client/utils";
 
 describe("knowledge client helpers", () => {
   it("normalizes upload paths and rejects traversal", () => {
@@ -13,6 +13,12 @@ describe("knowledge client helpers", () => {
     expect(fileIconName("data.xlsx")).toBe("file-xls");
     expect(formatBytes(2 * 1024 * 1024)).toBe("2.0 MB");
     expect(directoryPrefix("a/b/")).toBe("a/");
+  });
+
+  it("stops polling files whose processing never started", () => {
+    const file = { name: "a.pdf", path: "a.pdf", relativePath: "a.pdf", size: 1, lastModified: "2026-07-21T06:00:00.000Z", etag: "etag" };
+    expect(processingDisplay(file)).toEqual({ label: "未开始处理", retryable: true, poll: false });
+    expect(processingDisplay({ ...file, processing: { state: "queued", sourceEtag: "etag", updatedAt: "2026-07-21T06:00:00.000Z" } }, Date.parse("2026-07-21T06:03:00.000Z"))).toEqual({ label: "处理未启动", retryable: true, poll: false });
   });
 });
 
@@ -35,5 +41,12 @@ describe("knowledge client surface", () => {
     expect(source).toContain('uppy.on("upload-progress"');
     expect(source).toContain('uppy.on("progress"');
     expect(source).toContain('aria-label="总体上传进度"');
+  });
+
+  it("clears server markup and uses one background file refresh timer", () => {
+    expect(source).toContain("root.replaceChildren()");
+    expect(source).toContain("window.clearTimeout(fileRefreshTimer)");
+    expect(source).toContain("void loadFiles(true)");
+    expect(source).not.toContain("!file.processing ||");
   });
 });

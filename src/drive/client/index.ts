@@ -11,7 +11,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { renderIcon } from "./icons";
 import "./qa-chat";
 import type { FileListResponse, KnowledgeFile, OverviewResponse, TopicSummary, UserRole } from "./types";
-import { directoryPrefix, fileIconName, fileNameFromPath, formatBytes, formatDate, normalizeClientRelativePath } from "./utils";
+import { directoryPrefix, fileIconName, fileNameFromPath, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay } from "./utils";
 
 declare const __PDF_WORKER_FILENAME__: string;
 
@@ -32,6 +32,9 @@ interface UploadSignature {
 const rootElement = document.querySelector<HTMLElement>("[data-drive-root]");
 if (!rootElement) throw new Error("Missing [data-drive-root] mount element");
 const root = rootElement;
+root.replaceChildren();
+
+let fileRefreshTimer: number | undefined;
 
 const state: {
   mode: Mode;
@@ -112,17 +115,28 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
   if (state.role === "admin" && state.topicView === "files") await loadFiles();
 }
 
-async function loadFiles(): Promise<void> {
+async function loadFiles(background = false): Promise<void> {
   if (!state.topic || state.role !== "admin") return;
-  state.loading = true;
-  renderApp();
-  state.listing = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(state.topic.id)}&prefix=${encodeURIComponent(state.prefix)}`);
+  if (fileRefreshTimer !== undefined) {
+    window.clearTimeout(fileRefreshTimer);
+    fileRefreshTimer = undefined;
+  }
+  const topicId = state.topic.id;
+  const prefix = state.prefix;
+  if (!background) {
+    state.loading = true;
+    renderApp();
+  }
+  const listing = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(prefix)}`);
+  if (state.topic?.id !== topicId || state.prefix !== prefix || state.topicView !== "files") return;
+  state.listing = listing;
   state.loading = false;
   renderApp();
-  if (state.listing.files.some((file) => !file.processing || ["queued", "processing", "indexing"].includes(file.processing.state))) {
-    window.setTimeout(() => {
-      if (state.mode === "topic" && state.topicView === "files") void loadFiles();
-    }, 5000);
+  if (listing.files.some((file) => processingDisplay(file).poll)) {
+    fileRefreshTimer = window.setTimeout(() => {
+      fileRefreshTimer = undefined;
+      if (state.mode === "topic" && state.topicView === "files") void loadFiles(true);
+    }, 10_000);
   }
 }
 
@@ -357,9 +371,8 @@ function renderFileList(listing: FileListResponse): TemplateResult {
 }
 
 function renderFileRow(file: KnowledgeFile): TemplateResult {
-  const status = file.processing?.state || "queued";
-  const labels: Record<string, string> = { queued: "排队中", processing: "处理中", indexing: "建索引", ready: "可问答", failed: "失败" };
-  return html`<div class="drive-file-row" role="row"><span class="drive-file-name">${renderIcon(fileIconName(file.name))}<strong>${file.name}</strong></span><span>${formatBytes(file.size)}</span><span title=${file.processing?.error || ""}>${labels[status]}</span><span>${formatDate(file.uploadedAt || file.lastModified)}</span><span class="drive-row-actions">${status === "failed" ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}<button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button><button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${file.name}>${renderIcon("trash")}删除</button></span></div>`;
+  const processing = processingDisplay(file);
+  return html`<div class="drive-file-row" role="row"><span class="drive-file-name">${renderIcon(fileIconName(file.name))}<strong>${file.name}</strong></span><span>${formatBytes(file.size)}</span><span title=${file.processing?.error || ""}>${processing.label}</span><span>${formatDate(file.uploadedAt || file.lastModified)}</span><span class="drive-row-actions">${processing.retryable ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}<button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button><button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${file.name}>${renderIcon("trash")}删除</button></span></div>`;
 }
 
 function renderUploadProgress(): TemplateResult {

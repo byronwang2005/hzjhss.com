@@ -36,3 +36,43 @@ export function fileIconName(name: string): string {
   if (["ppt", "pptx"].includes(extension || "")) return "file-ppt";
   return "file-text";
 }
+
+export interface ProcessingDisplay {
+  label: string;
+  retryable: boolean;
+  poll: boolean;
+}
+
+const PROCESSING_LABELS: Record<ProcessingState, string> = {
+  queued: "等待云处理",
+  processing: "处理中",
+  indexing: "建索引",
+  ready: "可问答",
+  failed: "失败",
+};
+
+const STALE_AFTER_MS: Partial<Record<ProcessingState, number>> = {
+  queued: 2 * 60 * 1000,
+  processing: 30 * 60 * 1000,
+  indexing: 10 * 60 * 1000,
+};
+
+export function processingDisplay(file: KnowledgeFile, now = Date.now()): ProcessingDisplay {
+  const processing = file.processing;
+  if (!processing) return { label: "未开始处理", retryable: true, poll: false };
+  const staleAfter = STALE_AFTER_MS[processing.state];
+  const updatedAt = Date.parse(processing.updatedAt);
+  if (staleAfter && (!Number.isFinite(updatedAt) || now - updatedAt > staleAfter)) {
+    return {
+      label: processing.state === "queued" ? "处理未启动" : "处理超时",
+      retryable: true,
+      poll: false,
+    };
+  }
+  return {
+    label: PROCESSING_LABELS[processing.state],
+    retryable: processing.state === "failed",
+    poll: processing.state === "queued" || processing.state === "processing" || processing.state === "indexing",
+  };
+}
+import type { KnowledgeFile, ProcessingState } from "./types";
