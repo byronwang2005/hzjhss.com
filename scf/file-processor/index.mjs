@@ -18,7 +18,12 @@ export async function main(event) {
   assertWebhook(event);
   const records = extractRecords(event);
   const results = await Promise.allSettled(records.map((record) => processRecord(record)));
-  return { ok: results.every((result) => result.status === "fulfilled"), processed: results.length };
+  const failures = results.filter((result) => result.status === "rejected");
+  if (failures.length) {
+    const messages = failures.map((result) => safeError(result.reason));
+    throw new AggregateError(messages.map((message) => new Error(message)), `文件处理失败 (${failures.length}/${results.length}): ${messages.join("; ")}`);
+  }
+  return { ok: true, processed: results.length };
 }
 
 async function processRecord(record) {

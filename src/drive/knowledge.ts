@@ -282,17 +282,27 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     updatedAt: uploadedAt,
   };
   const nextTopic = { ...topic, updatedAt: uploadedAt, indexVersion: topic.indexVersion + 1 };
-  await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8");
-  await copyObject(config, temporaryPath, sourcePath(topicId, relativePath), actual.etag);
-  const copied = await headObject(config, sourcePath(topicId, relativePath));
-  if (!copied || copied.size !== actual.size || copied.etag !== actual.etag) throw new Error("COS 文件转存校验失败");
   await Promise.all([
+    putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8"),
     putObjectText(config, fileMetaPath(topicId, relativePath), JSON.stringify(metadata, null, 2), "application/json; charset=utf-8"),
     putObjectText(config, processingStatusPath(topicId, relativePath), JSON.stringify(status, null, 2), "application/json; charset=utf-8"),
     deleteObject(config, topicIndexPath(topicId)),
     deleteObject(config, topicIndexManifestPath(topicId)),
-    deleteObject(config, temporaryPath),
   ]);
+  try {
+    // The COS ObjectCreated event must not become visible before its processing metadata.
+    await copyObject(config, temporaryPath, sourcePath(topicId, relativePath), actual.etag);
+    const copied = await headObject(config, sourcePath(topicId, relativePath));
+    if (!copied || copied.size !== actual.size || copied.etag !== actual.etag) throw new Error("COS 文件转存校验失败");
+  } catch (error) {
+    await Promise.all([
+      deleteObject(config, sourcePath(topicId, relativePath)),
+      deleteObject(config, fileMetaPath(topicId, relativePath)),
+      deleteObject(config, processingStatusPath(topicId, relativePath)),
+    ]);
+    throw error;
+  }
+  await deleteObject(config, temporaryPath);
   return metadata;
 }
 
