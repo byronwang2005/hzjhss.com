@@ -75,13 +75,13 @@ export class DriveAiQa extends LitElement {
 
   protected render(): TemplateResult {
     const isGlobal = this.scope === "global";
-    const title = isGlobal ? "全局 AI 问答" : "专题问答";
+    const title = isGlobal ? "向全部资料提问" : "专题问答";
     return html`
       <section class=${classMap({ "drive-ai-qa": true, "is-global": isGlobal })} aria-label=${title} aria-busy=${String(this.streaming)}>
         <header class="drive-ai-qa-head">
           <div class="drive-ai-qa-heading">
             <span class="drive-ai-qa-symbol">${renderIcon("chat-circle-dots")}</span>
-            <h2>${title}</h2>
+            <div><span class="drive-eyebrow">${isGlobal ? "AI 检索" : "当前专题"}</span><h2>${title}</h2></div>
           </div>
           ${this.messages.length
             ? html`<button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>
@@ -144,7 +144,7 @@ export class DriveAiQa extends LitElement {
         ];
     return html`
       <div class="drive-ai-qa-empty">
-        <div><h3>${this.ready ? readyTitle : "等待文件处理"}</h3><p>${this.ready ? "选择一个方向，或直接输入您关心的问题。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
+        <div><h3>${this.ready ? readyTitle : "等待文件处理"}</h3><p>${this.ready ? "直接提问，或从下面三个方向开始。回答会尽量标明资料来源。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
         ${this.ready
           ? html`<div class="drive-ai-qa-suggestions" aria-label="问题建议">
               ${suggestions.map(([icon, label, prompt]) => html`

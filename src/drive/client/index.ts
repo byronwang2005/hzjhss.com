@@ -335,31 +335,63 @@ function renderApp(): void {
 }
 
 function renderLogin(): TemplateResult {
-  return html`<section class="drive-login-panel"><div><h1>AI 知识库</h1></div><form class="drive-form drive-login-card" data-login-form>
-    <label class="drive-field"><span>登录姓名</span><input name="displayName" autocomplete="name" .value=${state.loginName} required></label>
-    <label class="drive-field"><span>访问码</span><input name="accessCode" type="password" autocomplete="current-password" .value=${state.accessCode} required></label>
-    <button class="drive-control drive-control-primary" type="submit" ?disabled=${state.loading}>${renderIcon("arrow-right", "bold")}进入</button>
-    ${renderStatus()}
-  </form></section>`;
+  return html`<section class="drive-login-panel">
+    <div class="drive-login-story">
+      <div class="drive-brand-lockup"><img src="/assets/jhss-logo-cropped.png" alt="嘉合杉升"><span>嘉合杉升</span></div>
+      <div class="drive-login-copy">
+        <span class="drive-eyebrow">企业知识工作台</span>
+        <h1>把知识，<br>变成答案。</h1>
+        <p>从分散资料中快速提取结论、核验风险，并回到每一处可信来源。</p>
+      </div>
+      <div class="drive-login-principles" aria-label="知识库能力">
+        <span>${renderIcon("database")}跨专题检索</span>
+        <span>${renderIcon("link")}来源可追溯</span>
+        <span>${renderIcon("files")}资料统一管理</span>
+      </div>
+    </div>
+    <form class="drive-form drive-login-card" data-login-form>
+      <div class="drive-login-card-head"><span class="drive-eyebrow">内部访问</span><h2>欢迎回来</h2><p>使用您的姓名与访问码进入知识库。</p></div>
+      <label class="drive-field"><span>登录姓名</span><input name="displayName" autocomplete="name" placeholder="请输入姓名" .value=${state.loginName} required></label>
+      <label class="drive-field"><span>访问码</span><input name="accessCode" type="password" autocomplete="current-password" placeholder="请输入访问码" .value=${state.accessCode} required></label>
+      <button class="drive-control drive-control-primary drive-login-submit" type="submit" ?disabled=${state.loading}>进入知识库${renderIcon("arrow-right", "bold")}</button>
+      ${renderStatus()}
+      <p class="drive-login-help">仅限授权成员访问</p>
+    </form>
+  </section>`;
 }
 
 function renderShell(): TemplateResult {
-  return html`<section class="drive-dashboard"><div class="drive-page-head"><div><h1>${state.mode === "topic" ? state.topic?.name : "AI 知识库"}</h1></div><div class="drive-head-actions">
-    ${state.mode !== "overview" ? iconButton("arrow-left", "返回", "back") : nothing}
-    ${iconButton("arrow-clockwise", "刷新", "refresh")}
-    ${iconButton("sign-out", "退出", "logout")}
-  </div></div>${renderStatus()}${state.loading ? renderLoading() : state.mode === "overview" ? renderOverview() : state.mode === "create" ? renderCreate() : renderTopic()}</section>`;
+  const title = state.mode === "topic" ? state.topic?.name : state.mode === "create" ? "新建专题" : `欢迎回来，${state.displayName}`;
+  const description = state.mode === "topic"
+    ? state.topic?.ready ? "从当前专题中提问，或管理专题资料。" : "资料仍在处理中，完成后即可开始问答。"
+    : state.mode === "create" ? "建立一个独立的资料范围，让后续问答更聚焦。" : "从全部资料中提问，快速获得带来源的可靠答案。";
+  return html`<section class="drive-dashboard">
+    <header class="drive-appbar">
+      <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" data-action="back" aria-label="返回知识库首页">
+        <img src="/assets/jhss-logo-cropped.png" alt=""><span><strong>嘉合杉升</strong><small>AI 知识库</small></span>
+      </button>
+      <div class="drive-appbar-meta"><span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
+    </header>
+    <main class="drive-dashboard-main">
+      <div class="drive-page-head"><div>
+        ${state.mode !== "overview" ? html`<button class="drive-back-link" type="button" data-action="back">${renderIcon("arrow-left")}返回知识库</button>` : html`<span class="drive-eyebrow">知识工作台</span>`}
+        <h1>${title}</h1><p>${description}</p>
+      </div><div class="drive-head-actions">${state.mode === "overview" && state.role === "admin" ? html`<button class="drive-control" data-action="create-topic" type="button">${renderIcon("folder-plus")}新建专题</button>` : nothing}</div></div>
+      ${renderStatus()}
+      ${state.loading ? renderLoading() : state.mode === "overview" ? renderOverview() : state.mode === "create" ? renderCreate() : renderTopic()}
+    </main>
+  </section>`;
 }
 
 function renderOverview(): TemplateResult {
   const ready = state.topics.some((topic) => topic.ready);
-  return html`<div class="drive-two-column"><drive-ai-qa scope="global" .ready=${ready}></drive-ai-qa><section class="drive-panel"><div class="drive-panel-head"><h2>专题</h2>${state.role === "admin" ? html`<button class="drive-control drive-control-primary" data-action="create-topic" type="button">${renderIcon("folder-plus", "bold")}新建</button>` : nothing}</div>
-    ${state.topics.length ? html`<div class="drive-topic-grid">${repeat(state.topics, (topic) => topic.id, (topic) => html`<button class="drive-topic-card" type="button" data-action="open-topic" data-topic-id=${topic.id}><span class="drive-topic-card-icon">${renderIcon("folder")}</span><span><strong>${topic.name}</strong><small>${topic.ready ? "可问答" : "处理中"}</small></span>${renderIcon("arrow-right")}</button>`)}</div>` : html`<div class="drive-empty"><h3>暂无专题</h3></div>`}
-  </section></div>`;
+  return html`<div class="drive-two-column"><drive-ai-qa scope="global" .ready=${ready}></drive-ai-qa><aside class="drive-panel drive-topic-panel"><div class="drive-panel-head"><div><span class="drive-eyebrow">资料范围</span><h2>专题</h2></div><span>${state.topics.length} 个</span></div>
+    ${state.topics.length ? html`<div class="drive-topic-grid">${repeat(state.topics, (topic) => topic.id, (topic) => html`<button class="drive-topic-card" type="button" data-action="open-topic" data-topic-id=${topic.id}><span class="drive-topic-card-icon">${renderIcon("folder")}</span><span><strong>${topic.name}</strong><small class=${topic.ready ? "is-ready" : ""}>${topic.ready ? "可问答" : "处理中"}</small></span>${renderIcon("arrow-right")}</button>`)}</div>` : html`<div class="drive-empty">${renderIcon("folder")}<h3>还没有专题</h3><p>创建专题并上传资料后，即可开始可追溯问答。</p></div>`}
+  </aside></div>`;
 }
 
 function renderCreate(): TemplateResult {
-  return html`<form class="drive-form drive-create-card" data-topic-form><label class="drive-field"><span>专题名称</span><input name="topicName" .value=${state.topicName} required></label><div class="drive-form-actions"><button class="drive-control" type="button" data-action="back">${renderIcon("x-circle")}取消</button><button class="drive-control drive-control-primary" type="submit">${renderIcon("check", "bold")}创建</button></div></form>`;
+  return html`<form class="drive-form drive-create-card" data-topic-form><div class="drive-create-icon">${renderIcon("folder-plus")}</div><div><h2>专题信息</h2><p>专题创建后，可继续上传文件并等待系统处理。</p></div><label class="drive-field"><span>专题名称</span><input name="topicName" placeholder="例如：2026 年行业研究" .value=${state.topicName} required></label><div class="drive-form-actions"><button class="drive-control" type="button" data-action="back">${renderIcon("x-circle")}取消</button><button class="drive-control drive-control-primary" type="submit">${renderIcon("check", "bold")}创建专题</button></div></form>`;
 }
 
 function renderTopic(): TemplateResult {
@@ -370,7 +402,7 @@ function renderTopic(): TemplateResult {
 
 function renderFiles(): TemplateResult {
   const listing = state.listing;
-  return html`<section class="drive-tab-panel"><div class="drive-material-toolbar"><div><h2>${state.prefix || "全部文件"}</h2></div><div class="drive-upload-actions">
+  return html`<section class="drive-tab-panel"><div class="drive-material-toolbar"><div><span class="drive-eyebrow">资料管理</span><h2>${state.prefix || "全部文件"}</h2></div><div class="drive-upload-actions">
     ${state.prefix ? html`<button class="drive-control" type="button" data-action="up-folder">${renderIcon("arrow-left")}上一级</button>` : nothing}
     <button class="drive-control drive-control-primary" type="button" data-action="pick-files">${renderIcon("upload-simple", "bold")}上传文件</button>
     <button class="drive-control" type="button" data-action="pick-folder">${renderIcon("folder-simple-plus")}上传文件夹</button>
