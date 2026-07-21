@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { PDFDocument } from "pdf-lib";
 import pLimit from "p-limit";
 import pRetry from "p-retry";
 import tencentcloud from "tencentcloud-sdk-nodejs";
@@ -8,11 +9,20 @@ import { assertWebhook, bucket, cosCall, extension, fileMetaKey, getJson, head, 
 const OcrClient = tencentcloud.ocr.v20181119.Client;
 const ScfClient = tencentcloud.scf.v20180416.Client;
 const credential = { secretId: required("TENCENT_SECRET_ID"), secretKey: required("TENCENT_SECRET_KEY") };
-const ocr = new OcrClient(credential, region, { endpoint: "ocr.tencentcloudapi.com" });
-const scf = new ScfClient(credential, region, { endpoint: "scf.tencentcloudapi.com" });
+const clientConfig = createTencentClientConfig(credential, region);
+const ocr = new OcrClient(clientConfig);
+const scf = new ScfClient(clientConfig);
 const xml = new XMLParser({ ignoreAttributes: false, trimValues: true });
 const imageLimit = pLimit(10);
 const documentLimit = pLimit(5);
+
+export function createTencentClientConfig(clientCredential, clientRegion) {
+  return {
+    credential: clientCredential,
+    region: clientRegion,
+    profile: { httpProfile: { reqTimeout: 60 } },
+  };
+}
 
 export async function main(event) {
   assertWebhook(event);
@@ -108,16 +118,9 @@ async function processDocument(key, metadata, ext) {
 }
 
 async function assertPdfPageLimit(key) {
-  const [{ getDocument }, response] = await Promise.all([
-    import("pdfjs-dist/legacy/build/pdf.mjs"),
-    cosCall("getObject", { Bucket: bucket, Region: region, Key: key }),
-  ]);
-  const document = await getDocument({ data: new Uint8Array(response.Body), disableWorker: true }).promise;
-  try {
-    if (document.numPages > 300) throw new Error("PDF 最多支持 300 页");
-  } finally {
-    await document.destroy();
-  }
+  const response = await cosCall("getObject", { Bucket: bucket, Region: region, Key: key });
+  const document = await PDFDocument.load(new Uint8Array(response.Body), { ignoreEncryption: true, updateMetadata: false });
+  if (document.getPageCount() > 300) throw new Error("PDF 最多支持 300 页");
 }
 
 export function structuredChunks(raw, ext) {

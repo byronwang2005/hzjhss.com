@@ -24,6 +24,15 @@ describe("SCF event routing and chunking", () => {
     expect(records[0].key).toContain("/files/report.pdf");
   });
 
+  it("uses the Tencent Cloud SDK client configuration object shape", () => {
+    const credential = { secretId: "id", secretKey: "key" };
+    expect(processor.createTencentClientConfig(credential, "ap-shanghai")).toEqual({
+      credential,
+      region: "ap-shanghai",
+      profile: { httpProfile: { reqTimeout: 60 } },
+    });
+  });
+
   it("preserves PDF pages and Excel worksheet headings", () => {
     expect(processor.structuredChunks({ Blocks: [{ PageNumber: 12, Content: "这是足够长的 PDF 页面内容，用于验证页码来源能够保存在检索分块中。" }] }, "pdf")[0].locator).toBe("第 12 页");
     expect(processor.splitMarkdown("# 资产负债表\n\n这是工作表中的主要数据和说明。", "xlsx")[0].locator).toBe("工作表：资产负债表");
