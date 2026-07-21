@@ -11,7 +11,8 @@ import {
   sourcePath,
   tempUploadPath,
 } from "../src/drive/knowledge";
-import { createSessionCookie, isDriveAdmin } from "../src/drive/session";
+import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/session";
+import { jsonResponse } from "../src/drive/http";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 
 const env: DriveEnv = {
@@ -29,6 +30,14 @@ const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
 describe("new COS namespace and policies", () => {
+  it("round-trips the signed session cookie and preserves Set-Cookie headers", async () => {
+    const cookie = await createSessionCookie(env, "https://example.com", "汪旭");
+    const session = await getDriveSession(env, cookie.split(";", 1)[0]);
+    expect(session?.displayName).toBe("汪旭");
+    const response = jsonResponse({ ok: true }, 200, { "set-cookie": cookie });
+    expect(response.headers.get("set-cookie")).toBe(cookie);
+  });
+
   it("uses only the new knowledge-base prefix", () => {
     expect(KNOWLEDGE_ROOT_PREFIX).toBe("ai-knowledge-base/");
     expect(config.rootPrefix).toBe("ai-knowledge-base/");

@@ -41,6 +41,9 @@ describe("knowledge client surface", () => {
     expect(source).toContain('uppy.on("upload-progress"');
     expect(source).toContain('uppy.on("progress"');
     expect(source).toContain('aria-label="总体上传进度"');
+    expect(source).toContain('phase: "registering"');
+    expect(source).toContain("文件登记超时，请稍后重试");
+    expect(source).toContain("completed.length !== prepared.length");
   });
 
   it("clears server markup and uses one background file refresh timer", () => {

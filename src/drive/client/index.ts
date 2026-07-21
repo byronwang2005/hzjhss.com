@@ -20,6 +20,7 @@ type TopicView = "qa" | "files";
 type UppyMeta = { relativePath?: string; pdfPages?: number };
 type UppyBody = Record<string, unknown>;
 type DriveUppyFile = UppyFile<UppyMeta, UppyBody>;
+type UploadPhase = "preparing" | "uploading" | "registering";
 
 interface UploadSignature {
   url: string;
@@ -51,7 +52,7 @@ const state: {
   loginName: string;
   accessCode: string;
   topicName: string;
-  upload: { active: boolean; name: string; percent: number; overallPercent: number; total: number };
+  upload: { active: boolean; phase: UploadPhase; name: string; percent: number; overallPercent: number; total: number };
 } = {
   mode: "login",
   role: "viewer",
@@ -67,7 +68,7 @@ const state: {
   loginName: "",
   accessCode: "",
   topicName: "",
-  upload: { active: false, name: "", percent: 0, overallPercent: 0, total: 0 },
+  upload: { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 },
 };
 
 root.addEventListener("click", (event) => void handleClick(event));
@@ -82,10 +83,20 @@ async function boot(): Promise<void> {
     await loadOverview();
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      state.mode = "login";
-      state.loading = false;
-      renderApp();
-      return;
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+      try {
+        await loadOverview();
+        return;
+      } catch (retryError) {
+        if (!(retryError instanceof ApiError && retryError.status === 401)) {
+          showError(retryError);
+          return;
+        }
+        state.mode = "login";
+        state.loading = false;
+        renderApp();
+        return;
+      }
     }
     showError(error);
   }
@@ -240,7 +251,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string): 
       validateFileSizeAndType(file, relativePath);
       prepared.push({ file, relativePath, ...(relativePath.toLowerCase().endsWith(".pdf") ? { pdfPages: await pdfPageCount(file) } : {}) });
     }
-    state.upload = { active: true, name: "准备上传...", percent: 0, overallPercent: 0, total: prepared.length };
+    state.upload = { active: true, phase: "preparing", name: "准备上传...", percent: 0, overallPercent: 0, total: prepared.length };
     renderApp();
     const signatures = new Map<string, UploadSignature>();
     const completed: Array<{ uploadId: string; relativePath: string; size: number; contentType: string; pdfPages?: number }> = [];
@@ -262,6 +273,8 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string): 
       headers: (file: DriveUppyFile) => signatures.get(file.id)?.requiredHeaders || { "content-type": file.type || "application/octet-stream" },
       getResponseData: () => ({}),
     });
+    state.upload = { ...state.upload, phase: "uploading", name: prepared[0]?.relativePath || "上传文件" };
+    renderApp();
     uppy.on("upload-progress", (file, progress) => {
       if (!file || !progress.bytesTotal) return;
       state.upload = { ...state.upload, name: String(file.meta.relativePath || file.name), percent: Math.round(progress.bytesUploaded / progress.bytesTotal * 100) };
@@ -281,12 +294,15 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string): 
     for (const entry of prepared) uppy.addFile({ name: entry.file.name, type: entry.file.type || "application/octet-stream", data: entry.file, meta: { relativePath: entry.relativePath, pdfPages: entry.pdfPages } });
     const result = await uppy.upload();
     if (result?.failed?.length) throw new Error(`${result.failed.length} 个文件上传失败`);
-    await api("/upload-complete", { method: "POST", body: { topicId: state.topic.id, files: completed } });
-    state.upload = { active: false, name: "", percent: 0, overallPercent: 0, total: 0 };
+    if (completed.length !== prepared.length) throw new Error(`仅完成 ${completed.length}/${prepared.length} 个文件上传`);
+    state.upload = { ...state.upload, phase: "registering", name: "正在登记文件...", percent: 100, overallPercent: 100 };
+    renderApp();
+    await withTimeout(api("/upload-complete", { method: "POST", body: { topicId: state.topic.id, files: completed } }), 60_000, "文件登记超时，请稍后重试");
+    state.upload = { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 };
     setStatus(`已上传 ${completed.length} 个文件，腾讯云正在异步处理。`, "success");
     await loadFiles();
   } catch (error) {
-    state.upload = { active: false, name: "", percent: 0, overallPercent: 0, total: 0 };
+    state.upload = { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 };
     showError(error);
   } finally {
     uppy?.destroy();
@@ -376,7 +392,8 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
 }
 
 function renderUploadProgress(): TemplateResult {
-  return html`<div class="drive-upload-progress"><div class="drive-upload-progress-item"><div class="drive-upload-progress-label"><strong>${state.upload.name}</strong><span>${state.upload.percent}%</span></div><wa-progress-bar aria-label="当前文件上传进度" .value=${state.upload.percent}></wa-progress-bar></div>${state.upload.total > 1 ? html`<div class="drive-upload-progress-item"><div class="drive-upload-progress-label"><strong>总体进度</strong><span>${state.upload.overallPercent}% · ${state.upload.total} 个文件</span></div><wa-progress-bar aria-label="总体上传进度" .value=${state.upload.overallPercent}></wa-progress-bar></div>` : nothing}</div>`;
+  const label = state.upload.phase === "preparing" ? "准备上传..." : state.upload.phase === "registering" ? "正在登记文件..." : state.upload.name;
+  return html`<div class="drive-upload-progress"><div class="drive-upload-progress-item"><div class="drive-upload-progress-label"><strong>${label}</strong><span>${state.upload.percent}%</span></div><wa-progress-bar aria-label="当前文件上传进度" .value=${state.upload.percent}></wa-progress-bar></div>${state.upload.total > 1 ? html`<div class="drive-upload-progress-item"><div class="drive-upload-progress-label"><strong>总体进度</strong><span>${state.upload.overallPercent}% · ${state.upload.total} 个文件</span></div><wa-progress-bar aria-label="总体上传进度" .value=${state.upload.overallPercent}></wa-progress-bar></div>` : nothing}</div>`;
 }
 
 function tabButton(view: TopicView, label: string, icon: string): TemplateResult {
@@ -393,11 +410,23 @@ function setStatus(message: string, tone: "neutral" | "success" | "danger" = "ne
 function showError(error: unknown): void { state.loading = false; setStatus(error instanceof Error ? error.message : "请求失败", "danger"); }
 
 class ApiError extends Error { constructor(message: string, readonly status: number) { super(message); } }
-async function api<T = unknown>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  const response = await fetch(`/api/drive${path}`, { method: options.method || "GET", credentials: "same-origin", headers: options.body === undefined ? undefined : { "content-type": "application/json" }, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
+async function api<T = unknown>(path: string, options: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+  const response = await fetch(`/api/drive${path}`, { method: options.method || "GET", credentials: "same-origin", headers: options.body === undefined ? undefined : { "content-type": "application/json" }, body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: options.signal });
   if (!response.ok) {
     const data = await response.json().catch(() => ({})) as { error?: unknown };
     throw new ApiError(typeof data.error === "string" ? data.error : `请求失败（${response.status}）`, response.status);
   }
   return response.json() as Promise<T>;
+}
+
+async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  let timer: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => { timer = window.setTimeout(() => reject(new Error(message)), milliseconds); }),
+    ]);
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
+  }
 }

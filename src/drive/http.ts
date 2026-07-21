@@ -7,13 +7,14 @@ export interface AuthedContext {
 }
 
 export function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
+  const responseHeaders = new Headers({
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  new Headers(headers).forEach((value, name) => responseHeaders.set(name, value));
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      ...headers,
-    },
+    headers: responseHeaders,
   });
 }
 
