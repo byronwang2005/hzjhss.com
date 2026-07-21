@@ -1,12 +1,9 @@
 import MiniSearch from "minisearch";
 import { assertWebhook, getJson, head, listAll, putJson, ROOT_PREFIX, sourceKey } from "../lib/common.mjs";
 
-export async function main(event) {
+export async function main(event, context) {
   assertWebhook(event);
-  if (typeof event?.body === "string") {
-    try { event = JSON.parse(event.body); } catch { throw new Error("请求体无效"); }
-  }
-  const topicId = event?.topicId || parseClientContext(event?.ClientContext);
+  const topicId = extractTopicId(event, context);
   if (!/^t_[A-Za-z0-9_-]{12,32}$/.test(topicId || "")) throw new Error("topicId 无效");
   const topicKey = `${ROOT_PREFIX}topics/${topicId}/topic.json`;
   const topic = await getJson(topicKey);
@@ -67,9 +64,22 @@ export function tokenize(input) {
   return [...tokens];
 }
 
-function parseClientContext(value) {
+export function extractTopicId(event, context) {
+  return readTopicId(event)
+    || readTopicId(event?.body)
+    || readTopicId(event?.ClientContext)
+    || readTopicId(event?.clientContext)
+    || readTopicId(context?.client_context)
+    || readTopicId(context?.clientContext);
+}
+
+function readTopicId(value) {
   if (!value) return undefined;
-  try { return JSON.parse(value).topicId; } catch { return undefined; }
+  if (Buffer.isBuffer(value)) return readTopicId(value.toString("utf8"));
+  if (typeof value === "string") {
+    try { return readTopicId(JSON.parse(value)); } catch { return undefined; }
+  }
+  return typeof value === "object" && typeof value.topicId === "string" ? value.topicId : undefined;
 }
 
 export const handler = main;

@@ -1,1 +1,1 @@
-export { handler, main } from "./index-builder/index.mjs";
+export { extractTopicId, handler, main } from "./index-builder/index.mjs";

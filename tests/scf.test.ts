@@ -32,4 +32,12 @@ describe("SCF event routing and chunking", () => {
   it("uses the same Chinese n-gram strategy as the Worker", () => {
     expect(indexer.tokenize("新能源库存")).toEqual(expect.arrayContaining(["新能源", "库存"]));
   });
+
+  it("accepts topic IDs from SCF async invocation event variants", () => {
+    const topicId = "t_abcdefghijkl";
+    expect(indexer.extractTopicId({ topicId })).toBe(topicId);
+    expect(indexer.extractTopicId(JSON.stringify({ topicId }))).toBe(topicId);
+    expect(indexer.extractTopicId({ ClientContext: JSON.stringify({ topicId }) })).toBe(topicId);
+    expect(indexer.extractTopicId({}, { client_context: JSON.stringify({ topicId }) })).toBe(topicId);
+  });
 });
