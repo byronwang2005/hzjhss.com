@@ -7,10 +7,13 @@ export interface DriveEnv {
   DRIVE_ACCESS_CODE?: string;
   DRIVE_SESSION_SECRET?: string;
   DRIVE_ROOT_PREFIX?: string;
-  DRIVE_MAX_FILE_MB?: string;
   /** @deprecated Short-lived COS URLs are fixed at 30 minutes. */
   DRIVE_SIGN_EXPIRES_SECONDS?: string;
   DRIVE_SESSION_MAX_AGE_SECONDS?: string;
+  PROCESSOR_WEBHOOK_URL?: string;
+  PROCESSOR_WEBHOOK_SECRET?: string;
+  INDEXER_WEBHOOK_URL?: string;
+  INDEXER_WEBHOOK_SECRET?: string;
   AI_API_KEY?: string;
   AI_BASE_URL?: string;
   AI_MODEL?: string;
@@ -31,13 +34,11 @@ export interface DriveConfig {
   region: string;
   endpoint: string;
   rootPrefix: string;
-  maxFileBytes: number;
   signExpiresSeconds: number;
   sessionMaxAgeSeconds: number;
 }
 
-const DEFAULT_ROOT_PREFIX = "cloud-drive/";
-const DEFAULT_MAX_FILE_MB = 512;
+export const KNOWLEDGE_ROOT_PREFIX = "ai-knowledge-base/";
 const SIGN_EXPIRES_SECONDS = 30 * 60;
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const DEFAULT_AI_MAX_OUTPUT_TOKENS = 2500;
@@ -50,7 +51,7 @@ export function getRequiredEnv(env: DriveEnv, key: keyof DriveEnv): string {
   return value;
 }
 
-export function normalizeRootPrefix(value = DEFAULT_ROOT_PREFIX): string {
+export function normalizeRootPrefix(value = KNOWLEDGE_ROOT_PREFIX): string {
   const clean = value.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+/g, "/").trim();
   if (!clean) {
     return "";
@@ -71,8 +72,7 @@ export function getDriveConfig(env: DriveEnv): DriveConfig {
     bucket,
     region,
     endpoint,
-    rootPrefix: normalizeRootPrefix(env.DRIVE_ROOT_PREFIX),
-    maxFileBytes: parsePositiveInt(env.DRIVE_MAX_FILE_MB, DEFAULT_MAX_FILE_MB) * 1024 * 1024,
+    rootPrefix: KNOWLEDGE_ROOT_PREFIX,
     signExpiresSeconds: SIGN_EXPIRES_SECONDS,
     sessionMaxAgeSeconds: parsePositiveInt(env.DRIVE_SESSION_MAX_AGE_SECONDS, DEFAULT_SESSION_MAX_AGE_SECONDS),
   };

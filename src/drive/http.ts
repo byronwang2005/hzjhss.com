@@ -1,5 +1,5 @@
 import type { DriveEnv } from "./config";
-import { getDriveSession, type DriveSession } from "./session";
+import { getDriveSession, isDriveAdmin, type DriveSession } from "./session";
 
 export interface AuthedContext {
   request: Request;
@@ -34,6 +34,17 @@ export async function requireDriveSession(context: AuthedContext): Promise<Respo
 export async function readDriveSession(context: AuthedContext): Promise<DriveSession | Response> {
   const session = await getDriveSession(context.env, context.request.headers.get("cookie"));
   return session ?? jsonResponse({ error: "请先输入姓名和访问码" }, 401);
+}
+
+export async function readDriveAdminSession(context: AuthedContext): Promise<DriveSession | Response> {
+  const session = await getDriveSession(context.env, context.request.headers.get("cookie"));
+  if (!session) {
+    return jsonResponse({ error: "请先输入姓名和访问码" }, 401);
+  }
+  if (!isDriveAdmin(session.displayName)) {
+    return jsonResponse({ error: "只有管理员汪旭可以执行此操作" }, 403);
+  }
+  return session;
 }
 
 export function errorResponse(error: unknown): Response {

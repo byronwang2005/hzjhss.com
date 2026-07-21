@@ -22,6 +22,7 @@
     "fast-xml-parser": "^4.5.1",
     "lit": "^3.3.3",
     "markdown-it": "^14.3.0",
+    "minisearch": "^7.2.0",
     "openai": "^6.46.0",
     "pdfjs-dist": "6.1.200"
   },

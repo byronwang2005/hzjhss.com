@@ -1,29 +1,15 @@
-import type { DriveEnv } from "../../../src/drive/config";
-import { getDriveConfig } from "../../../src/drive/config";
-import { deleteObject } from "../../../src/drive/cos";
-import { errorResponse, jsonResponse, readJsonBody, requireDriveSession } from "../../../src/drive/http";
-import { normalizeObjectPath } from "../../../src/drive/paths";
-import { hasSystemPathSegment, removeFileMetadata } from "../../../src/drive/topic";
+import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
+import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/http";
+import { deleteKnowledgeFile } from "../../../src/drive/knowledge";
+import { notifyIndexer } from "../../../src/drive/webhooks";
 
-export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env }) => {
+export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
   try {
-    const unauthorized = await requireDriveSession({ request, env });
-    if (unauthorized) {
-      return unauthorized;
-    }
-
+    const session = await readDriveAdminSession({ request, env });
+    if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    const path = normalizeObjectPath(body.path, { allowTrailingSlash: true });
-    const config = getDriveConfig(env);
-    if (hasSystemPathSegment(path)) {
-      return jsonResponse({ error: "不能删除系统文件" }, 400);
-    }
-    await deleteObject(config, path);
-    if (!path.endsWith("/")) {
-      await removeFileMetadata(config, path);
-    }
-    return jsonResponse({ ok: true, path });
-  } catch (error) {
-    return errorResponse(error);
-  }
+    await deleteKnowledgeFile(getDriveConfig(env), body.topicId, body.path);
+    waitUntil(notifyIndexer(env, { topicId: String(body.topicId) }));
+    return jsonResponse({ ok: true });
+  } catch (error) { return errorResponse(error); }
 };

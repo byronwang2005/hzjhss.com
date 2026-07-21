@@ -1,19 +1,17 @@
 import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
-import { toDriveOverviewApiResponse } from "../../../src/drive/api-responses";
 import { errorResponse, jsonResponse, readDriveSession } from "../../../src/drive/http";
-import { readDriveOverview } from "../../../src/drive/topic";
+import { listKnowledgeTopics } from "../../../src/drive/knowledge";
+import { isDriveAdmin } from "../../../src/drive/session";
 
 export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
     const session = await readDriveSession({ request, env });
-    if (session instanceof Response) {
-      return session;
-    }
-    const overview = await readDriveOverview(getDriveConfig(env), {
+    if (session instanceof Response) return session;
+    return jsonResponse({
+      role: isDriveAdmin(session.displayName) ? "admin" : "viewer",
       displayName: session.displayName,
-      origin: new URL(request.url).origin,
+      topics: await listKnowledgeTopics(getDriveConfig(env)),
     });
-    return jsonResponse(toDriveOverviewApiResponse(overview));
   } catch (error) {
     return errorResponse(error);
   }

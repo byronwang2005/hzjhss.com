@@ -20,7 +20,7 @@ const markdown = new MarkdownIt({ html: false, linkify: true, typographer: false
 export class DriveAiQa extends LitElement {
   static properties = {
     scope: { type: String },
-    prefix: { type: String },
+    topicId: { type: String, attribute: "topic-id" },
     topicName: { type: String, attribute: "topic-name" },
     ready: { type: Boolean },
     question: { state: true },
@@ -31,7 +31,7 @@ export class DriveAiQa extends LitElement {
   };
 
   accessor scope: "global" | "topic" = "topic";
-  accessor prefix = "";
+  accessor topicId = "";
   accessor topicName = "";
   accessor ready = false;
   private accessor question = "";
@@ -54,7 +54,7 @@ export class DriveAiQa extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues): void {
-    const nextKey = `${this.scope}:${this.scope === "topic" ? this.prefix : "all"}`;
+    const nextKey = `${this.scope}:${this.scope === "topic" ? this.topicId : "all"}`;
     if (this.conversationKey && this.conversationKey !== nextKey) {
       this.clearConversation(false);
     }
@@ -93,7 +93,7 @@ export class DriveAiQa extends LitElement {
         ${this.ready
           ? nothing
           : html`<div class="drive-ai-qa-notice is-warning" role="status">
-              ${renderIcon("warning")}<span>${isGlobal ? "当前没有可用于全局问答的 Context。" : "当前专题还没有可用的最新版 Context，请联系专题负责人生成并回传。"}</span>
+              ${renderIcon("warning")}<span>${isGlobal ? "当前没有可检索的已处理文件。" : "当前专题还没有可检索的已处理文件。"}</span>
             </div>`}
 
         <div class="drive-ai-qa-messages" data-qa-messages aria-live="polite">
@@ -122,7 +122,7 @@ export class DriveAiQa extends LitElement {
                 </button>`}
           </div>
           <span class="drive-ai-qa-status" role="status">
-            ${this.status || (this.ready ? "对话仅保存在当前页面，刷新后清空。" : "Context 准备完成后即可使用。")}
+            ${this.status || (this.ready ? "对话仅保存在当前页面，刷新后清空。" : "文件处理和索引完成后即可使用。")}
           </span>
         </form>
       </section>
@@ -135,7 +135,7 @@ export class DriveAiQa extends LitElement {
       ? [
           ["database", "汇总重点", "请汇总各专题当前最重要的结论，并标明来源。"],
           ["files", "比较专题", "哪些专题存在共同风险或相互影响？请分别说明依据。"],
-          ["link", "查找来源", "请列出全局 Context 中可追溯的关键来源路径。"],
+          ["link", "查找来源", "请列出检索结果中可追溯的关键文件和位置。"],
         ]
       : [
           ["database", "概括结论", "请概括这个专题的核心结论，并标明来源。"],
@@ -144,7 +144,7 @@ export class DriveAiQa extends LitElement {
         ];
     return html`
       <div class="drive-ai-qa-empty">
-        <div><h3>${this.ready ? readyTitle : "等待 Context"}</h3><p>${this.ready ? "选择一个方向，或直接输入您关心的问题。" : "准备完成后，这里会提供基于资料的可追溯回答。"}</p></div>
+        <div><h3>${this.ready ? readyTitle : "等待文件处理"}</h3><p>${this.ready ? "选择一个方向，或直接输入您关心的问题。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
         ${this.ready
           ? html`<div class="drive-ai-qa-suggestions" aria-label="问题建议">
               ${suggestions.map(([icon, label, prompt]) => html`
@@ -226,7 +226,7 @@ export class DriveAiQa extends LitElement {
         signal: controller.signal,
         body: JSON.stringify({
           scope: this.scope,
-          ...(this.scope === "topic" ? { prefix: this.prefix } : {}),
+          ...(this.scope === "topic" ? { topicId: this.topicId } : {}),
           messages: [...history, userMessage].map(({ role, content }) => ({ role, content })),
         }),
       });

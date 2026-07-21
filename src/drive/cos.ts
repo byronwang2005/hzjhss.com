@@ -156,6 +156,20 @@ export async function deleteObject(config: DriveConfig, relativePath: string): P
   }
 }
 
+export async function copyObject(config: DriveConfig, sourceRelativePath: string, targetRelativePath: string, sourceEtag: string): Promise<void> {
+  const sourceKey = makeObjectKey(config.rootPrefix, sourceRelativePath);
+  const targetKey = makeObjectKey(config.rootPrefix, targetRelativePath);
+  const sourceUrl = new URL(objectUrl(config, sourceKey));
+  const response = await signedFetch(config, objectUrl(config, targetKey), {
+    method: "PUT",
+    headers: {
+      "x-cos-copy-source": `${sourceUrl.host}/${sourceKey.split("/").map(encodeURIComponent).join("/")}`,
+      "x-cos-copy-source-if-match": sourceEtag,
+    },
+  });
+  if (!response.ok) throw new Error(`COS 文件转存失败: ${response.status}`);
+}
+
 export async function deleteObjects(config: DriveConfig, relativePaths: string[]): Promise<void> {
   const chunkSize = 20;
   for (let index = 0; index < relativePaths.length; index += chunkSize) {

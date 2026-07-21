@@ -1,89 +1,50 @@
-export interface DriveFile {
+export type UserRole = "admin" | "viewer";
+export type ProcessingState = "queued" | "processing" | "indexing" | "ready" | "failed";
+
+export interface TopicSummary {
+  version: 1;
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  indexVersion: number;
+  ready: boolean;
+}
+
+export interface OverviewResponse {
+  role: UserRole;
+  displayName: string;
+  topics: TopicSummary[];
+}
+
+export interface ProcessingStatus {
+  state: ProcessingState;
+  sourceEtag: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export interface KnowledgeFile {
   name: string;
   path: string;
+  relativePath: string;
   size: number;
   lastModified: string;
-  etag?: string;
+  etag: string;
+  contentType?: string;
   uploadedBy?: string;
   uploadedAt?: string;
-  contentType?: string;
-  kind?: string;
+  processing?: ProcessingStatus;
 }
 
-export interface DriveFolder {
+export interface KnowledgeFolder {
   name: string;
   path: string;
 }
 
-export interface DriveListResult {
+export interface FileListResponse {
   prefix: string;
-  folders: DriveFolder[];
-  files: DriveFile[];
+  folders: KnowledgeFolder[];
+  files: KnowledgeFile[];
   nextCursor: string | null;
 }
-
-export interface TopicMetadata {
-  version: 5;
-  instanceId: string;
-  name: string;
-  prefix: string;
-  analysisKeywords: string;
-  owner: string;
-  createdBy: string;
-  createdAt: string;
-  updatedBy: string;
-  updatedAt: string;
-  featuredOutputPath: string | null;
-  contextOutputPath: string | null;
-}
-
-export interface TopicDetail {
-  topic: TopicMetadata;
-  outputs: DriveFile[];
-  canEditAnalysisScope: boolean;
-  canDeleteTopic: boolean;
-  canManageFeaturedOutput: boolean;
-  canTransferTopicOwner: boolean;
-  canGenerateContext: boolean;
-  hasCurrentContext: boolean;
-}
-
-export interface DriveOverviewOutput {
-  name: string;
-  path: string;
-  uploadedAt?: string;
-  lastModified: string;
-  contentType?: string;
-  size: number;
-  uploadedBy?: string;
-}
-
-export interface DriveOverviewTopic {
-  prefix: string;
-  name: string;
-  analysisKeywords: string;
-  owner: string;
-  createdBy: string;
-  updatedAt: string;
-  outputCount: number;
-  hasCurrentContext: boolean;
-  featuredOutput?: DriveOverviewOutput;
-}
-
-export interface DriveOverview {
-  topics: DriveOverviewTopic[];
-}
-
-export interface UploadCompleteResponse {
-  ok: true;
-  file: DriveFile;
-}
-
-export interface OwnerCandidatesResponse {
-  candidates: string[];
-  canManage: boolean;
-}
-
-export type ViewMode = "login" | "overview" | "topic" | "create";
-export type TopicTab = "qa" | "outputs" | "materials" | "agent" | "settings";
-export type PreviewKind = "html" | "pdf" | "markdown" | "text" | "none";

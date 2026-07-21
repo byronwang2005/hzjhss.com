@@ -11,7 +11,7 @@ afterEach(() => {
 async function mountQa(scope: "global" | "topic" = "global"): Promise<DriveAiQa> {
   const qa = new DriveAiQa();
   qa.scope = scope;
-  qa.prefix = scope === "topic" ? "新能源/" : "";
+  qa.topicId = scope === "topic" ? "t_abcdefghijkl" : "";
   qa.topicName = scope === "topic" ? "新能源" : "";
   qa.ready = true;
   document.body.appendChild(qa);
@@ -61,7 +61,7 @@ describe("drive AI Q&A component", () => {
     await waitForAnswer(qa);
     expect(qa.textContent).toContain("专题回答");
 
-    qa.prefix = "半导体/";
+    qa.topicId = "t_mnopqrstuvwx";
     qa.topicName = "半导体";
     await qa.updateComplete;
     expect(qa.textContent).not.toContain("专题回答");

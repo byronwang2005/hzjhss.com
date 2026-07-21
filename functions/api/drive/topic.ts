@@ -1,100 +1,41 @@
-import type { DriveEnv } from "../../../src/drive/config";
-import { toTopicDetailApiResponse } from "../../../src/drive/api-responses";
-import { getDriveConfig } from "../../../src/drive/config";
-import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createTopic, deleteTopic, readTopic, transferTopicOwner, updateFeaturedOutput, updateTopic } from "../../../src/drive/topic";
+import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
+import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/http";
+import { createKnowledgeTopic, deleteKnowledgeTopic, readKnowledgeTopic, updateKnowledgeTopic } from "../../../src/drive/knowledge";
+import { notifyIndexer } from "../../../src/drive/webhooks";
 
 export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
-    const session = await readDriveSession({ request, env });
-    if (session instanceof Response) {
-      return session;
-    }
-
-    const url = new URL(request.url);
-    const detail = await readTopic(getDriveConfig(env), url.searchParams.get("prefix"), {
-      displayName: session.displayName,
-      origin: url.origin,
-    });
-    return jsonResponse(toTopicDetailApiResponse(detail, session.displayName));
-  } catch (error) {
-    return errorResponse(error);
-  }
+    const session = await readDriveAdminSession({ request, env });
+    if (session instanceof Response) return session;
+    return jsonResponse({ topic: await readKnowledgeTopic(getDriveConfig(env), new URL(request.url).searchParams.get("topicId")) });
+  } catch (error) { return errorResponse(error); }
 };
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
-    const session = await readDriveSession({ request, env });
-    if (session instanceof Response) {
-      return session;
-    }
-
+    const session = await readDriveAdminSession({ request, env });
+    if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    const detail = await createTopic(getDriveConfig(env), {
-      name: body.name,
-      analysisKeywords: body.analysisKeywords,
-      description: body.description,
-      displayName: session.displayName,
-      origin: new URL(request.url).origin,
-    });
-    return jsonResponse(toTopicDetailApiResponse(detail, session.displayName));
-  } catch (error) {
-    return errorResponse(error);
-  }
+    return jsonResponse({ topic: await createKnowledgeTopic(getDriveConfig(env), body.name) });
+  } catch (error) { return errorResponse(error); }
 };
 
-export const onRequestPut: PagesFunction<DriveEnv> = async ({ request, env }) => {
+export const onRequestPut: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
   try {
-    const session = await readDriveSession({ request, env });
-    if (session instanceof Response) {
-      return session;
-    }
-
+    const session = await readDriveAdminSession({ request, env });
+    if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    const detail = Object.prototype.hasOwnProperty.call(body, "owner")
-      ? await transferTopicOwner(getDriveConfig(env), {
-          prefix: body.prefix,
-          owner: body.owner,
-          confirmName: body.confirmName,
-          displayName: session.displayName,
-          origin: new URL(request.url).origin,
-        })
-      : Object.prototype.hasOwnProperty.call(body, "featuredOutputPath")
-      ? await updateFeaturedOutput(getDriveConfig(env), {
-          prefix: body.prefix,
-          path: body.featuredOutputPath,
-          displayName: session.displayName,
-          origin: new URL(request.url).origin,
-        })
-      : await updateTopic(getDriveConfig(env), {
-      prefix: body.prefix,
-      analysisKeywords: body.analysisKeywords,
-      description: body.description,
-      displayName: session.displayName,
-      origin: new URL(request.url).origin,
-        });
-    return jsonResponse(toTopicDetailApiResponse(detail, session.displayName));
-  } catch (error) {
-    return errorResponse(error);
-  }
+    const topic = await updateKnowledgeTopic(getDriveConfig(env), body.topicId, body.name);
+    waitUntil(notifyIndexer(env, { topicId: topic.id }));
+    return jsonResponse({ topic });
+  } catch (error) { return errorResponse(error); }
 };
 
 export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
-    const session = await readDriveSession({ request, env });
-    if (session instanceof Response) {
-      return session;
-    }
-
+    const session = await readDriveAdminSession({ request, env });
+    if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    const result = await deleteTopic(getDriveConfig(env), {
-      prefix: body.prefix,
-      confirmName: body.confirmName,
-      displayName: session.displayName,
-      origin: new URL(request.url).origin,
-    });
-    return jsonResponse(result);
-  } catch (error) {
-    return errorResponse(error);
-  }
+    return jsonResponse(await deleteKnowledgeTopic(getDriveConfig(env), body.topicId, body.confirmName));
+  } catch (error) { return errorResponse(error); }
 };

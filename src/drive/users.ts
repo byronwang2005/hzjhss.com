@@ -1,8 +1,8 @@
 import type { DriveConfig } from "./config";
 import { getObjectText, putObjectText } from "./cos";
-import { DRIVE_ADMIN_DISPLAY_NAME, normalizeDisplayName } from "./session";
+import { normalizeDisplayName } from "./session";
 
-export const DRIVE_USERS_FILENAME = "._drive-users.json";
+export const DRIVE_USERS_FILENAME = "system/users.json";
 
 export interface DriveUserRecord {
   firstLoginAt: string;
@@ -23,33 +23,6 @@ export async function registerDriveUser(config: DriveConfig, rawDisplayName: unk
     firstLoginAt: existing?.firstLoginAt || timestamp,
     lastLoginAt: timestamp,
   };
-  await writeDriveUserRegistry(config, registry);
-}
-
-export async function listDriveUserCandidates(config: DriveConfig): Promise<string[]> {
-  const registry = await readDriveUserRegistry(config);
-  return Array.from(new Set([DRIVE_ADMIN_DISPLAY_NAME, ...Object.keys(registry.users)])).sort((a, b) =>
-    a.localeCompare(b, "zh-Hans-CN"),
-  );
-}
-
-export async function removeDriveUserCandidate(
-  config: DriveConfig,
-  rawDisplayName: unknown,
-  activeOwners: Set<string>,
-): Promise<void> {
-  const displayName = normalizeDisplayName(rawDisplayName);
-  if (displayName === DRIVE_ADMIN_DISPLAY_NAME) {
-    throw new Error("不能移除管理员候选");
-  }
-  if (activeOwners.has(displayName)) {
-    throw new Error("该用户仍是专题负责人，不能移除");
-  }
-  const registry = await readDriveUserRegistry(config);
-  if (!registry.users[displayName]) {
-    throw new Error("负责人候选不存在");
-  }
-  delete registry.users[displayName];
   await writeDriveUserRegistry(config, registry);
 }
 

@@ -1,109 +1,64 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { DriveEnv } from "../../../src/drive/config";
 import { getAiConfig, getDriveConfig } from "../../../src/drive/config";
-import { errorResponse, jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createGlobalQaSystemMessage, createQaClient, createQaSystemMessage, encodeSse, normalizeQaMessages, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/qa";
-import { readCurrentContext, readGlobalContexts, readTopic } from "../../../src/drive/topic";
+import { jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
+import { createQaClient, createRetrievedQaSystemMessage, encodeSse, normalizeQaMessages, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/qa";
+import { retrieveKnowledge } from "../../../src/drive/retrieval";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
+  const session = await readDriveSession({ request, env });
+  if (session instanceof Response) return session;
+  const body = await readJsonBody(request);
+  const qaMessages = normalizeQaMessages(body.messages);
+  const question = qaMessages.at(-1)?.content || "";
+  const scope = body.scope === "global" ? "global" : "topic";
+  let chunks;
   try {
-    const session = await readDriveSession({ request, env });
-    if (session instanceof Response) {
-      return session;
-    }
-    const body = await readJsonBody(request);
-    const origin = new URL(request.url).origin;
-    const driveConfig = getDriveConfig(env);
-    const qaMessages = normalizeQaMessages(body.messages);
-    const aiConfig = getAiConfig(env);
-    let systemMessage: string;
-    if (body.scope === "global") {
-      const contexts = await readGlobalContexts(driveConfig);
-      if (!contexts.length) {
-        return jsonResponse({ error: "当前没有可用于全局问答的 Markdown Context" }, 409);
-      }
-      systemMessage = createGlobalQaSystemMessage(contexts);
-    } else {
-      const detail = await readTopic(driveConfig, body.prefix, { displayName: session.displayName, origin });
-      const context = await readCurrentContext(driveConfig, detail.topic);
-      if (!detail.topic.contextOutputPath || context === null) {
-        return jsonResponse({ error: "该专题尚未准备可用的 Markdown Context" }, 409);
-      }
-      if (!context.trim()) {
-        return jsonResponse({ error: "当前 Markdown Context 为空，问答已禁用" }, 409);
-      }
-      systemMessage = createQaSystemMessage(context);
-    }
-    const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: systemMessage },
-      ...qaMessages,
-    ];
-
-    let stream;
-    try {
-      stream = await createQaClient(aiConfig).chat.completions.create({
-        model: aiConfig.model,
-        messages,
-        stream: true,
-        max_tokens: aiConfig.maxOutputTokens,
-      }, { signal: request.signal });
-    } catch (error) {
-      return jsonResponse({ error: upstreamAiErrorMessage(error) }, upstreamAiHttpStatus(error));
-    }
-
-    const responseStream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let receivedContent = false;
-        try {
-          for await (const chunk of stream) {
-            for (const choice of chunk.choices) {
-              const content = choice.delta.content;
-              if (content) {
-                receivedContent = true;
-                if (!safeEnqueue(controller, encodeSse("delta", { content }))) {
-                  return;
-                }
-              }
-            }
-          }
-          if (!receivedContent) {
-            safeEnqueue(controller, encodeSse("error", { error: "模型没有返回可显示的流式内容" }));
-          } else {
-            safeEnqueue(controller, encodeSse("done", { ok: true }));
-          }
-        } catch (error) {
-          safeEnqueue(controller, encodeSse("error", { error: upstreamAiErrorMessage(error) }));
-        } finally {
-          safeClose(controller);
-        }
-      },
-    });
-
-    return new Response(responseStream, {
-      headers: {
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": "no-cache, no-store",
-        "x-accel-buffering": "no",
-      },
-    });
+    chunks = await retrieveKnowledge(getDriveConfig(env), { scope, topicId: body.topicId, query: question });
   } catch (error) {
-    return errorResponse(error);
+    return jsonResponse({ error: error instanceof Error ? error.message : "资料检索失败" }, 400);
   }
+  if (!chunks.length) {
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encodeSse("delta", { content: "当前检索资料不足，未找到与问题相关的已处理文件。" }));
+        controller.enqueue(encodeSse("done", { ok: true }));
+        controller.close();
+      },
+    }), { headers: sseHeaders() });
+  }
+  const systemMessage = createRetrievedQaSystemMessage(chunks, scope === "global");
+  const messages: ChatCompletionMessageParam[] = [{ role: "system", content: systemMessage }, ...qaMessages];
+  let stream;
+  try {
+    const aiConfig = getAiConfig(env);
+    stream = await createQaClient(aiConfig).chat.completions.create({
+      model: aiConfig.model,
+      messages,
+      stream: true,
+      max_tokens: aiConfig.maxOutputTokens,
+    }, { signal: request.signal });
+  } catch (error) {
+    return jsonResponse({ error: upstreamAiErrorMessage(error) }, upstreamAiHttpStatus(error));
+  }
+  return new Response(new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const chunk of stream) {
+          for (const choice of chunk.choices) {
+            if (choice.delta.content) controller.enqueue(encodeSse("delta", { content: choice.delta.content }));
+          }
+        }
+        controller.enqueue(encodeSse("done", { ok: true }));
+      } catch (error) {
+        controller.enqueue(encodeSse("error", { error: upstreamAiErrorMessage(error) }));
+      } finally {
+        controller.close();
+      }
+    },
+  }), { headers: sseHeaders() });
 };
 
-function safeEnqueue(controller: ReadableStreamDefaultController<Uint8Array>, chunk: Uint8Array): boolean {
-  try {
-    controller.enqueue(chunk);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function safeClose(controller: ReadableStreamDefaultController<Uint8Array>): void {
-  try {
-    controller.close();
-  } catch {
-    // The browser may have stopped generation and canceled the response stream.
-  }
+function sseHeaders(): HeadersInit {
+  return { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-transform", connection: "keep-alive" };
 }

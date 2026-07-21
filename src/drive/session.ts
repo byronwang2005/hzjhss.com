@@ -5,7 +5,6 @@ const COOKIE_NAME = "jhss_drive_session";
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 const MAX_DISPLAY_NAME_LENGTH = 40;
 const DEFAULT_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
-export const AGENT_OUTPUT_TOKEN_MAX_AGE_SECONDS = 60 * 60;
 export const DRIVE_ADMIN_DISPLAY_NAME = "汪旭";
 
 export function isDriveAdmin(displayName: string): boolean {
@@ -18,17 +17,6 @@ export interface DriveSession {
   iat: number;
   exp: number;
   displayName: string;
-}
-
-export interface AgentOutputCapability {
-  v: 1;
-  purpose: "agent-output";
-  iat: number;
-  exp: number;
-  displayName: string;
-  topicPrefix: string;
-  topicInstanceId: string;
-  allowedPaths: string[];
 }
 
 export async function createSessionCookie(env: DriveEnv, requestUrl: string, displayName: string): Promise<string> {
@@ -106,68 +94,6 @@ export async function verifyAccessCode(env: DriveEnv, provided: unknown): Promis
   return constantTimeEqual(expectedDigest, providedDigest);
 }
 
-export async function createAgentOutputToken(
-  env: DriveEnv,
-  input: { displayName: string; topicPrefix: string; topicInstanceId: string; allowedPaths: string[] },
-): Promise<{ token: string; expiresAt: string; expiresIn: number }> {
-  const now = Math.floor(Date.now() / 1000);
-  const payload: AgentOutputCapability = {
-    v: 1,
-    purpose: "agent-output",
-    iat: now,
-    exp: now + AGENT_OUTPUT_TOKEN_MAX_AGE_SECONDS,
-    displayName: normalizeDisplayName(input.displayName),
-    topicPrefix: input.topicPrefix,
-    topicInstanceId: input.topicInstanceId,
-    allowedPaths: [...new Set(input.allowedPaths)],
-  };
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signature = await signWithPurpose("agent-output", encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
-  return {
-    token: `${encodedPayload}.${signature}`,
-    expiresAt: new Date(payload.exp * 1000).toISOString(),
-    expiresIn: AGENT_OUTPUT_TOKEN_MAX_AGE_SECONDS,
-  };
-}
-
-export async function getAgentOutputCapability(env: DriveEnv, authorization: string | null): Promise<AgentOutputCapability | null> {
-  const match = /^Bearer\s+([^\s]+)$/i.exec(authorization || "");
-  if (!match) {
-    return null;
-  }
-  const [encodedPayload, providedSignature] = match[1].split(".");
-  if (!encodedPayload || !providedSignature) {
-    return null;
-  }
-  const expectedSignature = await signWithPurpose("agent-output", encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
-  if (!constantTimeEqual(providedSignature, expectedSignature)) {
-    return null;
-  }
-  try {
-    const payload = JSON.parse(base64UrlDecode(encodedPayload)) as Partial<AgentOutputCapability>;
-    if (
-      payload.v !== 1 ||
-      payload.purpose !== "agent-output" ||
-      !Number.isFinite(payload.exp) ||
-      (payload.exp as number) <= Math.floor(Date.now() / 1000) ||
-      typeof payload.displayName !== "string" ||
-      typeof payload.topicPrefix !== "string" ||
-      typeof payload.topicInstanceId !== "string" ||
-      !Array.isArray(payload.allowedPaths) ||
-      !payload.allowedPaths.every((path) => typeof path === "string")
-    ) {
-      return null;
-    }
-    return payload as AgentOutputCapability;
-  } catch {
-    return null;
-  }
-}
-
-export function allowsAgentOutputPath(capability: AgentOutputCapability, path: string): boolean {
-  return path.startsWith(capability.topicPrefix) && capability.allowedPaths.includes(path);
-}
-
 export function normalizeDisplayName(input: unknown): string {
   if (typeof input !== "string") {
     throw new Error("请输入登录姓名");
@@ -210,7 +136,7 @@ async function sign(value: string, secret: string): Promise<string> {
   return base64UrlEncodeBytes(new Uint8Array(signature));
 }
 
-async function signWithPurpose(purpose: "drive-session" | "agent-output", value: string, secret: string): Promise<string> {
+async function signWithPurpose(purpose: "drive-session", value: string, secret: string): Promise<string> {
   return sign(`${purpose}:${value}`, secret);
 }
 

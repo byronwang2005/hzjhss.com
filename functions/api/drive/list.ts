@@ -1,22 +1,12 @@
-import type { DriveEnv } from "../../../src/drive/config";
-import { getDriveConfig } from "../../../src/drive/config";
-import { errorResponse, jsonResponse, requireDriveSession } from "../../../src/drive/http";
-import { normalizePrefix } from "../../../src/drive/paths";
-import { listDirectoryWithMetadata } from "../../../src/drive/topic";
+import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
+import { errorResponse, jsonResponse, readDriveAdminSession } from "../../../src/drive/http";
+import { listKnowledgeFiles } from "../../../src/drive/knowledge";
 
 export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {
-    const unauthorized = await requireDriveSession({ request, env });
-    if (unauthorized) {
-      return unauthorized;
-    }
-
+    const session = await readDriveAdminSession({ request, env });
+    if (session instanceof Response) return session;
     const url = new URL(request.url);
-    const prefix = normalizePrefix(url.searchParams.get("prefix") ?? "");
-    const cursor = url.searchParams.get("cursor");
-    const result = await listDirectoryWithMetadata(getDriveConfig(env), prefix, cursor);
-    return jsonResponse(result);
-  } catch (error) {
-    return errorResponse(error);
-  }
+    return jsonResponse(await listKnowledgeFiles(getDriveConfig(env), url.searchParams.get("topicId"), url.searchParams.get("prefix") || "", url.searchParams.get("cursor")));
+  } catch (error) { return errorResponse(error); }
 };
