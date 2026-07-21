@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build:drive": "node scripts/build-drive.mjs",
-    "dev": "wrangler pages dev . --compatibility-date=2026-07-08",
+    "build:pages": "node scripts/build-pages.mjs",
+    "dev": "npm run build:pages && wrangler pages dev dist --compatibility-date=2026-07-08",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

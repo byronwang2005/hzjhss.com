@@ -12,8 +12,8 @@
 
 构建设置：
 
-- Build command：`npm run build:drive`
-- Build output directory：`.`
+- Build command：`npm run build:pages`
+- Build output directory：`dist`
 - Root directory：仓库根目录
 
 Secrets：
@@ -177,6 +177,7 @@ npm install --prefix scf
 npm run typecheck
 npm test
 npm run build:drive
+npm run build:pages
 node --check scf/file-processor/index.mjs
 node --check scf/index-builder/index.mjs
 ```

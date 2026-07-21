@@ -12,6 +12,20 @@ const cssSource = ["theme.css", "styles.css", "src/drive/client/drive.css"]
   .join("\n");
 
 describe("shared UI system", () => {
+  it("loads the generated PDF worker from the hashed drive-assets directory", () => {
+    const workerPath = globSync("assets/drive-assets/pdf.worker-*.mjs")[0];
+    expect(workerPath).toBeTruthy();
+    const driveBundle = readFileSync("assets/drive.js", "utf8");
+    expect(driveBundle).toContain(workerPath.replace(/^assets\//, ""));
+  });
+
+  it("publishes only the explicit static-site allowlist", () => {
+    const buildScript = readFileSync("scripts/build-pages.mjs", "utf8");
+    expect(buildScript).toContain('["assets", "docs"]');
+    expect(buildScript).not.toMatch(/cp\([^\n]*(?:src|functions|scf|package\.json|node_modules)/);
+    expect(readFileSync("package.json", "utf8")).toContain("wrangler pages dev dist");
+  });
+
   it("uses the generated Phosphor sprite without hand-drawn paths", () => {
     expect(publicMarkup).not.toMatch(/<path\b/i);
     expect(driveSource).not.toMatch(/<path\b/i);

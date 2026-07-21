@@ -74,7 +74,7 @@ const workerOutput = Object.entries(workerResult.metafile.outputs).find(([, outp
 if (!workerOutput) {
   throw new Error("PDF worker output was not generated.");
 }
-const workerFilename = path.basename(workerOutput[0]);
+const workerFilename = path.posix.join("drive-assets", path.basename(workerOutput[0]));
 
 await build({
   absWorkingDir: root,
