@@ -989,13 +989,13 @@ function renderTopbar(): TemplateResult {
   return html`
     <header class=${classMap({ "drive-topbar": true, "is-authenticated": state.mode !== "login" })}>
       <div class="drive-brand-actions">
-        <a class="drive-brand" href="/drive" aria-label="返回嘉合杉升专题资料库">
+        <a class="drive-brand" href="/" aria-label="返回嘉合杉升专题资料库首页">
           <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" width="400" height="501" />
           <span>嘉合杉升专题资料库</span>
         </a>
         ${state.mode !== "login" ? controlButton("退出登录", "ph-sign-out", "logout", false, "", "drive-logout-button") : nothing}
       </div>
-      <nav class="drive-nav" aria-label="专题资料库导航"><a href="./index.html">${renderDriveIcon("house")}返回首页</a></nav>
+      <nav class="drive-nav" aria-label="专题资料库导航"><a href="/docs/">${renderDriveIcon("book-open")}AI手册</a></nav>
     </header>
   `;
 }

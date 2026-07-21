@@ -236,7 +236,7 @@ describe("COS list XML parser", () => {
 
 describe("drive sessions", () => {
   it("creates and verifies a signed session cookie", async () => {
-    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/drive.html", "王小明");
+    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/", "王小明");
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("Max-Age=60");
     await expect(verifySessionCookie(env, cookie)).resolves.toBe(true);
@@ -244,7 +244,7 @@ describe("drive sessions", () => {
   });
 
   it("rejects tampered cookies and wrong access codes", async () => {
-    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/drive.html", "王小明");
+    const cookie = await createSessionCookie(env, "http://127.0.0.1:8788/", "王小明");
     const tampered = cookie.replace(/jhss_drive_session=([^.;]+)\./, "jhss_drive_session=$1x.");
     await expect(verifySessionCookie(env, tampered)).resolves.toBe(false);
     await expect(verifyAccessCode(env, "wrong")).resolves.toBe(false);

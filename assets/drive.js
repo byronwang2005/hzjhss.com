@@ -2480,13 +2480,13 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
     `,pt)}function pg(){return C`
     <header class=${ee({"drive-topbar":!0,"is-authenticated":f.mode!=="login"})}>
       <div class="drive-brand-actions">
-        <a class="drive-brand" href="/drive" aria-label="返回嘉合杉升专题资料库">
+        <a class="drive-brand" href="/" aria-label="返回嘉合杉升专题资料库首页">
           <img src="./assets/jhss-logo-cropped.png" alt="" aria-hidden="true" width="400" height="501" />
           <span>嘉合杉升专题资料库</span>
         </a>
         ${f.mode!=="login"?Or("\u9000\u51FA\u767B\u5F55","ph-sign-out","logout",!1,"","drive-logout-button"):R}
       </div>
-      <nav class="drive-nav" aria-label="专题资料库导航"><a href="./index.html">${P("house")}返回首页</a></nav>
+      <nav class="drive-nav" aria-label="专题资料库导航"><a href="/docs/">${P("book-open")}AI手册</a></nav>
     </header>
   `}function fg(){return!f.status&&!f.upload.active&&!f.loading?R:C`
     <section class="drive-system-row" aria-live="polite">

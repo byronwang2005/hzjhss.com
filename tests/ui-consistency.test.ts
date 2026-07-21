@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { globSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const htmlFiles = ["index.html", ...globSync("articles/*.html")];
+const htmlFiles = ["404.html", "docs/index.html", ...globSync("docs/articles/*.html")];
 const publicMarkup = htmlFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts"]
   .map((file) => readFileSync(file, "utf8"))

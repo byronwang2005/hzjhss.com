@@ -1,8 +1,26 @@
 # 嘉合杉升专题资料库部署说明
 
-专题资料库页面是 `drive.html`，API 使用 Cloudflare Pages Functions，专题资料和成果元数据存储在腾讯云 COS 私有 Bucket。
+专题资料库是网站首页 `/`，AI 手册位于 `/docs/`。API 使用 Cloudflare Pages Functions，专题资料和成果元数据存储在腾讯云 COS 私有 Bucket。
 
 ## Cloudflare 配置
+
+Cloudflare Pages 构建设置：
+
+- Production branch：使用正式部署分支
+- Build command：`npm run build:drive`
+- Build output directory：`.`
+- Root directory：仓库根目录，不要设置为 `docs`
+
+Pages Functions 继续从仓库根目录的 `functions/` 部署。页面目录调整不需要迁移现有环境变量或 Secrets。
+
+部署完成后确认：
+
+- 根域名 `/` 打开专题资料库
+- `/docs/` 打开 AI 手册
+- `/docs/articles/` 下的文章、图片和下载文件可以访问
+- `/api/drive/*` 请求仍由 Pages Functions 处理
+
+首次发布目录调整后，在 Cloudflare 的 Caching > Configuration 中执行一次 Purge Everything，避免边缘节点继续返回旧首页。
 
 在 Pages 项目的 Settings > Environment variables 中配置：
 
