@@ -1737,8 +1737,8 @@ body.drive-body {
 
 .drive-ai-qa-composer {
   width: 100%;
-  min-height: 68px;
-  padding: 7px 8px 7px 17px;
+  min-height: 60px;
+  padding: 4px 8px 4px 17px;
   background: #0e1114;
   border: 1px solid var(--drive-line-strong);
   border-radius: 14px;
@@ -1764,8 +1764,8 @@ body.drive-body {
 }
 
 .drive-ai-qa-composer textarea {
-  min-height: 52px;
-  padding: 12px 3px 10px;
+  min-height: 44px;
+  padding: 9px 3px 7px;
   font-size: 14px;
 }
 
@@ -2079,7 +2079,7 @@ wa-callout {
   }
 
   .drive-ai-qa-composer {
-    min-height: 62px;
+    min-height: 56px;
     padding-left: 13px;
   }
 
