@@ -355,7 +355,7 @@ function renderLogin(): TemplateResult {
       <label class="drive-field"><span>访问码</span><input name="accessCode" type="password" autocomplete="current-password" placeholder="请输入访问码" .value=${state.accessCode} required></label>
       <button class="drive-control drive-control-primary drive-login-submit" type="submit" ?disabled=${state.loading}>进入知识库${renderIcon("arrow-right", "bold")}</button>
       ${renderStatus()}
-      <p class="drive-login-help">仅限授权成员访问</p>
+      <div class="drive-login-foot"><p class="drive-login-help">仅限授权成员访问</p><a class="drive-docs-link" href="/docs/">${renderIcon("book-open")}浏览 AI 手册</a></div>
     </form>
   </section>`;
 }
@@ -370,7 +370,7 @@ function renderShell(): TemplateResult {
       <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" data-action="back" aria-label="返回知识库首页">
         <img src="/assets/jhss-logo-cropped.png" alt=""><span><strong>嘉合杉升</strong><small>AI 知识库</small></span>
       </button>
-      <div class="drive-appbar-meta"><span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
+      <div class="drive-appbar-meta"><a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a><span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
     </header>
     <main class="drive-dashboard-main">
       <div class="drive-page-head"><div>

@@ -1346,6 +1346,35 @@ body.drive-body {
   text-align: center;
 }
 
+.drive-login-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.drive-login-foot .drive-login-help {
+  padding: 0;
+  text-align: left;
+}
+
+.drive-docs-link,
+.drive-appbar-docs {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--drive-muted);
+  border-bottom: 0;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.drive-docs-link:hover,
+.drive-appbar-docs:hover {
+  color: var(--drive-accent-hover);
+}
+
 .drive-field {
   gap: 9px;
 }
@@ -1468,6 +1497,17 @@ body.drive-body {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+.drive-appbar-docs {
+  min-height: 38px;
+  margin-right: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+.drive-appbar-docs:hover {
+  background: var(--drive-accent-soft);
 }
 
 .drive-user-badge {
@@ -2023,6 +2063,11 @@ wa-callout {
     display: none;
   }
 
+  .drive-appbar-docs {
+    margin-right: 0;
+    padding-inline: 8px;
+  }
+
   .drive-dashboard-main {
     padding: 32px 16px 48px;
   }
@@ -2111,6 +2156,11 @@ wa-callout {
 }
 
 @media (max-width: 440px) {
+  .drive-login-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .drive-login-principles {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
