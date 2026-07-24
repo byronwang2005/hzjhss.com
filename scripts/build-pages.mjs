@@ -10,7 +10,7 @@ await import("./build-drive.mjs");
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-for (const file of ["index.html", "404.html", "_headers", "theme.css", "styles.css", "site.js"]) {
+for (const file of ["index.html", "404.html", "_headers", "theme.css", "theme-controller.js", "styles.css", "site.js"]) {
   await cp(path.join(root, file), path.join(output, file));
 }
 

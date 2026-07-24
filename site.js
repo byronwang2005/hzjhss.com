@@ -2,6 +2,7 @@ const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const faviconUrl = document.querySelector('link[rel="icon"]')?.href || document.baseURI;
 const iconSpriteUrl = new URL("phosphor-sprite.svg", faviconUrl).href;
 
+initThemeToggle();
 initIcons();
 initCopyButtons();
 initArticleToc();
@@ -24,6 +25,30 @@ function addIcon(element, name, { weight = "regular", position = "prepend", clas
     return;
   }
   element[position](createIcon(name, weight, className));
+}
+
+function initThemeToggle() {
+  const controller = window.jhssTheme;
+  const navigation = document.querySelector(".top-nav, .drive-nav");
+  if (!controller || !navigation) {
+    return;
+  }
+
+  const button = document.createElement("button");
+  button.className = "theme-toggle";
+  button.type = "button";
+  button.dataset.themeToggle = "";
+  navigation.append(button);
+
+  const update = (theme) => {
+    const target = theme === "dark" ? "亮色" : "暗色";
+    button.replaceChildren(createIcon(theme === "dark" ? "sun" : "moon"));
+    button.setAttribute("aria-label", `切换到${target}主题`);
+    button.title = `切换到${target}主题`;
+  };
+
+  button.addEventListener("click", () => controller.toggleTheme());
+  controller.subscribe(update);
 }
 
 function initIcons() {

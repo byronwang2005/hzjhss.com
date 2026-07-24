@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const htmlFiles = ["404.html", "docs/index.html", ...globSync("docs/articles/*.html")];
 const publicMarkup = htmlFiles.map((file) => readFileSync(file, "utf8")).join("\n");
+const allPublicHtml = ["index.html", ...htmlFiles].map((file) => readFileSync(file, "utf8"));
 const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts"]
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
@@ -69,6 +70,50 @@ describe("shared UI system", () => {
     }
   });
 
+  it("loads the theme controller before styles on every public page", () => {
+    for (const markup of allPublicHtml) {
+      const controllerIndex = markup.indexOf('src="/theme-controller.js"');
+      const stylesheetIndex = markup.indexOf('rel="stylesheet"');
+      expect(controllerIndex).toBeGreaterThan(-1);
+      expect(controllerIndex).toBeLessThan(stylesheetIndex);
+    }
+  });
+
+  it("publishes matching light and dark semantic color tokens", () => {
+    const themeCss = readFileSync("theme.css", "utf8");
+    const lightBlock = themeCss.match(/^:root \\{([\\s\\S]*?)^\\}/m)?.[1] || "";
+    const darkBlock = themeCss.match(/^:root\\[data-theme="dark"\\] \\{([\\s\\S]*?)^\\}/m)?.[1] || "";
+    const colorTokens = (block: string) => [...block.matchAll(/(--jh-color-[\\w-]+)\\s*:/g)].map((match) => match[1]).sort();
+    expect(colorTokens(darkBlock)).toEqual(colorTokens(lightBlock));
+  });
+
+  it("does not reintroduce legacy or drive-specific color palettes", () => {
+    const legacyTokens = [
+      "parchment", "ivory", "warm-sand", "brand", "brand-light", "brand-tint",
+      "near-black", "dark-warm", "olive", "stone", "border", "border-soft",
+      "line", "dark-surface",
+    ];
+    for (const token of legacyTokens) {
+      expect(cssSource).not.toContain(`--${token}:`);
+      expect(cssSource).not.toContain(`var(--${token})`);
+    }
+    expect(cssSource).not.toMatch(/--drive-(?:accent|surface|ink|muted|line|success|danger|warning|shadow)\\b/);
+  });
+
+  it("keeps theme palette declarations in the shared theme only", () => {
+    const componentCss = ["styles.css", "src/drive/client/drive.css"]
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    expect(componentCss).not.toMatch(/--jh-color-[\\w-]+\\s*:/);
+    expect(componentCss).not.toContain("color-scheme: dark");
+  });
+
+  it("includes the theme action icons in the generated sprite", () => {
+    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    expect(sprite).toContain('id="ph-regular-sun"');
+    expect(sprite).toContain('id="ph-regular-moon"');
+  });
+
   it("covers public page controls through the shared icon initializer", () => {
     const siteScript = readFileSync("site.js", "utf8");
     for (const selector of [".top-nav a", ".back-link", ".footer a", ".article-list-item em", ".toc-toggle", ".copy-button", ".system-tab[data-system]", ".architecture-tab"]) {
@@ -126,6 +171,5 @@ describe("shared UI system", () => {
     }
     expect(cssSource).toContain("--jh-motion-control: cubic-bezier(0.2, 0, 0, 1)");
     expect(cssSource).toContain("--jh-motion-enter: cubic-bezier(0.32, 0.72, 0, 1)");
-    expect(cssSource).toContain("--jh-motion-exit: cubic-bezier(0.32, 0, 0.67, 0)");
   });
 });

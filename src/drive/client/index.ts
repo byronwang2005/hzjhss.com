@@ -21,6 +21,19 @@ type UppyMeta = { relativePath?: string; pdfPages?: number };
 type UppyBody = Record<string, unknown>;
 type DriveUppyFile = UppyFile<UppyMeta, UppyBody>;
 type UploadPhase = "preparing" | "uploading" | "registering";
+type ThemeName = "light" | "dark";
+
+declare global {
+  interface Window {
+    jhssTheme: {
+      getPreference(): ThemeName | null;
+      getResolvedTheme(): ThemeName;
+      setTheme(theme: ThemeName): void;
+      subscribe(listener: (theme: ThemeName) => void): () => void;
+      toggleTheme(): void;
+    };
+  }
+}
 
 interface UploadSignature {
   url: string;
@@ -52,6 +65,7 @@ const state: {
   loginName: string;
   accessCode: string;
   topicName: string;
+  theme: ThemeName;
   upload: { active: boolean; phase: UploadPhase; name: string; percent: number; overallPercent: number; total: number };
 } = {
   mode: "login",
@@ -68,6 +82,7 @@ const state: {
   loginName: "",
   accessCode: "",
   topicName: "",
+  theme: window.jhssTheme.getResolvedTheme(),
   upload: { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 },
 };
 
@@ -75,6 +90,12 @@ root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
 root.addEventListener("input", handleInput);
 root.addEventListener("change", (event) => void handleChange(event));
+window.jhssTheme.subscribe((theme) => {
+  if (state.theme !== theme) {
+    state.theme = theme;
+    renderApp();
+  }
+});
 
 void boot();
 
@@ -183,7 +204,9 @@ async function handleClick(event: MouseEvent): Promise<void> {
   const button = (event.target as Element).closest<HTMLElement>("[data-action]");
   if (!button) return;
   const action = button.dataset.action;
-  if (action === "logout") {
+  if (action === "toggle-theme") {
+    window.jhssTheme.toggleTheme();
+  } else if (action === "logout") {
     await api("/logout", { method: "POST" });
     location.reload();
   } else if (action === "refresh") {
@@ -336,6 +359,7 @@ function renderApp(): void {
 
 function renderLogin(): TemplateResult {
   return html`<section class="drive-login-panel">
+    ${renderThemeToggle("drive-login-theme-toggle")}
     <div class="drive-login-story">
       <div class="drive-brand-lockup"><img src="/assets/jhss-logo-cropped.png" alt="嘉合杉升"><span>嘉合杉升</span></div>
       <div class="drive-login-copy">
@@ -370,7 +394,7 @@ function renderShell(): TemplateResult {
       <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" data-action="back" aria-label="返回知识库首页">
         <img src="/assets/jhss-logo-cropped.png" alt=""><span><strong>嘉合杉升</strong><small>AI 知识库</small></span>
       </button>
-      <div class="drive-appbar-meta"><a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a><span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
+      <div class="drive-appbar-meta"><a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a>${renderThemeToggle()}<span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
     </header>
     <main class="drive-dashboard-main">
       <div class="drive-page-head"><div>
@@ -434,6 +458,12 @@ function tabButton(view: TopicView, label: string, icon: string): TemplateResult
 
 function iconButton(icon: string, label: string, action: string): TemplateResult {
   return html`<button class="drive-icon-button" type="button" data-action=${action} aria-label=${label} title=${label}>${renderIcon(icon)}</button>`;
+}
+
+function renderThemeToggle(className = ""): TemplateResult {
+  const target = state.theme === "dark" ? "亮色" : "暗色";
+  const label = `切换到${target}主题`;
+  return html`<button class=${`theme-toggle ${className}`.trim()} type="button" data-theme-toggle data-action="toggle-theme" aria-label=${label} title=${label}>${renderIcon(state.theme === "dark" ? "sun" : "moon")}</button>`;
 }
 
 function renderLoading(): TemplateResult { return html`<div class="drive-inline-skeleton"><span></span><span></span><span></span></div>`; }

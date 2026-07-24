@@ -19,7 +19,7 @@ const iconSets = {
     "files", "floppy-disk", "folder", "folder-open", "folder-plus", "folder-simple-plus",
     "house", "info", "link", "list", "minus", "package", "plus", "sign-out",
     "paper-plane-tilt", "sliders-horizontal", "star", "stop-circle", "terminal-window", "trash", "tray", "upload-simple",
-    "user-switch", "warning", "windows-logo", "x", "x-circle",
+    "moon", "sun", "user-switch", "warning", "windows-logo", "x", "x-circle",
   ],
   bold: [
     "arrow-right", "broadcast", "check", "clipboard-text", "copy", "download-simple",

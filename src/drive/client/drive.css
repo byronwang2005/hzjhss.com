@@ -1,25 +1,8 @@
 @import "../../../theme.css";
 
 :root {
-  color-scheme: light dark;
-  --drive-accent: var(--jh-color-brand);
-  --drive-accent-hover: var(--jh-color-brand-hover);
-  --drive-accent-soft: var(--jh-color-brand-soft);
-  --drive-surface: var(--jh-color-page);
-  --drive-surface-raised: var(--jh-color-surface);
-  --drive-surface-muted: var(--jh-color-surface-muted);
-  --drive-ink: var(--jh-color-text);
-  --drive-muted: var(--jh-color-text-muted);
-  --drive-line: var(--jh-color-border-soft);
-  --drive-line-strong: var(--jh-color-border);
-  --drive-success: var(--jh-color-success);
-  --drive-success-soft: var(--jh-color-success-soft);
-  --drive-danger: var(--jh-color-danger);
-  --drive-danger-soft: var(--jh-color-danger-soft);
-  --drive-warning: var(--jh-color-warning);
-  --drive-shadow: var(--jh-shadow-raised);
-  --drive-radius: var(--jh-radius-panel);
-  --drive-font: var(--jh-font-sans);
+  --drive-radius: 14px;
+  --drive-font: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --drive-mono: var(--jh-font-mono);
 }
 
@@ -36,8 +19,8 @@ body {
 body.drive-body {
   min-height: 100dvh;
   overflow-x: hidden;
-  color: var(--drive-ink);
-  background: var(--drive-surface);
+  color: var(--jh-color-text);
+  background: var(--jh-color-page);
   font-family: var(--drive-font);
   font-size: 15px;
   line-height: 1.5;
@@ -69,7 +52,7 @@ a {
   z-index: 100;
   padding: 8px 12px;
   color: var(--jh-color-on-brand);
-  background: var(--drive-accent);
+  background: var(--jh-color-brand);
   border-radius: var(--jh-radius-control);
   transform: translateY(-150%);
   transition: transform var(--jh-duration-medium) var(--jh-motion-enter);
@@ -85,10 +68,10 @@ a {
 }
 
 .drive-workspace {
-  --wa-color-brand-fill-loud: var(--drive-accent);
-  --wa-color-brand-fill-loud-hover: var(--drive-accent-hover);
-  --wa-focus-ring-color: color-mix(in srgb, var(--drive-accent) 52%, transparent);
-  color: var(--drive-ink);
+  --wa-color-brand-fill-loud: var(--jh-color-brand);
+  --wa-color-brand-fill-loud-hover: var(--jh-color-brand-hover);
+  --wa-focus-ring-color: color-mix(in srgb, var(--jh-color-brand) 52%, transparent);
+  color: var(--jh-color-text);
 }
 
 .drive-topbar {
@@ -100,8 +83,8 @@ a {
   justify-content: space-between;
   min-height: 64px;
   padding: 0 clamp(16px, 3vw, 40px);
-  background: color-mix(in srgb, var(--drive-surface-raised) 92%, transparent);
-  border-bottom: 1px solid var(--drive-line);
+  background: color-mix(in srgb, var(--jh-color-surface) 92%, transparent);
+  border-bottom: 1px solid var(--jh-color-border-soft);
   backdrop-filter: blur(14px);
 }
 
@@ -146,7 +129,7 @@ a {
 
 .drive-nav {
   gap: 16px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 14px;
 }
 
@@ -169,7 +152,7 @@ a {
 .drive-link-button:hover,
 .drive-title-button:hover,
 .drive-breadcrumbs button:hover {
-  color: var(--drive-accent-hover);
+  color: var(--jh-color-brand-hover);
 }
 
 .drive-main {
@@ -192,23 +175,23 @@ a {
   max-width: 100%;
   min-height: 34px;
   padding: 6px 10px;
-  color: var(--drive-muted);
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  color: var(--jh-color-text-muted);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
   font-size: 13px;
 }
 
 .drive-status-line.is-success {
-  color: var(--drive-success);
-  background: var(--drive-success-soft);
-  border-color: color-mix(in srgb, var(--drive-success) 35%, var(--drive-line));
+  color: var(--jh-color-success);
+  background: var(--jh-color-success-soft);
+  border-color: color-mix(in srgb, var(--jh-color-success) 35%, var(--jh-color-border-soft));
 }
 
 .drive-status-line.is-danger {
-  color: var(--drive-danger);
-  background: var(--drive-danger-soft);
-  border-color: color-mix(in srgb, var(--drive-danger) 35%, var(--drive-line));
+  color: var(--jh-color-danger);
+  background: var(--jh-color-danger-soft);
+  border-color: color-mix(in srgb, var(--jh-color-danger) 35%, var(--jh-color-border-soft));
 }
 
 .drive-spin {
@@ -235,9 +218,9 @@ a {
   gap: 7px;
   min-height: 38px;
   padding: 8px 13px;
-  color: var(--drive-ink);
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line-strong);
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-strong);
   border-radius: var(--jh-radius-control);
   font-weight: 650;
   line-height: 1;
@@ -251,7 +234,7 @@ a {
 }
 
 .drive-control:hover:not(:disabled) {
-  border-color: var(--drive-accent);
+  border-color: var(--jh-color-brand);
 }
 
 .drive-control:active:not(:disabled),
@@ -262,19 +245,19 @@ a {
 
 .drive-control-primary {
   color: var(--jh-color-on-brand);
-  background: var(--drive-accent);
-  border-color: var(--drive-accent);
+  background: var(--jh-color-brand);
+  border-color: var(--jh-color-brand);
 }
 
 .drive-control-primary:hover:not(:disabled) {
   color: var(--jh-color-on-brand);
-  background: var(--drive-accent-hover);
-  border-color: var(--drive-accent-hover);
+  background: var(--jh-color-brand-hover);
+  border-color: var(--jh-color-brand-hover);
 }
 
 .drive-control-danger {
-  color: var(--drive-danger);
-  border-color: color-mix(in srgb, var(--drive-danger) 46%, var(--drive-line));
+  color: var(--jh-color-danger);
+  border-color: color-mix(in srgb, var(--jh-color-danger) 46%, var(--jh-color-border-soft));
 }
 
 .drive-control:disabled,
@@ -312,10 +295,10 @@ a {
 .drive-create-card,
 .drive-settings-form {
   padding: clamp(20px, 3vw, 30px);
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
-  box-shadow: var(--drive-shadow);
+  box-shadow: var(--jh-shadow-floating);
 }
 
 .drive-field {
@@ -329,7 +312,7 @@ a {
 }
 
 .drive-field small {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
 }
 
@@ -337,9 +320,9 @@ a {
 .drive-field select,
 .drive-field textarea {
   width: 100%;
-  color: var(--drive-ink);
-  background: var(--drive-surface);
-  border: 1px solid var(--drive-line-strong);
+  color: var(--jh-color-text);
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-strong);
   border-radius: var(--jh-radius-control);
   outline: 0;
 }
@@ -364,15 +347,15 @@ a {
 .drive-field input:focus,
 .drive-field select:focus,
 .drive-field textarea:focus {
-  border-color: var(--drive-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--drive-accent) 18%, transparent);
+  border-color: var(--jh-color-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jh-color-brand) 18%, transparent);
 }
 
 .drive-owner-settings {
   display: grid;
   gap: 12px;
   padding-top: 20px;
-  border-top: 1px solid var(--drive-line);
+  border-top: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-owner-settings h3,
@@ -381,7 +364,7 @@ a {
 }
 
 .drive-owner-settings p {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 13px;
 }
 
@@ -396,8 +379,8 @@ a {
   align-items: center;
   gap: 5px;
   padding: 4px 5px 4px 10px;
-  background: var(--drive-surface-muted);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface-muted);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: 999px;
   font-size: 13px;
 }
@@ -429,8 +412,8 @@ a {
 .drive-panel,
 .drive-tab-panel {
   min-width: 0;
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
 }
 
@@ -445,7 +428,7 @@ a {
   gap: 20px;
   min-height: 52px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--drive-line);
+  border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-panel-head h2,
@@ -458,12 +441,12 @@ a {
 
 .drive-panel-head p {
   margin: 4px 0 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
 }
 
 .drive-panel-head > span {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
 }
 
@@ -473,10 +456,10 @@ a {
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--drive-line);
+  border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
-.drive-featured-badge { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; color: var(--drive-warning); font-size: 12px; font-weight: 750; }
+.drive-featured-badge { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; color: var(--jh-color-warning); font-size: 12px; font-weight: 750; }
 
 .drive-output-item:last-child .drive-output-card,
 .drive-topic-card:last-child {
@@ -496,8 +479,8 @@ a {
   place-items: center;
   width: 36px;
   height: 36px;
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
   border-radius: var(--jh-radius-control);
   font-size: 19px;
 }
@@ -513,7 +496,7 @@ a {
 .drive-topic-title-row p,
 .drive-agent-card p,
 .drive-empty p {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
 }
 
 .drive-output-main p,
@@ -538,7 +521,7 @@ a {
 .drive-topic-card-meta {
   display: grid;
   gap: 3px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
   text-align: right;
 }
@@ -557,7 +540,7 @@ a {
   gap: 5px;
   min-height: 30px;
   padding: 5px 8px;
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
   border-radius: var(--jh-radius-control);
   font-size: 12px;
   font-weight: 700;
@@ -568,15 +551,15 @@ a {
 }
 
 .drive-table-action:hover {
-  background: var(--drive-accent-soft);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-table-action.is-danger {
-  color: var(--drive-danger);
+  color: var(--jh-color-danger);
 }
 
 .drive-table-action.is-danger:hover {
-  background: var(--drive-danger-soft);
+  background: var(--jh-color-danger-soft);
 }
 
 .drive-topic-headline {
@@ -588,7 +571,7 @@ a {
   align-items: center;
   gap: 6px;
   padding: 5px 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-weight: 650;
 }
 
@@ -610,7 +593,7 @@ a {
   justify-items: end;
   flex: 0 0 auto;
   gap: 3px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-family: var(--drive-mono);
   font-size: 11px;
 }
@@ -619,7 +602,7 @@ a {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   margin-bottom: 14px;
-  border: 1px solid var(--drive-line);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
   overflow: hidden;
 }
@@ -631,8 +614,8 @@ a {
   gap: 7px;
   min-height: 42px;
   padding: 8px 12px;
-  color: var(--drive-muted);
-  border-right: 1px solid var(--drive-line);
+  color: var(--jh-color-text-muted);
+  border-right: 1px solid var(--jh-color-border-soft);
   font-weight: 700;
   transition:
     color var(--jh-duration-fast) var(--jh-motion-control),
@@ -646,8 +629,8 @@ a {
 
 .drive-tab:hover,
 .drive-tab.is-active {
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-tab-panel {
@@ -682,7 +665,7 @@ a {
   align-items: center;
   gap: 5px;
   margin-top: 5px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
 }
 
@@ -706,8 +689,8 @@ a {
   align-content: start;
   gap: 12px;
   padding: 18px;
-  background: var(--drive-surface);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
 }
 
@@ -738,10 +721,10 @@ a {
   gap: 12px;
   min-height: 90px;
   padding: 16px;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   text-align: left;
-  background: var(--drive-surface);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
   transition:
     color var(--jh-duration-fast) var(--jh-motion-control),
@@ -751,14 +734,14 @@ a {
 }
 
 .drive-category-card:hover {
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
-  border-color: var(--drive-accent);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
+  border-color: var(--jh-color-brand);
   transform: translateY(-1px);
 }
 
 .drive-category-card > .ui-icon:first-child {
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
 }
 
 .drive-category-card span {
@@ -767,7 +750,7 @@ a {
 }
 
 .drive-category-card small {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
 }
 
 .drive-qa-panel {
@@ -781,8 +764,8 @@ a {
   min-width: 0;
   min-height: 560px;
   overflow: hidden;
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
 }
 
@@ -793,7 +776,7 @@ a {
 
 .drive-ai-qa.is-global {
   min-height: clamp(560px, 68dvh, 720px);
-  box-shadow: var(--drive-shadow);
+  box-shadow: var(--jh-shadow-floating);
 }
 
 .drive-ai-qa-head {
@@ -803,7 +786,7 @@ a {
   gap: 20px;
   min-height: 78px;
   padding: 17px 18px;
-  border-bottom: 1px solid var(--drive-line);
+  border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-ai-qa-heading {
@@ -819,8 +802,8 @@ a {
   flex: 0 0 auto;
   width: 38px;
   height: 38px;
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
   border-radius: var(--jh-radius-control);
 }
 
@@ -839,9 +822,9 @@ a {
   align-items: center;
   gap: 8px;
   padding: 10px 18px;
-  color: var(--drive-warning);
+  color: var(--jh-color-warning);
   background: var(--jh-color-warning-soft);
-  border-bottom: 1px solid color-mix(in srgb, var(--drive-warning) 24%, var(--drive-line));
+  border-bottom: 1px solid color-mix(in srgb, var(--jh-color-warning) 24%, var(--jh-color-border-soft));
   font-size: 13px;
 }
 
@@ -859,7 +842,7 @@ a {
 .drive-ai-qa-message {
   width: min(100%, 900px);
   padding: 18px 2px;
-  border-bottom: 1px solid var(--drive-line);
+  border-bottom: 1px solid var(--jh-color-border-soft);
   animation: drive-ai-message-enter var(--jh-duration-medium) var(--jh-motion-enter);
 }
 
@@ -868,13 +851,13 @@ a {
   width: min(82%, 720px);
   margin: 14px 0;
   padding: 13px 15px;
-  background: var(--drive-accent-soft);
-  border: 1px solid color-mix(in srgb, var(--drive-accent) 25%, var(--drive-line));
+  background: var(--jh-color-brand-soft);
+  border: 1px solid color-mix(in srgb, var(--jh-color-brand) 25%, var(--jh-color-border-soft));
   border-radius: var(--drive-radius);
 }
 
 .drive-ai-qa-message.is-error {
-  border-bottom-color: var(--drive-danger);
+  border-bottom-color: var(--jh-color-danger);
 }
 
 .drive-ai-qa-message header {
@@ -882,13 +865,13 @@ a {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
   font-weight: 750;
 }
 
 .drive-ai-qa-message header small {
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
   font-size: 11px;
 }
 
@@ -912,7 +895,7 @@ a {
 
 .drive-ai-qa-empty p {
   margin: 8px 0 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
 }
 
 .drive-ai-qa-suggestions {
@@ -920,7 +903,7 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
   margin-top: 28px;
-  border-top: 1px solid var(--drive-line);
+  border-top: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-ai-qa-suggestions button {
@@ -929,10 +912,10 @@ a {
   gap: 9px;
   min-height: 54px;
   padding: 12px 14px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   background: transparent;
   border: 0;
-  border-right: 1px solid var(--drive-line);
+  border-right: 1px solid var(--jh-color-border-soft);
   cursor: pointer;
   font-weight: 700;
   text-align: left;
@@ -942,8 +925,8 @@ a {
 .drive-ai-qa-suggestions button:last-child { border-right: 0; }
 
 .drive-ai-qa-suggestions button:hover {
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-ai-qa-suggestions button:active { transform: scale(0.98); }
@@ -952,8 +935,8 @@ a {
   display: grid;
   justify-items: center;
   padding: 18px clamp(14px, 3vw, 28px) 0;
-  background: color-mix(in srgb, var(--drive-surface-raised) 64%, transparent);
-  border-top: 1px solid var(--drive-line);
+  background: color-mix(in srgb, var(--jh-color-surface) 64%, transparent);
+  border-top: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-ai-qa-composer {
@@ -963,49 +946,49 @@ a {
   width: min(100%, 920px);
   min-height: 70px;
   padding: 8px 9px 8px 20px;
-  background: color-mix(in srgb, var(--drive-surface-raised) 68%, transparent);
-  border: 1px solid color-mix(in srgb, var(--drive-accent) 74%, white 26%);
+  background: color-mix(in srgb, var(--jh-color-surface) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--jh-color-brand) 74%, white 26%);
   border-radius: 999px;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 76%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--drive-accent) 18%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--drive-accent) 22%, transparent),
-    0 0 18px color-mix(in srgb, var(--drive-accent) 42%, transparent),
-    0 10px 30px color-mix(in srgb, var(--drive-accent) 24%, transparent);
+    inset 0 -1px 0 color-mix(in srgb, var(--jh-color-brand) 18%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--jh-color-brand) 22%, transparent),
+    0 0 18px color-mix(in srgb, var(--jh-color-brand) 42%, transparent),
+    0 10px 30px color-mix(in srgb, var(--jh-color-brand) 24%, transparent);
   backdrop-filter: blur(18px) saturate(132%);
   -webkit-backdrop-filter: blur(18px) saturate(132%);
   transition: border-color var(--jh-duration-medium) var(--jh-motion-control), box-shadow var(--jh-duration-medium) var(--jh-motion-control), background-color var(--jh-duration-medium) var(--jh-motion-control), transform var(--jh-duration-medium) var(--jh-motion-control);
 }
 
 .drive-ai-qa-composer:hover {
-  border-color: color-mix(in srgb, var(--drive-accent) 88%, white 12%);
+  border-color: color-mix(in srgb, var(--jh-color-brand) 88%, white 12%);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 82%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--drive-accent) 22%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--drive-accent) 30%, transparent),
-    0 0 24px color-mix(in srgb, var(--drive-accent) 50%, transparent),
-    0 12px 34px color-mix(in srgb, var(--drive-accent) 28%, transparent);
+    inset 0 -1px 0 color-mix(in srgb, var(--jh-color-brand) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--jh-color-brand) 30%, transparent),
+    0 0 24px color-mix(in srgb, var(--jh-color-brand) 50%, transparent),
+    0 12px 34px color-mix(in srgb, var(--jh-color-brand) 28%, transparent);
 }
 
 .drive-ai-qa-composer:focus-within {
-  background: color-mix(in srgb, var(--drive-surface-raised) 78%, transparent);
-  border-color: color-mix(in srgb, var(--drive-accent) 90%, white 10%);
+  background: color-mix(in srgb, var(--jh-color-surface) 78%, transparent);
+  border-color: color-mix(in srgb, var(--jh-color-brand) 90%, white 10%);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 88%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--drive-accent) 28%, transparent),
-    0 0 0 2px color-mix(in srgb, var(--drive-accent) 34%, transparent),
-    0 0 30px color-mix(in srgb, var(--drive-accent) 58%, transparent),
-    0 14px 38px color-mix(in srgb, var(--drive-accent) 32%, transparent);
+    inset 0 -1px 0 color-mix(in srgb, var(--jh-color-brand) 28%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--jh-color-brand) 34%, transparent),
+    0 0 30px color-mix(in srgb, var(--jh-color-brand) 58%, transparent),
+    0 14px 38px color-mix(in srgb, var(--jh-color-brand) 32%, transparent);
   transform: translateY(-1px);
 }
 
 .drive-ai-qa-form.is-danger .drive-ai-qa-composer {
-  border-color: color-mix(in srgb, var(--drive-danger) 82%, white 18%);
+  border-color: color-mix(in srgb, var(--jh-color-danger) 82%, white 18%);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 74%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--drive-danger) 24%, transparent),
-    0 0 22px color-mix(in srgb, var(--drive-danger) 46%, transparent),
-    0 10px 30px color-mix(in srgb, var(--drive-danger) 22%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--jh-color-danger) 24%, transparent),
+    0 0 22px color-mix(in srgb, var(--jh-color-danger) 46%, transparent),
+    0 10px 30px color-mix(in srgb, var(--jh-color-danger) 22%, transparent);
 }
 
 .drive-ai-qa-composer textarea {
@@ -1016,7 +999,7 @@ a {
   margin: 0;
   padding: 13px 2px 11px;
   overflow-y: auto;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   line-height: 1.5;
   background: transparent;
   border: 0;
@@ -1032,7 +1015,7 @@ a {
 }
 
 .drive-ai-qa-composer textarea::placeholder {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   opacity: 1;
 }
 
@@ -1044,10 +1027,10 @@ a {
   height: 52px;
   padding: 0;
   color: var(--jh-color-on-brand);
-  background: var(--drive-accent);
+  background: var(--jh-color-brand);
   border: 1px solid color-mix(in srgb, white 24%, transparent);
   border-radius: 50%;
-  box-shadow: 0 5px 16px color-mix(in srgb, var(--drive-accent) 38%, transparent);
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--jh-color-brand) 38%, transparent);
   cursor: pointer;
   transition: background-color var(--jh-duration-fast) var(--jh-motion-control), box-shadow var(--jh-duration-fast) var(--jh-motion-control), transform var(--jh-duration-fast) var(--jh-motion-control), opacity var(--jh-duration-fast) var(--jh-motion-control);
 }
@@ -1057,8 +1040,8 @@ a {
 }
 
 .drive-ai-qa-action:hover:not(:disabled) {
-  background: var(--drive-accent-hover);
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--drive-accent) 50%, transparent);
+  background: var(--jh-color-brand-hover);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--jh-color-brand) 50%, transparent);
   transform: translateY(-1px);
 }
 
@@ -1073,10 +1056,10 @@ a {
 }
 
 .drive-ai-qa-action.is-stop {
-  color: var(--drive-danger);
-  background: var(--drive-danger-soft);
-  border-color: color-mix(in srgb, var(--drive-danger) 28%, transparent);
-  box-shadow: 0 5px 18px color-mix(in srgb, var(--drive-danger) 34%, transparent);
+  color: var(--jh-color-danger);
+  background: var(--jh-color-danger-soft);
+  border-color: color-mix(in srgb, var(--jh-color-danger) 28%, transparent);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--jh-color-danger) 34%, transparent);
 }
 
 .drive-ai-qa-status {
@@ -1092,7 +1075,7 @@ a {
   clip-path: inset(50%);
 }
 
-.drive-ai-qa-error { color: var(--drive-danger); }
+.drive-ai-qa-error { color: var(--jh-color-danger); }
 
 .drive-ai-qa-error {
   display: flex;
@@ -1108,7 +1091,7 @@ a {
   align-items: center;
   gap: 5px;
   padding: 5px 8px;
-  color: var(--drive-danger);
+  color: var(--jh-color-danger);
   background: transparent;
   border: 0;
   border-radius: var(--jh-radius-control);
@@ -1117,7 +1100,7 @@ a {
 }
 
 .drive-ai-qa-markdown {
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   line-height: 1.75;
 }
 
@@ -1127,14 +1110,14 @@ a {
 .drive-ai-qa-markdown pre {
   overflow: auto;
   padding: 14px;
-  background: var(--drive-surface-muted);
+  background: var(--jh-color-surface-muted);
   border-radius: var(--jh-radius-control);
 }
 
 .drive-ai-qa-markdown code { font-family: var(--drive-mono); }
 
 .drive-ai-qa-markdown a {
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1151,7 +1134,7 @@ a {
   width: 94%;
   height: 14px;
   overflow: hidden;
-  background: var(--drive-surface-muted);
+  background: var(--jh-color-surface-muted);
   border-radius: var(--jh-radius-control);
 }
 
@@ -1162,7 +1145,7 @@ a {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--drive-surface-raised) 84%, transparent), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--jh-color-surface) 84%, transparent), transparent);
   transform: translateX(-110%);
   animation: drive-sheen 1.3s var(--jh-motion-enter) infinite;
 }
@@ -1177,42 +1160,14 @@ a {
   .drive-ai-qa-message { animation: none; }
 }
 
-@media (prefers-color-scheme: dark) {
-  .drive-ai-qa .drive-control-primary {
-    color: var(--jh-color-page);
-  }
-}
-
 /* 2026 knowledge workspace redesign */
-:root {
-  color-scheme: dark;
-  --drive-accent: #c9a76a;
-  --drive-accent-hover: #dfbe7c;
-  --drive-accent-soft: #282219;
-  --drive-surface: #0b0d0f;
-  --drive-surface-raised: #121519;
-  --drive-surface-muted: #191d22;
-  --drive-ink: #f3f0e9;
-  --drive-muted: #9ba1aa;
-  --drive-line: #252a30;
-  --drive-line-strong: #343a42;
-  --drive-success: #7fba93;
-  --drive-success-soft: #14241b;
-  --drive-danger: #dc8b83;
-  --drive-danger-soft: #2c1818;
-  --drive-warning: #d8b76f;
-  --drive-shadow: 0 18px 50px rgb(0 0 0 / 24%);
-  --drive-radius: 14px;
-  --drive-font: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-
 html {
-  background: var(--drive-surface);
+  background: var(--jh-color-page);
 }
 
 body.drive-body {
-  color: var(--drive-ink);
-  background: var(--drive-surface);
+  color: var(--jh-color-text);
+  background: var(--jh-color-page);
   font-size: 15px;
   line-height: 1.6;
 }
@@ -1223,7 +1178,7 @@ body.drive-body {
 
 .drive-eyebrow {
   display: block;
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
   font-size: 11px;
   font-weight: 760;
   letter-spacing: 0.16em;
@@ -1235,7 +1190,7 @@ body.drive-body {
   display: inline-flex;
   align-items: center;
   gap: 13px;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
 }
 
 .drive-brand-lockup img {
@@ -1251,6 +1206,7 @@ body.drive-body {
 }
 
 .drive-login-panel {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr);
   gap: clamp(56px, 9vw, 144px);
@@ -1261,13 +1217,19 @@ body.drive-body {
   padding: 64px clamp(28px, 6vw, 88px);
 }
 
+.drive-login-theme-toggle {
+  position: absolute;
+  top: 24px;
+  right: clamp(20px, 4vw, 52px);
+}
+
 .drive-login-story {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   min-height: min(720px, calc(100dvh - 128px));
   padding-right: clamp(24px, 5vw, 76px);
-  border-right: 1px solid var(--drive-line);
+  border-right: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-login-copy {
@@ -1277,7 +1239,7 @@ body.drive-body {
 
 .drive-login-copy h1 {
   margin: 18px 0 24px;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   font-size: clamp(58px, 7.2vw, 102px);
   font-weight: 670;
   letter-spacing: -0.065em;
@@ -1287,7 +1249,7 @@ body.drive-body {
 .drive-login-copy p {
   max-width: 33ch;
   margin: 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: clamp(17px, 1.5vw, 21px);
   line-height: 1.65;
 }
@@ -1297,8 +1259,8 @@ body.drive-body {
   flex-wrap: wrap;
   gap: 10px 24px;
   padding-top: 22px;
-  color: var(--drive-muted);
-  border-top: 1px solid var(--drive-line);
+  color: var(--jh-color-text-muted);
+  border-top: 1px solid var(--jh-color-border-soft);
   font-size: 12px;
 }
 
@@ -1309,7 +1271,7 @@ body.drive-body {
 }
 
 .drive-login-principles .ui-icon {
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
 }
 
 .drive-login-card {
@@ -1317,10 +1279,10 @@ body.drive-body {
   max-width: 480px;
   justify-self: end;
   padding: clamp(30px, 4vw, 48px);
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
-  box-shadow: var(--drive-shadow);
+  box-shadow: var(--jh-shadow-floating);
 }
 
 .drive-login-card-head {
@@ -1337,7 +1299,7 @@ body.drive-body {
 .drive-login-card-head p,
 .drive-login-help {
   margin: 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 13px;
 }
 
@@ -1364,7 +1326,7 @@ body.drive-body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   border-bottom: 0;
   font-size: 12px;
   font-weight: 620;
@@ -1372,7 +1334,7 @@ body.drive-body {
 
 .drive-docs-link:hover,
 .drive-appbar-docs:hover {
-  color: var(--drive-accent-hover);
+  color: var(--jh-color-brand-hover);
 }
 
 .drive-field {
@@ -1380,7 +1342,7 @@ body.drive-body {
 }
 
 .drive-field > span {
-  color: #d8d4cc;
+  color: var(--jh-color-text-secondary);
   font-size: 12px;
   font-weight: 650;
 }
@@ -1388,9 +1350,9 @@ body.drive-body {
 .drive-field input,
 .drive-field select,
 .drive-field textarea {
-  color: var(--drive-ink);
-  background: #0e1114;
-  border-color: var(--drive-line-strong);
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface-subtle);
+  border-color: var(--jh-color-border-strong);
   border-radius: 10px;
 }
 
@@ -1401,14 +1363,14 @@ body.drive-body {
 
 .drive-field input::placeholder,
 .drive-field textarea::placeholder {
-  color: #707780;
+  color: var(--jh-color-text-muted);
 }
 
 .drive-field input:focus,
 .drive-field select:focus,
 .drive-field textarea:focus {
-  border-color: var(--drive-accent);
-  box-shadow: 0 0 0 3px rgb(201 167 106 / 14%);
+  border-color: var(--jh-color-brand);
+  box-shadow: var(--jh-focus-ring);
 }
 
 .drive-login-submit {
@@ -1422,35 +1384,35 @@ body.drive-body {
 .drive-control {
   min-height: 40px;
   padding: 9px 14px;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   background: transparent;
-  border-color: var(--drive-line-strong);
+  border-color: var(--jh-color-border-strong);
   border-radius: 9px;
   font-size: 13px;
   font-weight: 650;
 }
 
 .drive-control:hover:not(:disabled) {
-  color: var(--drive-accent-hover);
-  background: var(--drive-accent-soft);
-  border-color: #6e5b38;
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
+  border-color: color-mix(in srgb, var(--jh-color-brand) 62%, var(--jh-color-border));
 }
 
 .drive-control-primary {
-  color: #17130d;
-  background: var(--drive-accent);
-  border-color: var(--drive-accent);
+  color: var(--jh-color-on-brand);
+  background: var(--jh-color-brand);
+  border-color: var(--jh-color-brand);
 }
 
 .drive-control-primary:hover:not(:disabled) {
-  color: #17130d;
-  background: var(--drive-accent-hover);
-  border-color: var(--drive-accent-hover);
+  color: var(--jh-color-on-brand);
+  background: var(--jh-color-brand-hover);
+  border-color: var(--jh-color-brand-hover);
 }
 
 .drive-dashboard {
   min-height: 100dvh;
-  background: var(--drive-surface);
+  background: var(--jh-color-page);
 }
 
 .drive-appbar {
@@ -1462,8 +1424,8 @@ body.drive-body {
   justify-content: space-between;
   min-height: 76px;
   padding: 0 clamp(22px, 4vw, 58px);
-  background: rgb(11 13 15 / 92%);
-  border-bottom: 1px solid var(--drive-line);
+  background: color-mix(in srgb, var(--jh-color-surface) 92%, transparent);
+  border-bottom: 1px solid var(--jh-color-border-soft);
   backdrop-filter: blur(18px);
 }
 
@@ -1487,7 +1449,7 @@ body.drive-body {
 }
 
 .drive-brand-button small {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 10px;
   font-weight: 560;
   letter-spacing: 0.08em;
@@ -1507,7 +1469,7 @@ body.drive-body {
 }
 
 .drive-appbar-docs:hover {
-  background: var(--drive-accent-soft);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-user-badge {
@@ -1515,14 +1477,14 @@ body.drive-body {
   align-items: center;
   gap: 8px;
   margin-right: 8px;
-  color: #d8d4cc;
+  color: var(--jh-color-text-secondary);
   font-size: 12px;
 }
 
 .drive-user-badge small {
   padding: 2px 7px;
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
   border-radius: 999px;
   font-size: 10px;
 }
@@ -1530,13 +1492,13 @@ body.drive-body {
 .drive-icon-button {
   width: 40px;
   height: 40px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   border-radius: 9px;
 }
 
 .drive-icon-button:hover:not(:disabled) {
-  color: var(--drive-accent-hover);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-dashboard-main {
@@ -1562,7 +1524,7 @@ body.drive-body {
 .drive-page-head p {
   max-width: 56ch;
   margin: 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 14px;
 }
 
@@ -1572,7 +1534,7 @@ body.drive-body {
   gap: 7px;
   margin-bottom: 12px;
   padding: 0;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -1580,7 +1542,7 @@ body.drive-body {
 }
 
 .drive-back-link:hover {
-  color: var(--drive-accent-hover);
+  color: var(--jh-color-brand-hover);
 }
 
 .drive-two-column {
@@ -1590,8 +1552,8 @@ body.drive-body {
 
 .drive-panel,
 .drive-tab-panel {
-  background: var(--drive-surface-raised);
-  border-color: var(--drive-line);
+  background: var(--jh-color-surface);
+  border-color: var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
 }
 
@@ -1614,7 +1576,7 @@ body.drive-body {
 }
 
 .drive-panel-head > span {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 11px;
 }
 
@@ -1628,10 +1590,10 @@ body.drive-body {
   width: 100%;
   min-height: 76px;
   padding: 13px 18px;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--drive-line);
+  border-bottom: 1px solid var(--jh-color-border-soft);
   border-radius: 0;
   cursor: pointer;
   text-align: left;
@@ -1642,8 +1604,8 @@ body.drive-body {
 }
 
 .drive-topic-card:hover {
-  color: var(--drive-accent-hover);
-  background: #17150f;
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
   transform: none;
 }
 
@@ -1652,8 +1614,8 @@ body.drive-body {
   place-items: center;
   width: 38px;
   height: 38px;
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
   border-radius: 9px;
 }
 
@@ -1675,23 +1637,23 @@ body.drive-body {
 .drive-topic-card small {
   display: inline-flex;
   align-items: center;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 10px;
 }
 
 .drive-topic-card small.is-ready {
-  color: var(--drive-success);
+  color: var(--jh-color-success);
 }
 
 .drive-topic-card > .ui-icon {
-  color: #60666e;
+  color: var(--jh-color-text-muted);
   font-size: 15px;
 }
 
 .drive-ai-qa {
   min-height: 680px;
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
   box-shadow: none;
 }
@@ -1712,8 +1674,8 @@ body.drive-body {
 .drive-ai-qa-symbol {
   width: 38px;
   height: 38px;
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
   border-radius: 9px;
 }
 
@@ -1752,55 +1714,55 @@ body.drive-body {
 .drive-ai-qa-suggestions {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 38px;
-  border-top-color: var(--drive-line);
+  border-top-color: var(--jh-color-border-soft);
 }
 
 .drive-ai-qa-suggestions button {
   min-height: 62px;
   padding: 14px 13px;
-  color: #aeb3ba;
-  border-right-color: var(--drive-line);
+  color: var(--jh-color-text-muted);
+  border-right-color: var(--jh-color-border-soft);
   font-size: 12px;
   font-weight: 610;
 }
 
 .drive-ai-qa-suggestions button:hover {
-  color: var(--drive-accent-hover);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-ai-qa-form {
   padding: 16px 20px 20px;
-  background: var(--drive-surface-raised);
-  border-top-color: var(--drive-line);
+  background: var(--jh-color-surface);
+  border-top-color: var(--jh-color-border-soft);
 }
 
 .drive-ai-qa-composer {
   width: 100%;
   min-height: 60px;
   padding: 4px 8px 4px 17px;
-  background: #0e1114;
-  border: 1px solid var(--drive-line-strong);
+  background: var(--jh-color-surface-subtle);
+  border: 1px solid var(--jh-color-border-strong);
   border-radius: 14px;
   box-shadow: none;
   backdrop-filter: none;
 }
 
 .drive-ai-qa-composer:hover {
-  border-color: #66583e;
+  border-color: color-mix(in srgb, var(--jh-color-brand) 45%, var(--jh-color-border));
   box-shadow: none;
 }
 
 .drive-ai-qa-composer:focus-within {
-  background: #0e1114;
-  border-color: var(--drive-accent);
-  box-shadow: 0 0 0 3px rgb(201 167 106 / 12%);
+  background: var(--jh-color-surface-subtle);
+  border-color: var(--jh-color-brand);
+  box-shadow: var(--jh-focus-ring);
   transform: none;
 }
 
 .drive-ai-qa-form.is-danger .drive-ai-qa-composer {
-  border-color: var(--drive-danger);
-  box-shadow: 0 0 0 3px rgb(220 139 131 / 12%);
+  border-color: var(--jh-color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jh-color-danger) 18%, transparent);
 }
 
 .drive-ai-qa-composer textarea {
@@ -1812,15 +1774,15 @@ body.drive-body {
 .drive-ai-qa-action {
   width: 52px;
   height: 52px;
-  color: #17130d;
-  background: var(--drive-accent);
+  color: var(--jh-color-on-brand);
+  background: var(--jh-color-brand);
   border: 0;
   border-radius: 10px;
   box-shadow: none;
 }
 
 .drive-ai-qa-action:hover:not(:disabled) {
-  background: var(--drive-accent-hover);
+  background: var(--jh-color-brand-hover);
   box-shadow: none;
 }
 
@@ -1829,8 +1791,8 @@ body.drive-body {
 }
 
 .drive-ai-qa-message.is-user {
-  background: var(--drive-accent-soft);
-  border-color: #4a3e28;
+  background: var(--jh-color-brand-soft);
+  border-color: color-mix(in srgb, var(--jh-color-brand) 35%, var(--jh-color-border));
   border-radius: 11px;
 }
 
@@ -1838,8 +1800,8 @@ body.drive-body {
   grid-template-columns: 48px minmax(0, 1fr);
   width: min(680px, 100%);
   padding: 30px;
-  background: var(--drive-surface-raised);
-  border-color: var(--drive-line);
+  background: var(--jh-color-surface);
+  border-color: var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
   box-shadow: none;
 }
@@ -1860,7 +1822,7 @@ body.drive-body {
 
 .drive-create-card p {
   margin-top: 6px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
 }
 
@@ -1869,8 +1831,8 @@ body.drive-body {
   place-items: center;
   width: 48px;
   height: 48px;
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
   border-radius: 11px;
   font-size: 21px;
 }
@@ -1880,8 +1842,8 @@ body.drive-body {
   width: auto;
   margin: 0 0 16px;
   padding: 4px;
-  background: var(--drive-surface-muted);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface-muted);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: 10px;
 }
 
@@ -1893,7 +1855,7 @@ body.drive-body {
   min-width: 104px;
   min-height: 36px;
   padding: 7px 12px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -1903,14 +1865,14 @@ body.drive-body {
 }
 
 .drive-tabs button.is-active {
-  color: var(--drive-ink);
-  background: #262b31;
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface-muted);
 }
 
 .drive-material-toolbar {
   min-height: 88px;
   padding: 18px 20px;
-  border-bottom-color: var(--drive-line);
+  border-bottom-color: var(--jh-color-border-soft);
 }
 
 .drive-file-table {
@@ -1920,11 +1882,11 @@ body.drive-body {
 
 .drive-file-row {
   min-height: 58px;
-  border-bottom-color: var(--drive-line);
+  border-bottom-color: var(--jh-color-border-soft);
 }
 
 .drive-file-row-head {
-  background: #0f1215;
+  background: var(--jh-color-surface-subtle);
 }
 
 .drive-file-row > span {
@@ -1937,35 +1899,35 @@ body.drive-body {
 }
 
 .drive-table-action {
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   border-radius: 7px;
   font-size: 11px;
 }
 
 .drive-table-action:hover {
-  color: var(--drive-accent-hover);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-upload-progress {
   margin: 16px 20px;
-  background: #0f1215;
-  border-color: var(--drive-line);
+  background: var(--jh-color-surface-subtle);
+  border-color: var(--jh-color-border-soft);
   border-radius: 10px;
 }
 
 .drive-empty {
   min-height: 240px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
 }
 
 .drive-empty h3 {
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   font-size: 15px;
 }
 
 .drive-inline-skeleton {
-  border: 1px solid var(--drive-line);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--drive-radius);
 }
 
@@ -1976,7 +1938,7 @@ wa-callout {
 
 .drive-pdf-preview,
 .drive-preview-frame {
-  border-color: var(--drive-line-strong);
+  border-color: var(--jh-color-border-strong);
   border-radius: 10px;
 }
 
@@ -2005,6 +1967,11 @@ wa-callout {
 }
 
 @media (max-width: 760px) {
+  .drive-login-theme-toggle {
+    top: 14px;
+    right: 14px;
+  }
+
   .drive-login-panel {
     grid-template-columns: 1fr;
     align-content: center;
@@ -2016,7 +1983,7 @@ wa-callout {
     min-height: 0;
     padding: 0 0 20px;
     border-right: 0;
-    border-bottom: 1px solid var(--drive-line);
+    border-bottom: 1px solid var(--jh-color-border-soft);
   }
 
   .drive-login-copy {
@@ -2116,7 +2083,7 @@ wa-callout {
   .drive-ai-qa-suggestions button {
     min-height: 50px;
     border-right: 0;
-    border-bottom: 1px solid var(--drive-line);
+    border-bottom: 1px solid var(--jh-color-border-soft);
   }
 
   .drive-ai-qa-form {
@@ -2149,8 +2116,8 @@ wa-callout {
   }
 
   .drive-file-row {
-    background: #0f1215;
-    border-color: var(--drive-line);
+    background: var(--jh-color-surface-subtle);
+    border-color: var(--jh-color-border-soft);
     border-radius: 10px;
   }
 }
@@ -2194,7 +2161,7 @@ wa-callout {
 .drive-file-table {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--drive-line);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
 }
 
@@ -2203,7 +2170,7 @@ wa-callout {
   grid-template-columns: minmax(220px, 2.2fr) minmax(72px, 0.65fr) minmax(92px, 0.8fr) minmax(112px, 0.9fr) minmax(210px, auto);
   align-items: center;
   min-height: 50px;
-  border-bottom: 1px solid var(--drive-line);
+  border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-file-row:last-child {
@@ -2214,7 +2181,7 @@ wa-callout {
   min-width: 0;
   padding: 9px 11px;
   overflow: hidden;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2222,11 +2189,11 @@ wa-callout {
 
 .drive-file-row-head {
   min-height: 36px;
-  background: var(--drive-surface-muted);
+  background: var(--jh-color-surface-muted);
 }
 
 .drive-file-row-head > span {
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   font-weight: 750;
 }
 
@@ -2234,7 +2201,7 @@ wa-callout {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--drive-ink) !important;
+  color: var(--jh-color-text) !important;
   font-weight: 650;
 }
 
@@ -2246,15 +2213,15 @@ wa-callout {
 
 .drive-file-name .ui-icon {
   flex: 0 0 auto;
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
   font-size: 18px;
 }
 
 .drive-inline-preview {
   padding: 12px;
-  background: var(--drive-surface-muted);
-  border-top: 1px solid var(--drive-line);
-  border-bottom: 1px solid var(--drive-line);
+  background: var(--jh-color-surface-muted);
+  border-top: 1px solid var(--jh-color-border-soft);
+  border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-output-item:last-child .drive-inline-preview {
@@ -2274,8 +2241,8 @@ drive-pdf-preview {
   position: relative;
   height: clamp(500px, 72dvh, 840px);
   overflow: hidden;
-  background: var(--drive-line-strong);
-  border: 1px solid var(--drive-line-strong);
+  background: var(--jh-color-border-strong);
+  border: 1px solid var(--jh-color-border-strong);
   border-radius: var(--jh-radius-control);
 }
 
@@ -2286,9 +2253,9 @@ drive-pdf-preview {
   justify-content: space-between;
   min-height: 46px;
   padding: 6px 8px;
-  color: var(--drive-ink);
-  background: var(--drive-surface-raised);
-  border-bottom: 1px solid var(--drive-line);
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface);
+  border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-pdf-toolbar-group {
@@ -2300,7 +2267,7 @@ drive-pdf-preview {
   place-items: center;
   width: 40px;
   height: 40px;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   border-radius: var(--jh-radius-control);
   font-size: 17px;
   transition:
@@ -2310,14 +2277,14 @@ drive-pdf-preview {
 }
 
 .drive-icon-button:hover:not(:disabled) {
-  color: var(--drive-accent);
-  background: var(--drive-accent-soft);
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
 }
 
 .drive-pdf-page-count,
 .drive-pdf-scale {
   min-width: 64px;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
   font-family: var(--drive-mono);
   font-size: 12px;
   text-align: center;
@@ -2332,11 +2299,11 @@ drive-pdf-preview {
   inset: 46px 0 0;
   overflow: auto;
   outline: 0;
-  background: var(--drive-line-strong);
+  background: var(--jh-color-border-strong);
 }
 
 .drive-pdf-stage:focus-visible {
-  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--drive-accent) 35%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--jh-color-brand) 35%, transparent);
 }
 
 .drive-pdf-stage .pdfViewer {
@@ -2345,7 +2312,7 @@ drive-pdf-preview {
 
 .drive-pdf-stage .pdfViewer .page {
   margin: 0 auto 14px;
-  box-shadow: 0 4px 16px rgba(22, 31, 43, 0.18);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--jh-color-text) 18%, transparent);
 }
 
 .drive-pdf-skeleton {
@@ -2357,7 +2324,7 @@ drive-pdf-preview {
   height: 68%;
   padding: 36px;
   background: var(--jh-color-surface-subtle);
-  box-shadow: 0 4px 16px rgba(22, 31, 43, 0.16);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--jh-color-text) 16%, transparent);
 }
 
 .drive-pdf-skeleton span,
@@ -2365,7 +2332,7 @@ drive-pdf-preview {
 .drive-skeleton {
   position: relative;
   overflow: hidden;
-  background: var(--drive-surface-muted);
+  background: var(--jh-color-surface-muted);
 }
 
 .drive-pdf-skeleton span::after,
@@ -2374,7 +2341,7 @@ drive-pdf-preview {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--drive-surface-raised) 84%, transparent), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--jh-color-surface) 84%, transparent), transparent);
   transform: translateX(-110%);
   animation: drive-sheen 1.3s var(--jh-motion-enter) infinite;
 }
@@ -2410,22 +2377,22 @@ drive-pdf-preview {
   height: calc(100dvh - 170px);
   min-height: 480px;
   background: #ffffff;
-  border: 1px solid var(--drive-line);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
 }
 
 .drive-preview-markdown {
   max-width: 76ch;
   margin: 0 auto;
-  color: var(--drive-ink);
+  color: var(--jh-color-text);
   line-height: 1.75;
 }
 
 .drive-preview-markdown pre {
   overflow: auto;
   padding: 14px;
-  color: var(--drive-ink);
-  background: var(--drive-surface-muted);
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface-muted);
   border-radius: var(--jh-radius-control);
 }
 
@@ -2447,8 +2414,8 @@ drive-pdf-preview {
   gap: 12px;
   max-width: 620px;
   padding: 10px 12px;
-  background: var(--drive-surface-raised);
-  border: 1px solid var(--drive-line);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
   border-radius: var(--jh-radius-control);
 }
 
@@ -2473,7 +2440,7 @@ drive-pdf-preview {
 
 .drive-upload-progress-label span {
   flex: 0 0 auto;
-  color: var(--drive-muted);
+  color: var(--jh-color-text-muted);
 }
 
 .drive-empty {
@@ -2486,7 +2453,7 @@ drive-pdf-preview {
 }
 
 .drive-empty > .ui-icon {
-  color: var(--drive-accent);
+  color: var(--jh-color-brand);
   font-size: 28px;
 }
 
@@ -2538,7 +2505,7 @@ drive-pdf-preview {
 
 .drive-skeleton-metric {
   height: 84px;
-  border-right: 1px solid var(--drive-line);
+  border-right: 1px solid var(--jh-color-border-soft);
 }
 
 .drive-skeleton-panel {
@@ -2552,7 +2519,7 @@ drive-pdf-preview {
 }
 
 :where(a, button, input, textarea, label.drive-upload-trigger):focus-visible {
-  outline: 2px solid var(--drive-accent);
+  outline: 2px solid var(--jh-color-brand);
   outline-offset: 2px;
 }
 
@@ -2668,7 +2635,7 @@ drive-pdf-preview {
 
   .drive-ai-qa-suggestions button {
     border-right: 0;
-    border-bottom: 1px solid var(--drive-line);
+    border-bottom: 1px solid var(--jh-color-border-soft);
   }
 
   .drive-ai-qa-suggestions button:last-child {
@@ -2709,8 +2676,8 @@ drive-pdf-preview {
     gap: 0;
     margin-bottom: 8px;
     padding: 9px 11px;
-    background: var(--drive-surface);
-    border: 1px solid var(--drive-line);
+    background: var(--jh-color-page);
+    border: 1px solid var(--jh-color-border-soft);
     border-radius: var(--jh-radius-control);
   }
 
@@ -2724,7 +2691,7 @@ drive-pdf-preview {
 
   .drive-file-row > span::before {
     content: attr(data-label);
-    color: var(--drive-muted);
+    color: var(--jh-color-text-muted);
     font-weight: 500;
   }
 
@@ -2748,7 +2715,7 @@ drive-pdf-preview {
     display: flex !important;
     justify-content: flex-start;
     padding-top: 8px !important;
-    border-top: 1px solid var(--drive-line);
+    border-top: 1px solid var(--jh-color-border-soft);
   }
 
   .drive-row-actions::before {
@@ -2757,7 +2724,7 @@ drive-pdf-preview {
 
   .drive-inline-preview.is-table-row {
     margin: -1px 0 10px;
-    border: 1px solid var(--drive-line);
+    border: 1px solid var(--jh-color-border-soft);
     border-top: 0;
     border-radius: 0 0 var(--jh-radius-control) var(--jh-radius-control);
   }
