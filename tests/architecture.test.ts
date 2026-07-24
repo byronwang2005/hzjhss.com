@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { globSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   FILE_LIMITS,
@@ -32,6 +33,17 @@ describe("shared application policy", () => {
 });
 
 describe("source tree boundaries", () => {
+  it("keeps deployable public assets visible to Git", () => {
+    for (const sourcePath of [
+      "public/assets/jhss-logo-cropped.png",
+      "src/scf/file-processor/index.mjs",
+    ]) {
+      expect(existsSync(sourcePath)).toBe(true);
+      const ignored = spawnSync("git", ["check-ignore", sourcePath], { encoding: "utf8" });
+      expect(ignored.status, `${sourcePath}: ${ignored.stdout || ignored.stderr}`).toBe(1);
+    }
+  });
+
   it("keeps generated browser assets outside the repository source tree", () => {
     expect(existsSync("assets")).toBe(false);
     expect(readFileSync(".gitignore", "utf8")).toContain("dist/");
