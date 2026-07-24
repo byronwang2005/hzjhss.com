@@ -1,4 +1,4 @@
-import type { FileListResponse, TopicSummary, UserRole } from "../shared/contracts";
+import type { FileListResponse, KnowledgeRole, TopicSummary, UserRole } from "../shared/contracts";
 
 export type Mode = "login" | "overview" | "topic" | "create";
 export type TopicView = "qa" | "files";
@@ -24,6 +24,7 @@ export interface DriveClientState {
   topics: TopicSummary[];
   topic: TopicSummary | null;
   topicView: TopicView;
+  fileRoleView: KnowledgeRole;
   prefix: string;
   listing: FileListResponse | null;
   loading: boolean;
@@ -50,6 +51,7 @@ export const state: DriveClientState = {
   topics: [],
   topic: null,
   topicView: "qa",
+  fileRoleView: "evidence",
   prefix: "",
   listing: null,
   loading: true,

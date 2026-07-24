@@ -78,17 +78,20 @@ export class DriveAiQa extends LitElement {
     const isGlobal = this.scope === "global";
     const title = isGlobal ? "向全部资料提问" : "专题问答";
     return html`
-      <section class=${classMap({ "drive-ai-qa": true, "is-global": isGlobal })} aria-label=${title} aria-busy=${String(this.streaming)}>
+      <section class=${classMap({ "drive-ai-qa": true, "is-global": isGlobal, "has-notice": !this.ready })} aria-label=${title} aria-busy=${String(this.streaming)}>
         <header class="drive-ai-qa-head">
           <div class="drive-ai-qa-heading">
             <span class="drive-ai-qa-symbol">${renderIcon("chat-circle-dots")}</span>
             <div><span class="drive-eyebrow">${isGlobal ? "AI 检索" : "当前专题"}</span><h2>${title}</h2></div>
           </div>
-          ${this.messages.length
-            ? html`<button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>
-                ${renderIcon("trash")}清空会话
-              </button>`
-            : nothing}
+          <div class="drive-ai-qa-head-actions">
+            <span class="drive-ai-qa-scope">${renderIcon(isGlobal ? "files" : "folder")}${isGlobal ? "全部专题" : this.topicName || "当前专题"}</span>
+            ${this.messages.length
+              ? html`<button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>
+                  ${renderIcon("trash")}清空会话
+                </button>`
+              : nothing}
+          </div>
         </header>
 
         ${this.ready
@@ -133,24 +136,35 @@ export class DriveAiQa extends LitElement {
     const readyTitle = this.scope === "global" ? "在全资料库内提问" : `对${this.topicName || "当前专题"}提问`;
     const suggestions = this.scope === "global"
       ? [
-          ["database", "汇总重点", "请汇总各专题当前最重要的结论，并标明来源。"],
-          ["files", "比较专题", "哪些专题存在共同风险或相互影响？请分别说明依据。"],
-          ["link", "查找来源", "请列出检索结果中可追溯的关键文件和位置。"],
+          ["calendar-dots", "近期变化", "请汇总各专题最近的关键变化，并分别标明资料日期和来源。"],
+          ["files", "跨专题比较", "请比较各专题的共同信号、差异和风险，并分别说明依据。"],
+          ["link", "来源追溯", "请列出支持关键结论的文件和具体位置。"],
         ]
       : [
-          ["database", "概括结论", "请概括这个专题的核心结论，并标明来源。"],
-          ["warning", "检查风险", "当前有哪些风险、反例或待核验事项？"],
-          ["link", "查找来源", "请列出回答范围和关键来源路径。"],
+          ["database", "按方法论分析", "请按照专题方法论分析当前资料，并给出有来源的核心结论。"],
+          ["warning", "检查近期风险", "结合最近的时效资料，当前有哪些风险、反例或待核验事项？"],
+          ["link", "定位引用", "请列出支持关键结论的文件和具体位置。"],
         ];
+    const capabilities = [
+      ["database", "方法论指导"],
+      ["calendar-dots", "时效资料举证"],
+      ["link", "来源引用"],
+      ["chat-circle-dots", "连续追问"],
+    ];
     return html`
       <div class="drive-ai-qa-empty">
         <div><h3>${this.ready ? readyTitle : "等待文件处理"}</h3><p>${this.ready ? "直接提问，或从下面三个方向开始。回答会尽量标明资料来源。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
         ${this.ready
-          ? html`<div class="drive-ai-qa-suggestions" aria-label="问题建议">
-              ${suggestions.map(([icon, label, prompt]) => html`
-                <button type="button" @click=${() => this.useSuggestion(prompt)}>${renderIcon(icon)}<span>${label}</span></button>
-              `)}
-            </div>`
+          ? html`
+              <div class="drive-ai-qa-capabilities" aria-label="问答能力">
+                ${capabilities.map(([icon, label]) => html`<span>${renderIcon(icon)}${label}</span>`)}
+              </div>
+              <div class="drive-ai-qa-suggestions" aria-label="问题建议">
+                ${suggestions.map(([icon, label, prompt]) => html`
+                  <button type="button" @click=${() => this.useSuggestion(prompt)}>${renderIcon(icon)}<span>${label}</span></button>
+                `)}
+              </div>
+            `
           : nothing}
       </div>
     `;

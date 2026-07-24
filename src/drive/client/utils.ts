@@ -1,5 +1,49 @@
-import type { KnowledgeFile, ProcessingState } from "../shared/contracts";
+import type { KnowledgeFile, KnowledgeRole, ProcessingState } from "../shared/contracts";
 import { PROCESSING_STALE_AFTER_MS } from "../shared/runtime";
+
+export interface FileRolePresentation {
+  label: string;
+  description: string;
+  icon: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  uploadLabel: string;
+  uploadAction: string;
+}
+
+export const FILE_ROLE_PRESENTATION: Record<KnowledgeRole, FileRolePresentation> = {
+  reference: {
+    label: "研报原件",
+    description: "保留研究原文，并标记是否已经纳入专题方法论。",
+    icon: "books",
+    emptyTitle: "还没有研报原件",
+    emptyDescription: "上传原始研报后，可在这里维护其方法论纳入状态。",
+    uploadLabel: "上传研报原件",
+    uploadAction: "pick-reference",
+  },
+  methodology: {
+    label: "专题方法论",
+    description: "定义专题的分析维度、研究步骤和判断框架。",
+    icon: "database",
+    emptyTitle: "还没有专题方法论",
+    emptyDescription: "上传 Markdown 方法论，为专题问答提供稳定的分析框架。",
+    uploadLabel: "上传专题方法论",
+    uploadAction: "pick-methodology",
+  },
+  evidence: {
+    label: "时效资料",
+    description: "为事实、数据和当前结论提供带日期的可追溯依据。",
+    icon: "calendar-dots",
+    emptyTitle: "还没有时效资料",
+    emptyDescription: "上传周报、公告或其他近期资料后，即可用于问答举证。",
+    uploadLabel: "上传时效资料",
+    uploadAction: "pick-evidence",
+  },
+};
+
+export function filesForKnowledgeRole(files: KnowledgeFile[], role: KnowledgeRole): KnowledgeFile[] {
+  return files.filter((file) => file.knowledgeRole === role);
+}
 
 export function normalizeClientRelativePath(input: string): string {
   const path = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");

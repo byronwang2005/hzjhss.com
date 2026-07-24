@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { directoryPrefix, fileIconName, formatBytes, normalizeClientRelativePath, processingDisplay } from "../src/drive/client/utils";
+import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, filesForKnowledgeRole, formatBytes, normalizeClientRelativePath, processingDisplay } from "../src/drive/client/utils";
+import type { KnowledgeFile } from "../src/drive/shared/contracts";
 
 describe("knowledge client helpers", () => {
   it("normalizes upload paths and rejects traversal", () => {
@@ -19,6 +20,20 @@ describe("knowledge client helpers", () => {
     const file = { name: "a.pdf", path: "a.pdf", relativePath: "a.pdf", size: 1, lastModified: "2026-07-21T06:00:00.000Z", etag: "etag", knowledgeRole: "evidence" as const };
     expect(processingDisplay(file)).toEqual({ label: "未开始处理", retryable: true, poll: false });
     expect(processingDisplay({ ...file, processing: { state: "queued", sourceEtag: "etag", updatedAt: "2026-07-21T06:00:00.000Z" } }, Date.parse("2026-07-21T06:03:00.000Z"))).toEqual({ label: "处理未启动", retryable: true, poll: false });
+  });
+
+  it("presents and filters the three knowledge roles", () => {
+    const base = { path: "", relativePath: "", size: 1, lastModified: "2026-07-21T06:00:00.000Z", etag: "etag" };
+    const files: KnowledgeFile[] = [
+      { ...base, name: "reference.pdf", path: "reference.pdf", relativePath: "reference.pdf", knowledgeRole: "reference" },
+      { ...base, name: "methodology.md", path: "__methodology__.md", relativePath: "__methodology__.md", knowledgeRole: "methodology" },
+      { ...base, name: "weekly.pdf", path: "weekly.pdf", relativePath: "weekly.pdf", knowledgeRole: "evidence" },
+    ];
+
+    expect(FILE_ROLE_PRESENTATION.reference.label).toBe("研报原件");
+    expect(FILE_ROLE_PRESENTATION.methodology.uploadLabel).toBe("上传专题方法论");
+    expect(FILE_ROLE_PRESENTATION.evidence.label).toBe("时效资料");
+    expect(filesForKnowledgeRole(files, "evidence").map((file) => file.name)).toEqual(["weekly.pdf"]);
   });
 });
 
@@ -47,6 +62,15 @@ describe("knowledge client surface", () => {
     expect(source).toContain('phase: "registering"');
     expect(source).toContain("文件登记超时，请稍后重试");
     expect(source).toContain("completed.length !== prepared.length");
+  });
+
+  it("renders role tabs, contextual uploads and accessible table cells", () => {
+    expect(source).toContain('data-action="file-role-view"');
+    expect(source).toContain('role="tabpanel"');
+    expect(source).toContain('role="columnheader"');
+    expect(source).toContain('data-label="状态"');
+    expect(source).toContain("替换专题方法论");
+    expect(source).not.toContain(">上传周报<");
   });
 
   it("clears server markup and uses one background file refresh timer", () => {

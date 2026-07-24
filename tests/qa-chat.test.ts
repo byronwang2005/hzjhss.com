@@ -110,6 +110,33 @@ describe("drive AI Q&A component", () => {
 
     expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("在全资料库内提问");
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("对新能源提问");
+    expect(globalQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("全部专题");
+    expect(topicQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("新能源");
+  });
+
+  it("shows grounded capabilities and scope-aware suggestions", async () => {
+    const globalQa = await mountQa("global");
+    const topicQa = await mountQa("topic");
+
+    expect(globalQa.querySelector(".drive-ai-qa-capabilities")?.textContent).toContain("方法论指导");
+    expect(globalQa.querySelector(".drive-ai-qa-capabilities")?.textContent).toContain("连续追问");
+    expect(globalQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("跨专题比较");
+    expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("按方法论分析");
+    expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("定位引用");
+  });
+
+  it("marks only unavailable knowledge states as having a notice row", async () => {
+    const readyQa = await mountQa("global");
+    const waitingQa = new DriveAiQa();
+    waitingQa.scope = "topic";
+    waitingQa.topicName = "等待处理";
+    waitingQa.ready = false;
+    document.body.appendChild(waitingQa);
+    await waitingQa.updateComplete;
+
+    expect(readyQa.classList.contains("has-notice")).toBe(false);
+    expect(readyQa.querySelector(".drive-ai-qa")?.classList.contains("has-notice")).toBe(false);
+    expect(waitingQa.querySelector(".drive-ai-qa")?.classList.contains("has-notice")).toBe(true);
   });
 
   it("does not impose a product-level question length limit", async () => {

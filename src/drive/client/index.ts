@@ -12,7 +12,7 @@ import { renderIcon } from "./icons";
 import "./qa-chat";
 import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse } from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
-import { directoryPrefix, fileIconName, fileNameFromPath, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay } from "./utils";
+import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay } from "./utils";
 import { api, ApiError, withTimeout } from "./api";
 import { state, type TopicView } from "./state";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
@@ -41,6 +41,7 @@ root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
 root.addEventListener("input", handleInput);
 root.addEventListener("change", (event) => void handleChange(event));
+root.addEventListener("keydown", handleTabKeydown);
 window.jhssTheme.subscribe((theme) => {
   if (state.theme !== theme) {
     state.theme = theme;
@@ -91,6 +92,7 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
   if (!topic) return;
   state.topic = topic;
   state.topicView = view;
+  state.fileRoleView = "evidence";
   state.prefix = "";
   state.listing = null;
   state.mode = "topic";
@@ -175,6 +177,9 @@ async function handleClick(event: MouseEvent): Promise<void> {
     state.topicView = button.dataset.view === "files" ? "files" : "qa";
     renderApp();
     if (state.topicView === "files") await loadFiles();
+  } else if (action === "file-role-view") {
+    state.fileRoleView = normalizeKnowledgeRole(button.dataset.role);
+    renderApp();
   } else if (action === "open-folder") {
     state.prefix = String(button.dataset.path || "");
     await loadFiles();
@@ -230,6 +235,28 @@ async function handleClick(event: MouseEvent): Promise<void> {
       await loadOverview();
     }
   }
+}
+
+function handleTabKeydown(event: KeyboardEvent): void {
+  const current = (event.target as Element).closest<HTMLButtonElement>('[role="tab"][data-action]');
+  if (!current || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tablist = current.closest<HTMLElement>('[role="tablist"]');
+  if (!tablist) return;
+  const tabs = Array.from(tablist.querySelectorAll<HTMLButtonElement>(':scope > [role="tab"]'));
+  const currentIndex = tabs.indexOf(current);
+  if (currentIndex < 0 || !tabs.length) return;
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? tabs.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  event.preventDefault();
+  tabs[nextIndex]?.focus();
+  tabs[nextIndex]?.click();
+}
+
+function normalizeKnowledgeRole(value: unknown): KnowledgeRole {
+  return value === "reference" || value === "methodology" ? value : "evidence";
 }
 
 async function handleChange(event: Event): Promise<void> {
@@ -417,41 +444,153 @@ function renderCreate(): TemplateResult {
 
 function renderTopic(): TemplateResult {
   if (!state.topic) return html``;
-  return html`<div class="drive-tabs" role="tablist">${tabButton("qa", "问答", "chat-circle-dots")}${tabButton("files", state.role === "admin" ? "文件" : "资料", "files")}</div>${state.topicView === "qa" ? html`<drive-ai-qa scope="topic" .topicId=${state.topic.id} .topicName=${state.topic.name} .ready=${state.topic.ready}></drive-ai-qa>` : renderFiles()}`;
+  return html`
+    <div class="drive-tabs" role="tablist" aria-label="专题工作区">
+      ${tabButton("qa", "问答", "chat-circle-dots")}
+      ${tabButton("files", state.role === "admin" ? "文件" : "资料", "files")}
+    </div>
+    <div
+      id="topic-panel"
+      class="drive-topic-view-panel"
+      role="tabpanel"
+      aria-labelledby=${`topic-tab-${state.topicView}`}
+      tabindex="0"
+    >
+      ${state.topicView === "qa"
+        ? html`<drive-ai-qa scope="topic" .topicId=${state.topic.id} .topicName=${state.topic.name} .ready=${state.topic.ready}></drive-ai-qa>`
+        : renderFiles()}
+    </div>
+  `;
 }
 
 function renderFiles(): TemplateResult {
   const listing = state.listing;
-  return html`<section class="drive-tab-panel"><div class="drive-material-toolbar"><div><span class="drive-eyebrow">${state.role === "admin" ? "资料管理" : "只读资料"}</span><h2>${state.prefix || "全部文件"}</h2></div><div class="drive-upload-actions">
-    ${state.prefix ? html`<button class="drive-control" type="button" data-action="up-folder">${renderIcon("arrow-left")}上一级</button>` : nothing}
-    ${state.role === "admin" ? html`
-      <button class="drive-control" type="button" data-action="pick-reference">${renderIcon("upload-simple")}上传研报</button>
-      <button class="drive-control drive-control-primary" type="button" data-action="pick-evidence">${renderIcon("upload-simple", "bold")}上传周报</button>
-      <button class="drive-control" type="button" data-action="pick-methodology">${renderIcon("database")}上传/替换方法论</button>
-      <input data-reference-input type="file" multiple hidden>
-      <input data-evidence-input type="file" multiple hidden>
-      <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
-      ${state.prefix ? nothing : html`<button class="drive-control drive-control-danger" type="button" data-action="delete-topic">${renderIcon("trash")}删除专题</button>`}
-    ` : nothing}
-  </div></div>${state.upload.active ? renderUploadProgress() : nothing}${listing ? renderFileList(listing) : renderLoading()}</section>`;
+  const role = state.fileRoleView;
+  const presentation = FILE_ROLE_PRESENTATION[role];
+  const roleFiles = listing ? filesForKnowledgeRole(listing.files, role) : [];
+  const methodologyExists = Boolean(listing?.files.some((file) => file.knowledgeRole === "methodology"));
+  const uploadLabel = role === "methodology" && methodologyExists ? "替换专题方法论" : presentation.uploadLabel;
+  return html`
+    <section class=${`drive-tab-panel drive-files-panel is-${role}`}>
+      <div class="drive-file-role-tabs" role="tablist" aria-label="资料类型">
+        ${renderFileRoleTab("reference", listing)}
+        ${renderFileRoleTab("methodology", listing)}
+        ${renderFileRoleTab("evidence", listing)}
+      </div>
+      <div
+        id="file-role-panel"
+        class="drive-file-role-panel"
+        role="tabpanel"
+        aria-labelledby=${`file-role-tab-${role}`}
+        tabindex="0"
+      >
+        <div class="drive-material-toolbar">
+          <div class="drive-material-heading">
+            <span class="drive-file-role-symbol">${renderIcon(presentation.icon, "duotone")}</span>
+            <div>
+              <span class="drive-eyebrow">${state.role === "admin" ? "资料管理" : "只读资料"}</span>
+              <h2>${presentation.label}</h2>
+              <p>${presentation.description}</p>
+            </div>
+          </div>
+          <div class="drive-upload-actions">
+            ${state.prefix ? html`<button class="drive-control" type="button" data-action="up-folder">${renderIcon("arrow-left")}上一级</button>` : nothing}
+            ${state.role === "admin"
+              ? html`
+                  <button class="drive-control drive-control-primary" type="button" data-action=${presentation.uploadAction}>
+                    ${renderIcon(role === "methodology" ? "database" : "upload-simple", "bold")}${uploadLabel}
+                  </button>
+                `
+              : nothing}
+          </div>
+        </div>
+        <input data-reference-input type="file" multiple hidden>
+        <input data-evidence-input type="file" multiple hidden>
+        <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
+        ${state.upload.active ? renderUploadProgress() : nothing}
+        ${listing ? renderFileList(listing, roleFiles, presentation) : renderLoading()}
+        ${state.role === "admin" && !state.prefix
+          ? html`
+              <div class="drive-topic-danger-zone">
+                <div><strong>专题管理</strong><span>删除专题会永久移除其中的全部资料。</span></div>
+                <button class="drive-control drive-control-danger" type="button" data-action="delete-topic">${renderIcon("trash")}删除专题</button>
+              </div>
+            `
+          : nothing}
+      </div>
+    </section>
+  `;
 }
 
-function renderFileList(listing: FileListResponse): TemplateResult {
-  return html`<div class="drive-file-table" role="table"><div class="drive-file-row drive-file-row-head" role="row"><span>名称</span><span>大小</span><span>状态</span><span>更新</span><span>操作</span></div>
-    ${repeat(listing.folders, (folder) => folder.path, (folder) => html`<div class="drive-file-row" role="row"><span class="drive-file-name">${renderIcon("folder")}<strong>${folder.name}</strong></span><span>-</span><span>目录</span><span>-</span><span class="drive-row-actions"><button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path}>${renderIcon("folder-open")}打开</button></span></div>`)}
-    ${repeat(listing.files, (file) => file.path, renderFileRow)}
-  </div>`;
+function renderFileRoleTab(role: KnowledgeRole, listing: FileListResponse | null): TemplateResult {
+  const presentation = FILE_ROLE_PRESENTATION[role];
+  const selected = state.fileRoleView === role;
+  const count = listing ? filesForKnowledgeRole(listing.files, role).length : 0;
+  return html`
+    <button
+      id=${`file-role-tab-${role}`}
+      class=${`drive-file-role-tab is-${role}${selected ? " is-active" : ""}`}
+      type="button"
+      role="tab"
+      aria-selected=${String(selected)}
+      aria-controls="file-role-panel"
+      tabindex=${selected ? "0" : "-1"}
+      data-action="file-role-view"
+      data-role=${role}
+    >
+      <span class="drive-file-role-tab-icon">${renderIcon(presentation.icon, "duotone")}</span>
+      <span><strong>${presentation.label}</strong><small>${count} 项</small></span>
+    </button>
+  `;
+}
+
+function renderFileList(listing: FileListResponse, files: KnowledgeFile[], presentation: (typeof FILE_ROLE_PRESENTATION)[KnowledgeRole]): TemplateResult {
+  if (!listing.folders.length && !files.length) {
+    return html`
+      <div class="drive-empty drive-file-role-empty">
+        ${renderIcon(presentation.icon, "duotone", "ui-icon-lg")}
+        <h3>${presentation.emptyTitle}</h3>
+        <p>${presentation.emptyDescription}</p>
+      </div>
+    `;
+  }
+  return html`
+    <div class="drive-file-table" role="table" aria-label=${presentation.label}>
+      <div class="drive-file-row drive-file-row-head" role="row">
+        <span role="columnheader">名称</span><span role="columnheader">大小</span><span role="columnheader">状态</span><span role="columnheader">更新</span><span role="columnheader">操作</span>
+      </div>
+      ${repeat(listing.folders, (folder) => folder.path, (folder) => html`
+        <div class="drive-file-row" role="row">
+          <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
+          <span role="cell" data-label="大小">-</span>
+          <span role="cell" data-label="状态">目录</span>
+          <span role="cell" data-label="更新">-</span>
+          <span class="drive-row-actions" role="cell" data-label="操作"><button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path}>${renderIcon("folder-open")}打开</button></span>
+        </div>
+      `)}
+      ${repeat(files, (file) => file.path, renderFileRow)}
+    </div>
+  `;
 }
 
 function renderFileRow(file: KnowledgeFile): TemplateResult {
   const processing = processingDisplay(file);
+  const presentation = FILE_ROLE_PRESENTATION[file.knowledgeRole];
   const displayName = file.knowledgeRole === "methodology" ? "专题方法论.md" : file.name;
   const status = file.knowledgeRole === "reference"
     ? file.incorporatedAt ? "已纳入方法论" : "待纳入方法论"
     : file.knowledgeRole === "methodology"
       ? processing.label
       : `${processing.label}${file.reportDate ? ` · ${file.reportDate}` : ""}`;
-  return html`<div class="drive-file-row" role="row"><span class="drive-file-name">${renderIcon(fileIconName(displayName))}<strong>${displayName}</strong></span><span>${formatBytes(file.size)}</span><span title=${file.processing?.error || ""}>${status}</span><span>${formatDate(file.uploadedAt || file.lastModified)}</span><span class="drive-row-actions">
+  return html`<div class=${`drive-file-row is-${file.knowledgeRole}`} role="row">
+    <span class="drive-file-name" role="cell" data-label="名称">
+      <span class="drive-file-type-icon">${renderIcon(fileIconName(displayName))}</span>
+      <span class="drive-file-name-copy"><strong>${displayName}</strong><small class=${`drive-file-role-badge is-${file.knowledgeRole}`}>${presentation.label}</small></span>
+    </span>
+    <span role="cell" data-label="大小">${formatBytes(file.size)}</span>
+    <span role="cell" data-label="状态" title=${file.processing?.error || ""}>${status}</span>
+    <span role="cell" data-label="更新">${formatDate(file.uploadedAt || file.lastModified)}</span>
+    <span class="drive-row-actions" role="cell" data-label="操作">
     ${state.role === "admin" && file.knowledgeRole === "reference" ? html`<button class="drive-table-action" type="button" data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>${renderIcon(file.incorporatedAt ? "x-circle" : "check")} ${file.incorporatedAt ? "取消纳入" : "标记纳入"}</button>` : nothing}
     ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`<button class="drive-table-action" type="button" data-action="edit-report-date" data-path=${file.path} data-report-date=${file.reportDate || ""}>${renderIcon("calendar-dots", "duotone")}日期</button>` : nothing}
     ${state.role === "admin" && file.knowledgeRole !== "reference" && processing.retryable ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}
@@ -466,7 +605,20 @@ function renderUploadProgress(): TemplateResult {
 }
 
 function tabButton(view: TopicView, label: string, icon: string): TemplateResult {
-  return html`<button type="button" class=${state.topicView === view ? "is-active" : ""} data-action="topic-view" data-view=${view}>${renderIcon(icon)}${label}</button>`;
+  const selected = state.topicView === view;
+  return html`
+    <button
+      id=${`topic-tab-${view}`}
+      type="button"
+      class=${selected ? "is-active" : ""}
+      role="tab"
+      aria-selected=${String(selected)}
+      aria-controls="topic-panel"
+      tabindex=${selected ? "0" : "-1"}
+      data-action="topic-view"
+      data-view=${view}
+    >${renderIcon(icon)}${label}</button>
+  `;
 }
 
 function iconButton(icon: string, label: string, action: string): TemplateResult {

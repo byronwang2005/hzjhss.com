@@ -65,6 +65,13 @@ describe("shared UI system", () => {
     }
   });
 
+  it("hides role upload inputs and defines compact ready-state Q&A rows", () => {
+    expect(cssSource).toContain('.drive-file-role-panel > input[type="file"][hidden]');
+    expect(cssSource).toContain("display: none !important;");
+    expect(cssSource).toContain("grid-template-rows: auto minmax(280px, 1fr) auto;");
+    expect(cssSource).toContain(".drive-ai-qa.has-notice");
+  });
+
   it("includes every statically referenced drive icon at its requested weight", () => {
     const sprite = readFileSync("dist/assets/phosphor-sprite.svg", "utf8");
     const iconCalls = driveSource.matchAll(/render(?:Drive)?Icon\("([^"]+)"(?:,\s*"(regular|bold|fill|duotone)")?/g);

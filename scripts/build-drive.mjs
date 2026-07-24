@@ -27,7 +27,7 @@ const iconSets = {
     "trash", "upload-simple", "user-switch",
   ],
   fill: ["check-circle", "star"],
-  duotone: ["books", "calendar-dots", "eye-slash", "files", "folder-plus", "package", "tray"],
+  duotone: ["books", "calendar-dots", "database", "eye-slash", "files", "folder-plus", "package", "tray"],
 };
 
 async function buildIconSprite() {
