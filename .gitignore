@@ -19,8 +19,11 @@ dist/
 build/
 /assets/
 /scf/
+.wrangler/
 .cache/
 .parcel-cache/
+coverage/
+*.tsbuildinfo
 
 # Logs and local environment files
 *.log
