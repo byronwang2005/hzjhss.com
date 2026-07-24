@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-let processor: typeof import("../scf/file-processor/index.mjs");
-let indexer: typeof import("../scf/index-builder/index.mjs");
+let processor: typeof import("../src/scf/file-processor/index.mjs");
+let indexer: typeof import("../src/scf/index-builder/index.mjs");
 
 beforeAll(async () => {
   process.env.TENCENT_SECRET_ID = "id";
@@ -10,8 +10,8 @@ beforeAll(async () => {
   process.env.COS_REGION = "ap-guangzhou";
   process.env.INDEXER_FUNCTION_NAME = "index-builder";
   process.env.WEBHOOK_SECRET = "secret";
-  processor = await import("../scf/file-processor/index.mjs");
-  indexer = await import("../scf/index-builder/index.mjs");
+  processor = await import("../src/scf/file-processor/index.mjs");
+  indexer = await import("../src/scf/index-builder/index.mjs");
 });
 
 describe("SCF event routing and chunking", () => {

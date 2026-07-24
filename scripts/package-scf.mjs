@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { build } from "esbuild";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -8,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const execFileAsync = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDir = process.argv[2] ? path.resolve(process.argv[2]) : path.join(os.homedir(), "Desktop");
-const lock = JSON.parse(await readFile(path.join(root, "scf", "package-lock.json"), "utf8"));
+const lock = JSON.parse(await readFile(path.join(root, "package-lock.json"), "utf8"));
 
 const functions = [
   {
@@ -56,12 +57,21 @@ for (const definition of functions) {
     await Promise.all([
       writeFile(path.join(staging, "index.js"), wrapper),
       writeFile(path.join(staging, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`),
-      cp(path.join(root, "scf", definition.sourceDirectory), path.join(staging, definition.sourceDirectory), { recursive: true }),
-      cp(path.join(root, "scf", "lib"), path.join(staging, "lib"), { recursive: true }),
+      mkdir(path.join(staging, definition.sourceDirectory), { recursive: true }),
     ]);
+    await build({
+      entryPoints: [path.join(root, "src", "scf", definition.sourceDirectory, "index.mjs")],
+      outfile: path.join(staging, definition.sourceDirectory, "index.mjs"),
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      target: "node22",
+      packages: "external",
+      legalComments: "none",
+    });
     await execFileAsync("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: staging });
     await rm(archive, { force: true });
-    await execFileAsync("zip", ["-q", "-r", archive, "index.js", "package.json", "package-lock.json", definition.sourceDirectory, "lib", "node_modules"], { cwd: staging });
+    await execFileAsync("zip", ["-q", "-r", archive, "index.js", "package.json", "package-lock.json", definition.sourceDirectory, "node_modules"], { cwd: staging });
     console.log(`${definition.name}: ${archive}`);
   } finally {
     await rm(staging, { recursive: true, force: true });

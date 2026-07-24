@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="分享用DeepSeek和Codex写微信公众号财经小作文的两步流程。">
+    <title>怎么用AI在微信公众号写“小作文”</title>
+    {{site-assets}}
+  </head>
+  <body>
+    <a class="skip-link" href="#article-main">跳到正文</a>
+    <div class="page article-page">
+      {{site-header}}
+
+      <main id="article-main">
+      <article class="article-shell">
+        <header class="article-hero">
+          <a class="back-link" href="../index.html">返回AI手册</a>
+          <h1>怎么用AI在微信公众号写“小作文”</h1>
+          <div class="article-meta" role="group" aria-label="文章信息">
+            <span>8分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="article-layout">
+          <aside class="article-toc" data-toc aria-label="目录">
+            <button class="toc-toggle" type="button" aria-expanded="true">目录</button>
+            <a href="#deepseek">用DeepSeek生成内容</a>
+            <a href="#codex-format">用Codex排版</a>
+            <a href="#notes">一点心得</a>
+          </aside>
+
+          <div class="article-content">
+            <section id="deepseek">
+              <h2>1. 用DeepSeek生成内容</h2>
+              <p>
+                平时那些让人深恶痛绝，但是看起来结构清晰、排版舒服、还带点专业感的微信公众号小作文，到底是怎么写出来的？其实，方法远比想象中简单，甚至可以称得上“工业化生产”。
+              </p>
+              <p>下面，我就把自己写“财经小作文”的完整流程分享出来，一共只有两步。</p>
+              <p>DeepSeek的中文写作能力是遥遥领先的。</p>
+              <p>
+                写作的第一步，其实是确定标题。比如，“下一个CPO？HVDC可能远比你我想象中更重要！”，越骇人听闻越好。定下来之后，直接打开
+                <a href="https://chat.deepseek.com/" target="_blank" rel="noopener noreferrer">DeepSeek聊天官网</a>
+                ，打开联网搜索，在对话框里输入一句非常直接的指令：
+              </p>
+              <blockquote>
+                <p>写一篇微信公众号软文：标题是“下一个CPO？HVDC可能远比你我想象中更重要！”</p>
+              </blockquote>
+              <p>
+                DeepSeek会在几秒到十几秒内生成一篇结构完整、语气自然、适合公众号读者阅读的小作文。它通常包括吸引人的开头、分点论述的正文，以及一个总结或“彩蛋”式的结尾。
+              </p>
+              <p>
+                当然，有时候生成的内容不会一次性完美契合我的需求。我会再追加一些指令，比如“加入更多数据佐证”“语气再通俗一点”“增加一个给上班族的建议板块”。这个过程就像和一位熟悉财经写作的助理对话，来回几次，一篇文章的初稿就完成了。
+              </p>
+            </section>
+
+            <section id="codex-format">
+              <h2>2. 用Codex一键排版成公众号富文本</h2>
+              <p>
+                内容写好了，但直接复制到微信公众号后台，是一大坨文字，段落不清晰，小标题不突出，读者体验很差。手动去加粗、调字号、设行间距又太费时间。
+              </p>
+              <p>这时我会把DeepSeek生成好的全文复制进Codex，然后输入另一个核心指令：</p>
+              <blockquote>
+                <p>按微信公众号格式把以下文本排版为单html富文本</p>
+              </blockquote>
+              <p>这个指令非常关键。它会自动为文章生成适应微信公众号规范的HTML代码，包括：</p>
+              <ul>
+                <li>适当的段间距和行高</li>
+                <li>小标题加粗或使用不同颜色</li>
+                <li>重点语句用深色或背景色高亮</li>
+                <li>引用部分做缩进和灰色处理</li>
+                <li>文末留出二维码或作者信息的占位区域</li>
+              </ul>
+              <p>
+                几分钟后，我就能拿到一个完整的html文件。这时，只需要把它在浏览器打开，用鼠标拖动文本完成复制，粘贴到微信公众号平台，再稍微预览一下，确认图片、分隔符等元素显示正常，一篇文章就算大功告成了。
+              </p>
+            </section>
+
+            <section id="notes">
+              <h2>3. 一点心得</h2>
+              <p>
+                整个过程从确定主题到排版完成，通常不超过20分钟。以前我需要自己构思框架、逐段写作、再花半小时排版，现在这两步基本都交给了AI工具。作为写作者，我的角色更多变成了“主题判断+内容把关+微调优化”。
+              </p>
+              <p>当然，这种方法也有需要注意的地方：</p>
+              <ol>
+                <li><strong>事实核查</strong>：AI生成的财经数据和观点偶尔会有偏差，尤其涉及具体数字或政策解读时，一定要自己核实一遍。</li>
+                <li><strong>风格统一</strong>：不同prompt下AI的语气可能略有不同，需要你稍加润色，让整篇文章读起来像一个“人”写的。</li>
+                <li><strong>合规底线</strong>：财经类内容容易踩到推荐股票、承诺收益等红线，容易被限流，AI不会自动避雷，需要你自行判断和修改。</li>
+              </ol>
+              <p>希望这篇小分享，对同样写小作文、想扰乱金融市场的朋友有帮助！</p>
+            </section>
+          </div>
+        </div>
+      </article>
+      </main>
+
+      {{article-footer}}
+    </div>
+    <script src="../../site.js" defer></script>
+  </body>
+</html>

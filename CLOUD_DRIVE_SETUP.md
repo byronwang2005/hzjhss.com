@@ -2,6 +2,24 @@
 
 网站首页 `/` 是 AI 知识库，API 使用 Cloudflare Pages Functions。原文件、腾讯云处理结果和 MiniSearch 索引全部存储在腾讯云 COS 私有 Bucket。
 
+## 项目结构
+
+```text
+src/
+├── shared/styles/      # 站点与云盘共用的设计令牌
+├── site/               # 静态页面、共享模板与站点脚本
+├── drive/
+│   ├── client/         # Lit 客户端、上传与界面组件
+│   ├── server/         # Cloudflare 服务端业务模块
+│   └── shared/         # API 契约、文件策略和运行参数
+└── scf/                # 腾讯云文件处理与索引构建源码
+functions/api/drive/    # Cloudflare Pages 薄路由
+public/assets/          # 人工维护的图片与下载资源
+dist/                   # 构建生成，不提交 Git
+```
+
+`drive.js`、`drive.css`、图标 sprite、PDF.js 运行资源和 SCF 部署内容均由构建脚本生成，不应复制回源码目录或提交 Git。
+
 ## 权限模型
 
 - 管理员固定为姓名精确等于 `汪旭`，可创建专题、上传、下载和删除文件。
@@ -92,7 +110,7 @@ COS `ObjectCreated` 事件触发文件处理函数，前缀设置为 `ai-knowled
 
 ### 文件处理函数
 
-入口：`scf/file-processor/index.mjs` 的 `handler`
+源码入口：`src/scf/file-processor/index.mjs` 的 `handler`
 
 环境变量：
 
@@ -114,7 +132,7 @@ COS `ObjectCreated` 事件触发文件处理函数，前缀设置为 `ai-knowled
 
 ### 索引构建函数
 
-入口：`scf/index-builder/index.mjs` 的 `handler`
+源码入口：`src/scf/index-builder/index.mjs` 的 `handler`
 
 环境变量：
 
@@ -126,13 +144,7 @@ COS `ObjectCreated` 事件触发文件处理函数，前缀设置为 `ai-knowled
 
 将函数并发限制为 1，避免同一时间发布多个专题索引。文件处理函数通过 SCF 异步调用它；文件删除时 Cloudflare 也会通过 Web 函数通知它重建索引。
 
-安装函数依赖：
-
-```bash
-npm install --prefix scf
-```
-
-部署包需包含对应函数目录、`scf/lib/` 和 `scf/node_modules/`。
+运行 `npm run build:scf -- <输出目录>` 时，脚本会从 `src/scf/` 打包共享源码、按锁文件安装函数依赖，并生成两个可直接上传的 ZIP。
 
 ## CAM 最小权限
 
@@ -173,11 +185,8 @@ SCF 角色额外需要：
 
 ```bash
 npm install
-npm install --prefix scf
 npm run typecheck
 npm test
-npm run build:drive
 npm run build:pages
-node --check scf/file-processor/index.mjs
-node --check scf/index-builder/index.mjs
+npm run build:scf -- ./build/scf
 ```

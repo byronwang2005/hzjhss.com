@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const assetsDir = path.join(root, "assets");
+const assetsDir = path.join(root, "dist", "assets");
 const generatedAssetsDir = path.join(assetsDir, "drive-assets");
 const pdfPackageDir = path.join(root, "node_modules", "pdfjs-dist");
 const phosphorPackageDir = path.join(root, "node_modules", "@phosphor-icons", "core", "assets");
@@ -31,6 +31,7 @@ const iconSets = {
 };
 
 async function buildIconSprite() {
+  await mkdir(assetsDir, { recursive: true });
   const symbols = [];
   for (const [weight, icons] of Object.entries(iconSets)) {
     for (const icon of icons) {
@@ -45,14 +46,13 @@ async function buildIconSprite() {
   await writeFile(path.join(assetsDir, "phosphor-sprite.svg"), sprite);
 }
 
-await buildIconSprite();
-
 await Promise.all([
   rm(path.join(assetsDir, "drive.js"), { force: true }),
   rm(path.join(assetsDir, "drive.css"), { force: true }),
   rm(generatedAssetsDir, { recursive: true, force: true }),
 ]);
 await mkdir(generatedAssetsDir, { recursive: true });
+await buildIconSprite();
 
 const workerResult = await build({
   absWorkingDir: root,

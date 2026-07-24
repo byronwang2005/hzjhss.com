@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="介绍 Codex 宠物的开启方式、状态提示与自定义方法。">
+    <title>Codex宠物的用法</title>
+    {{site-assets}}
+  </head>
+  <body>
+    <a class="skip-link" href="#article-main">跳到正文</a>
+    <div class="page article-page">
+      {{site-header}}
+
+      <main id="article-main">
+      <article class="article-shell">
+        <header class="article-hero">
+          <a class="back-link" href="../index.html">返回AI手册</a>
+          <h1>Codex宠物的用法</h1>
+          <div class="article-meta" role="group" aria-label="文章信息">
+            <span>5分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="article-layout">
+          <aside class="article-toc" data-toc aria-label="目录">
+            <button class="toc-toggle" type="button" aria-expanded="true">目录</button>
+            <a href="#meaning">核心意义</a>
+            <a href="#enable">如何开启宠物</a>
+            <a href="#customize">如何创造独一无二的宠物</a>
+            <a href="#gexingyuan-pet">找不到心仪的？</a>
+          </aside>
+
+          <div class="article-content">
+            <section id="meaning">
+              <h2>1. 核心意义：实时报告工作进度</h2>
+              <p>
+                Codex宠物是OpenAI在2026年推出的一项趣味功能。它是一个为你实时报告Codex工作进度的可爱小伙伴，充当着可视化的“灵动岛”角色。
+              </p>
+              <p>
+                Codex宠物主要显示三种工作状态：
+              </p>
+              <ul>
+                <li><strong>任务执行中（Running）</strong>：宠物会显示动态的忙碌动画，例如挠头、翻箱倒柜，让你知道它正在后台处理任务。</li>
+                <li><strong>等待输入（Waiting for Input）</strong>：宠物会安静地待机，提醒你需要提供下一步指令才能继续。</li>
+                <li><strong>任务完成（Ready for Review）</strong>：宠物会通过挥手、闪烁等动作发出轻微的视觉提示，提醒你回来验收工作成果。</li>
+              </ul>
+            </section>
+
+            <section id="enable">
+              <h2>2. 如何开启宠物？</h2>
+              <ol>
+                <li>
+                  <strong>首次设置</strong>：在设置-外观-宠物中开启宠物功能，选择Codex自带宠物或在第三步获得自定义宠物后导入。
+                </li>
+                <li>
+                  <strong>快速召唤</strong>：在对话输入框中，直接键入 <code>/pet</code> 并回车，宠物就会出现在屏幕上。
+                </li>
+              </ol>
+            </section>
+
+            <section id="customize">
+              <h2>3. 如何获得独一无二的宠物？</h2>
+              <ol>
+                <li>
+                  <strong>安装孵化技能</strong>：先安装 <code>hatch-pet</code> 这个技能，然后重启Codex应用来刷新加载。
+                </li>
+                <li>
+                  <strong>宠物孵化</strong>：使用 <code>/hatch</code> 命令，Codex 会根据你最近的代码或你提供的图片描述，为你生成一个定制宠物。
+                </li>
+                <li>
+                  <strong>获取社区宠物</strong>：访问
+                  <a href="https://petdex.crafter.run" target="_blank" rel="noopener noreferrer">Petdex社区画廊平台</a>等社区平台
+                  ，上面已有数百款玩家创作的开源宠物可供免费下载安装。
+                </li>
+                <li id="gexingyuan-pet">
+                  <strong>找不到心仪的？</strong>：<a href="../../assets/GeXingyuan-pet.zip" download>点我试试</a>！
+                </li>
+              </ol>
+            </section>
+          </div>
+        </div>
+      </article>
+      </main>
+
+      {{article-footer}}
+    </div>
+    <script src="../../site.js" defer></script>
+  </body>
+</html>

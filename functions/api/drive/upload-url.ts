@@ -1,6 +1,6 @@
-import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
-import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/http";
-import { createUpload } from "../../../src/drive/knowledge";
+import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
+import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/server/http";
+import { createUpload } from "../../../src/drive/server/knowledge";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {

@@ -1,9 +1,9 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { DriveEnv } from "../../../src/drive/config";
-import { getAiConfig, getDriveConfig } from "../../../src/drive/config";
-import { jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/http";
-import { createQaClient, createRetrievedQaSystemMessage, encodeSse, normalizeQaMessages, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/qa";
-import { retrieveKnowledge } from "../../../src/drive/retrieval";
+import type { DriveEnv } from "../../../src/drive/server/config";
+import { getAiConfig, getDriveConfig } from "../../../src/drive/server/config";
+import { jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/server/http";
+import { createQaClient, createRetrievedQaSystemMessage, encodeSse, normalizeQaMessages, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/server/qa";
+import { retrieveKnowledge } from "../../../src/drive/server/retrieval";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   const session = await readDriveSession({ request, env });

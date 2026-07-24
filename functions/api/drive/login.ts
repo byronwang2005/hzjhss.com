@@ -1,8 +1,8 @@
-import type { DriveEnv } from "../../../src/drive/config";
-import { getDriveConfig } from "../../../src/drive/config";
-import { errorResponse, jsonResponse, readJsonBody } from "../../../src/drive/http";
-import { createSessionCookie, isDriveAdmin, normalizeDisplayName, verifyAccessCode } from "../../../src/drive/session";
-import { registerDriveUser } from "../../../src/drive/users";
+import type { DriveEnv } from "../../../src/drive/server/config";
+import { getDriveConfig } from "../../../src/drive/server/config";
+import { errorResponse, jsonResponse, readJsonBody } from "../../../src/drive/server/http";
+import { createSessionCookie, isDriveAdmin, normalizeDisplayName, verifyAccessCode } from "../../../src/drive/server/session";
+import { registerDriveUser } from "../../../src/drive/server/users";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   try {

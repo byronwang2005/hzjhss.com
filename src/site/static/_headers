@@ -1,0 +1,11 @@
+/assets/drive.js
+  Cache-Control: no-cache
+
+/assets/drive.css
+  Cache-Control: no-cache
+
+/assets/phosphor-sprite.svg
+  Cache-Control: no-cache
+
+/assets/drive-assets/*
+  Cache-Control: public, max-age=31536000, immutable

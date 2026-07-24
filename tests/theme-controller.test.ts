@@ -13,7 +13,7 @@ type ThemeController = {
   toggleTheme(): void;
 };
 
-const source = readFileSync("theme-controller.js", "utf8");
+const source = readFileSync("src/site/client/theme-controller.js", "utf8");
 
 function createThemeWindow(systemDark: boolean, storedTheme?: ThemeName) {
   const browserWindow = new Window({ url: "https://hzjhss.test/" });

@@ -10,30 +10,16 @@ import { html, nothing, render, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { renderIcon } from "./icons";
 import "./qa-chat";
-import type { FileListResponse, KnowledgeFile, OverviewResponse, TopicSummary, UserRole } from "./types";
+import type { FileListResponse, KnowledgeFile, OverviewResponse } from "../shared/contracts";
+import { CLIENT_TIMING } from "../shared/runtime";
 import { directoryPrefix, fileIconName, fileNameFromPath, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay } from "./utils";
+import { api, ApiError, withTimeout } from "./api";
+import { state, type TopicView } from "./state";
+import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 
-declare const __PDF_WORKER_FILENAME__: string;
-
-type Mode = "login" | "overview" | "topic" | "create";
-type TopicView = "qa" | "files";
 type UppyMeta = { relativePath?: string; pdfPages?: number };
 type UppyBody = Record<string, unknown>;
 type DriveUppyFile = UppyFile<UppyMeta, UppyBody>;
-type UploadPhase = "preparing" | "uploading" | "registering";
-type ThemeName = "light" | "dark";
-
-declare global {
-  interface Window {
-    jhssTheme: {
-      getPreference(): ThemeName | null;
-      getResolvedTheme(): ThemeName;
-      setTheme(theme: ThemeName): void;
-      subscribe(listener: (theme: ThemeName) => void): () => void;
-      toggleTheme(): void;
-    };
-  }
-}
 
 interface UploadSignature {
   url: string;
@@ -49,42 +35,6 @@ const root = rootElement;
 root.replaceChildren();
 
 let fileRefreshTimer: number | undefined;
-
-const state: {
-  mode: Mode;
-  role: UserRole;
-  displayName: string;
-  topics: TopicSummary[];
-  topic: TopicSummary | null;
-  topicView: TopicView;
-  prefix: string;
-  listing: FileListResponse | null;
-  loading: boolean;
-  status: string;
-  statusTone: "neutral" | "success" | "danger";
-  loginName: string;
-  accessCode: string;
-  topicName: string;
-  theme: ThemeName;
-  upload: { active: boolean; phase: UploadPhase; name: string; percent: number; overallPercent: number; total: number };
-} = {
-  mode: "login",
-  role: "viewer",
-  displayName: "",
-  topics: [],
-  topic: null,
-  topicView: "qa",
-  prefix: "",
-  listing: null,
-  loading: true,
-  status: "",
-  statusTone: "neutral",
-  loginName: "",
-  accessCode: "",
-  topicName: "",
-  theme: window.jhssTheme.getResolvedTheme(),
-  upload: { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 },
-};
 
 root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
@@ -104,7 +54,7 @@ async function boot(): Promise<void> {
     await loadOverview();
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
+      await new Promise((resolve) => window.setTimeout(resolve, CLIENT_TIMING.initialUnauthorizedRetryMs));
       try {
         await loadOverview();
         return;
@@ -168,7 +118,7 @@ async function loadFiles(background = false): Promise<void> {
     fileRefreshTimer = window.setTimeout(() => {
       fileRefreshTimer = undefined;
       if (state.mode === "topic" && state.topicView === "files") void loadFiles(true);
-    }, 10_000);
+    }, CLIENT_TIMING.fileRefreshMs);
   }
 }
 
@@ -320,7 +270,11 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string): 
     if (completed.length !== prepared.length) throw new Error(`仅完成 ${completed.length}/${prepared.length} 个文件上传`);
     state.upload = { ...state.upload, phase: "registering", name: "正在登记文件...", percent: 100, overallPercent: 100 };
     renderApp();
-    await withTimeout(api("/upload-complete", { method: "POST", body: { topicId: state.topic.id, files: completed } }), 60_000, "文件登记超时，请稍后重试");
+    await withTimeout(
+      api("/upload-complete", { method: "POST", body: { topicId: state.topic.id, files: completed } }),
+      CLIENT_TIMING.uploadRegistrationTimeoutMs,
+      "文件登记超时，请稍后重试",
+    );
     state.upload = { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 };
     setStatus(`已上传 ${completed.length} 个文件，腾讯云正在异步处理。`, "success");
     await loadFiles();
@@ -329,27 +283,6 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string): 
     showError(error);
   } finally {
     uppy?.destroy();
-  }
-}
-
-function validateFileSizeAndType(file: File, path: string): void {
-  const extension = path.split(".").at(-1)?.toLowerCase() || "";
-  const allowed = new Set(["png", "jpg", "jpeg", "bmp", "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "md", "txt", "wps"]);
-  if (!allowed.has(extension)) throw new Error(`${file.name} 的格式不受支持`);
-  const max = ["pdf", "doc", "docx", "ppt", "pptx"].includes(extension) ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
-  if (file.size <= 0 || file.size > max) throw new Error(`${file.name} 不能超过 ${max / 1024 / 1024} MB`);
-}
-
-async function pdfPageCount(file: File): Promise<number> {
-  const pdf = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  pdf.GlobalWorkerOptions.workerSrc = new URL(__PDF_WORKER_FILENAME__, import.meta.url).href;
-  const task = pdf.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
-  try {
-    const document = await task.promise;
-    if (document.numPages > 300) throw new Error(`${file.name} 超过 300 页`);
-    return document.numPages;
-  } finally {
-    await task.destroy();
   }
 }
 
@@ -470,25 +403,3 @@ function renderLoading(): TemplateResult { return html`<div class="drive-inline-
 function renderStatus(): TemplateResult | typeof nothing { return state.status ? html`<wa-callout variant=${state.statusTone === "danger" ? "danger" : state.statusTone === "success" ? "success" : "neutral"}>${state.status}</wa-callout>` : nothing; }
 function setStatus(message: string, tone: "neutral" | "success" | "danger" = "neutral"): void { state.status = message; state.statusTone = tone; renderApp(); }
 function showError(error: unknown): void { state.loading = false; setStatus(error instanceof Error ? error.message : "请求失败", "danger"); }
-
-class ApiError extends Error { constructor(message: string, readonly status: number) { super(message); } }
-async function api<T = unknown>(path: string, options: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
-  const response = await fetch(`/api/drive${path}`, { method: options.method || "GET", credentials: "same-origin", headers: options.body === undefined ? undefined : { "content-type": "application/json" }, body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: options.signal });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({})) as { error?: unknown };
-    throw new ApiError(typeof data.error === "string" ? data.error : `请求失败（${response.status}）`, response.status);
-  }
-  return response.json() as Promise<T>;
-}
-
-async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
-  let timer: number | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => { timer = window.setTimeout(() => reject(new Error(message)), milliseconds); }),
-    ]);
-  } finally {
-    if (timer !== undefined) window.clearTimeout(timer);
-  }
-}

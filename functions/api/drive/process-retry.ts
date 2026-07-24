@@ -1,8 +1,8 @@
-import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
-import { getObjectText, headObject, putObjectText } from "../../../src/drive/cos";
-import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/http";
-import { fileMetaPath, processingStatusPath, sourcePath, type FileMetadata, type ProcessingStatus } from "../../../src/drive/knowledge";
-import { notifyProcessor } from "../../../src/drive/webhooks";
+import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
+import { getObjectText, headObject, putObjectText } from "../../../src/drive/server/cos";
+import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/server/http";
+import { fileMetaPath, processingStatusPath, sourcePath, type FileMetadata, type ProcessingStatus } from "../../../src/drive/server/knowledge";
+import { notifyProcessor } from "../../../src/drive/server/webhooks";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
   try {

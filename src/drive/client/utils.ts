@@ -1,3 +1,6 @@
+import type { KnowledgeFile, ProcessingState } from "../shared/contracts";
+import { PROCESSING_STALE_AFTER_MS } from "../shared/runtime";
+
 export function normalizeClientRelativePath(input: string): string {
   const path = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
   const parts = path.split("/");
@@ -51,16 +54,10 @@ const PROCESSING_LABELS: Record<ProcessingState, string> = {
   failed: "失败",
 };
 
-const STALE_AFTER_MS: Partial<Record<ProcessingState, number>> = {
-  queued: 2 * 60 * 1000,
-  processing: 30 * 60 * 1000,
-  indexing: 10 * 60 * 1000,
-};
-
 export function processingDisplay(file: KnowledgeFile, now = Date.now()): ProcessingDisplay {
   const processing = file.processing;
   if (!processing) return { label: "未开始处理", retryable: true, poll: false };
-  const staleAfter = STALE_AFTER_MS[processing.state];
+  const staleAfter = PROCESSING_STALE_AFTER_MS[processing.state];
   const updatedAt = Date.parse(processing.updatedAt);
   if (staleAfter && (!Number.isFinite(updatedAt) || now - updatedAt > staleAfter)) {
     return {
@@ -75,4 +72,3 @@ export function processingDisplay(file: KnowledgeFile, now = Date.now()): Proces
     poll: processing.state === "queued" || processing.state === "processing" || processing.state === "indexing",
   };
 }
-import type { KnowledgeFile, ProcessingState } from "./types";

@@ -1,7 +1,7 @@
-import { getDriveConfig, type DriveEnv } from "../../../src/drive/config";
-import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/http";
-import { deleteKnowledgeFile } from "../../../src/drive/knowledge";
-import { notifyIndexer } from "../../../src/drive/webhooks";
+import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
+import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/server/http";
+import { deleteKnowledgeFile } from "../../../src/drive/server/knowledge";
+import { notifyIndexer } from "../../../src/drive/server/webhooks";
 
 export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
   try {

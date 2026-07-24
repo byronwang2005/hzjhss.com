@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createRetrievedQaSystemMessage, normalizeQaMessages } from "../src/drive/qa";
-import { buildSerializedSearchIndex, searchSerializedIndex, tokenizeKnowledgeText } from "../src/drive/search";
+import { createRetrievedQaSystemMessage, normalizeQaMessages } from "../src/drive/server/qa";
+import { buildSerializedSearchIndex, searchSerializedIndex, tokenizeKnowledgeText } from "../src/drive/server/search";
 
 describe("knowledge retrieval", () => {
   it("tokenizes Chinese terms, bigrams, numbers and identifiers", () => {

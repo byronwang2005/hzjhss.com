@@ -2,7 +2,7 @@ import { html, type TemplateResult } from "lit";
 
 export type IconWeight = "regular" | "bold" | "fill" | "duotone";
 
-const iconSpriteUrl = "/assets/phosphor-sprite.svg?v=drive-icons-20260721-1";
+const iconSpriteUrl = "/assets/phosphor-sprite.svg";
 
 export function renderIcon(iconName: string, weight: IconWeight = "regular", className = ""): TemplateResult {
   const normalizedName = iconName.replace(/^ph-/, "").replace(/-fill$/, "");

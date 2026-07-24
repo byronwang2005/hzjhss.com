@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getDriveConfig, KNOWLEDGE_ROOT_PREFIX, type DriveEnv } from "../src/drive/config";
+import { getDriveConfig, KNOWLEDGE_ROOT_PREFIX, type DriveEnv } from "../src/drive/server/config";
 import {
   completeUpload,
   createKnowledgeTopic,
@@ -10,9 +10,9 @@ import {
   processingStatusPath,
   sourcePath,
   tempUploadPath,
-} from "../src/drive/knowledge";
-import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/session";
-import { jsonResponse } from "../src/drive/http";
+} from "../src/drive/server/knowledge";
+import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/server/session";
+import { jsonResponse } from "../src/drive/server/http";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 
 const env: DriveEnv = {

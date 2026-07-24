@@ -24,6 +24,8 @@ describe("knowledge client helpers", () => {
 
 describe("knowledge client surface", () => {
   const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+  const uploadPolicy = readFileSync(new URL("../src/drive/client/upload-policy.ts", import.meta.url), "utf8");
+  const sharedPolicy = readFileSync(new URL("../src/drive/shared/policy.ts", import.meta.url), "utf8");
 
   it("keeps only Q&A and administrator file management", () => {
     expect(source).toContain('<drive-ai-qa scope="global"');
@@ -36,8 +38,9 @@ describe("knowledge client surface", () => {
   });
 
   it("validates supported formats, PDF pages and upload progress", () => {
-    expect(source).toContain('"png", "jpg", "jpeg", "bmp", "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "md", "txt", "wps"');
-    expect(source).toContain("document.numPages > 300");
+    expect(sharedPolicy).toContain('"png", "jpg", "jpeg", "bmp"');
+    expect(sharedPolicy).toContain('"pdf", "doc", "docx", "ppt", "pptx"');
+    expect(uploadPolicy).toContain("document.numPages > FILE_LIMITS.pdfPages");
     expect(source).toContain('uppy.on("upload-progress"');
     expect(source).toContain('uppy.on("progress"');
     expect(source).toContain('aria-label="总体上传进度"');

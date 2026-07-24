@@ -17,6 +17,8 @@ skills-lock.json
 # Build and cache output
 dist/
 build/
+assets/
+scf/
 .cache/
 .parcel-cache/
 

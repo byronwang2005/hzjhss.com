@@ -2,22 +2,28 @@ import { readFileSync } from "node:fs";
 import { globSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const htmlFiles = ["404.html", "docs/index.html", ...globSync("docs/articles/*.html")];
+const htmlFiles = ["dist/404.html", "dist/docs/index.html", ...globSync("dist/docs/articles/*.html")];
 const publicMarkup = htmlFiles.map((file) => readFileSync(file, "utf8")).join("\n");
-const allPublicHtml = ["index.html", ...htmlFiles].map((file) => readFileSync(file, "utf8"));
-const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts"]
+const allPublicHtml = ["dist/index.html", ...htmlFiles].map((file) => readFileSync(file, "utf8"));
+const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts", "src/drive/client/upload-policy.ts"]
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
-const cssSource = ["theme.css", "styles.css", "src/drive/client/drive.css"]
+const cssSource = [
+  "src/shared/styles/tokens.css",
+  "src/site/styles/base.css",
+  "src/site/styles/pages.css",
+  "src/drive/client/styles/base.css",
+  "src/drive/client/styles/workspace.css",
+]
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
 
 describe("shared UI system", () => {
   it("loads the generated PDF worker from the hashed drive-assets directory", () => {
-    const workerPath = globSync("assets/drive-assets/pdf.worker-*.mjs")[0];
+    const workerPath = globSync("dist/assets/drive-assets/pdf.worker-*.mjs")[0];
     expect(workerPath).toBeTruthy();
-    const driveBundle = readFileSync("assets/drive.js", "utf8");
-    expect(driveBundle).toContain(workerPath.replace(/^assets\//, ""));
+    const driveBundle = readFileSync("dist/assets/drive.js", "utf8");
+    expect(driveBundle).toContain(workerPath.replace(/^dist\/assets\//, ""));
   });
 
   it("loads the shared icon sprite from its deployed assets path", () => {
@@ -28,22 +34,22 @@ describe("shared UI system", () => {
 
   it("publishes only the explicit static-site allowlist", () => {
     const buildScript = readFileSync("scripts/build-pages.mjs", "utf8");
-    expect(buildScript).toContain('["assets", "docs"]');
-    expect(buildScript).not.toMatch(/cp\([^\n]*(?:src|functions|scf|package\.json|node_modules)/);
+    expect(buildScript).toContain('"public", "assets"');
+    expect(buildScript).not.toMatch(/cp\([^\n]*(?:functions|scf|package\.json|node_modules)/);
     expect(readFileSync("package.json", "utf8")).toContain("wrangler pages dev dist");
   });
 
   it("uses the generated Phosphor sprite without hand-drawn paths", () => {
     expect(publicMarkup).not.toMatch(/<path\b/i);
     expect(driveSource).not.toMatch(/<path\b/i);
-    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    const sprite = readFileSync("dist/assets/phosphor-sprite.svg", "utf8");
     expect(sprite).toContain('id="ph-regular-copy"');
     expect(sprite).toContain('id="ph-bold-check"');
     expect(sprite).toContain('id="ph-duotone-files"');
   });
 
   it("includes every SVG symbol used by the AI Q&A component", () => {
-    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    const sprite = readFileSync("dist/assets/phosphor-sprite.svg", "utf8");
     for (const symbol of [
       "ph-regular-arrow-clockwise",
       "ph-regular-chat-circle-dots",
@@ -60,7 +66,7 @@ describe("shared UI system", () => {
   });
 
   it("includes every statically referenced drive icon at its requested weight", () => {
-    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    const sprite = readFileSync("dist/assets/phosphor-sprite.svg", "utf8");
     const iconCalls = driveSource.matchAll(/render(?:Drive)?Icon\("([^"]+)"(?:,\s*"(regular|bold|fill|duotone)")?/g);
 
     for (const [, rawName, requestedWeight] of iconCalls) {
@@ -80,7 +86,7 @@ describe("shared UI system", () => {
   });
 
   it("publishes matching light and dark semantic color tokens", () => {
-    const themeCss = readFileSync("theme.css", "utf8");
+    const themeCss = readFileSync("src/shared/styles/tokens.css", "utf8");
     const lightBlock = themeCss.match(/^:root \\{([\\s\\S]*?)^\\}/m)?.[1] || "";
     const darkBlock = themeCss.match(/^:root\\[data-theme="dark"\\] \\{([\\s\\S]*?)^\\}/m)?.[1] || "";
     const colorTokens = (block: string) => [...block.matchAll(/(--jh-color-[\\w-]+)\\s*:/g)].map((match) => match[1]).sort();
@@ -101,7 +107,12 @@ describe("shared UI system", () => {
   });
 
   it("keeps theme palette declarations in the shared theme only", () => {
-    const componentCss = ["styles.css", "src/drive/client/drive.css"]
+    const componentCss = [
+      "src/site/styles/base.css",
+      "src/site/styles/pages.css",
+      "src/drive/client/styles/base.css",
+      "src/drive/client/styles/workspace.css",
+    ]
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     expect(componentCss).not.toMatch(/--jh-color-[\\w-]+\\s*:/);
@@ -109,13 +120,13 @@ describe("shared UI system", () => {
   });
 
   it("includes the theme action icons in the generated sprite", () => {
-    const sprite = readFileSync("assets/phosphor-sprite.svg", "utf8");
+    const sprite = readFileSync("dist/assets/phosphor-sprite.svg", "utf8");
     expect(sprite).toContain('id="ph-regular-sun"');
     expect(sprite).toContain('id="ph-regular-moon"');
   });
 
   it("covers public page controls through the shared icon initializer", () => {
-    const siteScript = readFileSync("site.js", "utf8");
+    const siteScript = readFileSync("src/site/client/site.js", "utf8");
     for (const selector of [".top-nav a", ".back-link", ".footer a", ".article-list-item em", ".toc-toggle", ".copy-button", ".system-tab[data-system]", ".architecture-tab"]) {
       expect(siteScript).toContain(`querySelectorAll("${selector}")`);
     }
@@ -137,7 +148,7 @@ describe("shared UI system", () => {
   });
 
   it("keeps optional file row actions aligned without changing mobile behavior", () => {
-    const driveCss = readFileSync("src/drive/client/drive.css", "utf8");
+    const driveCss = readFileSync("src/drive/client/styles/workspace.css", "utf8");
     const baseRuleStart = driveCss.indexOf(".drive-row-actions {");
     const baseRuleEnd = driveCss.indexOf("}", baseRuleStart);
     const baseRule = driveCss.slice(baseRuleStart, baseRuleEnd);
@@ -153,7 +164,7 @@ describe("shared UI system", () => {
   });
 
   it("keeps native file and folder inputs hidden behind the upload actions", () => {
-    const driveCss = readFileSync("src/drive/client/drive.css", "utf8");
+    const driveCss = readFileSync("src/drive/client/styles/workspace.css", "utf8");
     const hiddenUploadInputs = driveCss.match(
       /\.drive-upload-actions > \[data-file-input\],\s*\.drive-upload-actions > \[data-folder-input\] \{([^}]*)\}/,
     );

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="Codex配置教程。">
+    <title>Codex配置教程</title>
+    {{site-assets}}
+  </head>
+  <body>
+    <a class="skip-link" href="#setup-guide">跳到正文</a>
+    <div class="page setup-guide-page">
+      {{site-header}}
+
+      <main id="setup-guide">
+      <section class="hero article-hero">
+        <div class="hero-grid">
+          <a class="back-link" href="../index.html">返回AI手册</a>
+          <h1>Codex配置教程</h1>
+          <div class="article-meta" role="group" aria-label="文章信息">
+            <span>15分钟阅读</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="article-layout setup-layout">
+        <aside class="article-toc" data-toc aria-label="目录">
+          <button class="toc-toggle" type="button" aria-expanded="true">目录</button>
+          <a href="#install-codex-app">安装 Codex App</a>
+          <a href="#install-codex-plus-plus">安装 Codex++</a>
+          <a href="#register-account">注册账号</a>
+          <a href="#create-token">添加令牌</a>
+          <a href="#configure-provider">配置供应商</a>
+          <a href="#launch-codex">启动 Codex</a>
+        </aside>
+
+        <section class="guide article-content" aria-label="配置步骤">
+        <div class="step" id="install-codex-app">
+          <div class="step-marker">
+            <span>01</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第一步：安装 Codex App</h2>
+                <p>
+                  根据当前系统选择对应安装方式。macOS 可从
+                  <a href="https://github.com/Wangnov/codex-app-mirror/releases" target="_blank" rel="noopener noreferrer">codex-app-mirror releases</a>
+                  下载最新版安装包，Windows 请通过
+                  <a href="https://apps.microsoft.com/" target="_blank" rel="noopener noreferrer">Microsoft Store</a>
+                  安装。
+                </p>
+              </div>
+            </div>
+            <div class="setup-choice" role="group" aria-label="操作系统和芯片选择提示">
+              <p>先选择你正在使用的系统。选择 macOS 后，再在 macOS 选项内选择芯片版本。</p>
+              <div class="system-tabs" role="tablist" aria-label="选择操作系统">
+                <div class="system-option is-expanded" data-system-option="macos">
+                  <button class="system-tab is-active" type="button" aria-pressed="true" data-system="macos">
+                    <span>macOS</span>
+                  </button>
+                  <div class="architecture-tabs" role="tablist" aria-label="选择芯片架构" data-architecture-choice>
+                    <button class="system-tab architecture-tab is-active" type="button" aria-pressed="true" data-architecture="arm64">
+                      <span>M芯片</span>
+                    </button>
+                    <button class="system-tab architecture-tab" type="button" aria-pressed="false" data-architecture="x64">
+                      <span>Intel芯片</span>
+                    </button>
+                  </div>
+                </div>
+                <button class="system-tab" type="button" aria-pressed="false" data-system="windows">
+                  <span>Windows</span>
+                </button>
+              </div>
+            </div>
+            <div class="body-grid system-panel is-active" data-system-panel="macos">
+              <ol class="steps">
+                <li>
+                  打开
+                  <a href="https://github.com/Wangnov/codex-app-mirror/releases" target="_blank" rel="noopener noreferrer">codex-app-mirror releases</a>
+                  ，选择标记为 Latest 的版本。
+                </li>
+                <li>
+                  在 Assets 中下载 <code data-codex-app-package>Codex-mac-arm64.dmg</code>。
+                </li>
+                <li>运行安装包并按系统提示完成安装。</li>
+                <li>安装完成后打开 Codex App，确认应用能正常启动。</li>
+              </ol>
+            </div>
+            <div class="body-grid system-panel" data-system-panel="windows" hidden>
+              <ol class="steps">
+                <li>
+                  打开
+                  <a href="https://apps.microsoft.com/" target="_blank" rel="noopener noreferrer">Microsoft Store</a>
+                  。
+                </li>
+                <li>
+                  搜索 <code>Codex</code>。
+                </li>
+                <li>进入 Codex 页面并点击“获取”或“安装”。</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="step" id="install-codex-plus-plus">
+          <div class="step-marker">
+            <span>02</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第二步：安装 Codex++</h2>
+                <p>
+                  访问
+                  <a href="https://github.com/BigPizzaV3/CodexPlusPlus/releases" target="_blank" rel="noopener noreferrer">codex++ releases</a>
+                  下载最新版安装包，并按当前系统完成安装。
+                </p>
+              </div>
+            </div>
+            <div class="body-grid system-panel is-active" data-system-panel="codex-plus-macos">
+              <ol class="steps">
+                <li>
+                  打开
+                  <a href="https://github.com/BigPizzaV3/CodexPlusPlus/releases" target="_blank" rel="noopener noreferrer">codex++ releases</a>
+                  ，选择标记为 Latest 的版本。
+                </li>
+                <li>
+                  在 Assets 中下载 <code data-codex-plus-package>xxx-macos-arm64.dmg</code>。
+                </li>
+                <li>运行安装包并按系统提示完成安装。</li>
+                <li>安装完成后重新打开 Codex 或终端，再检查 Codex++ 是否正常加载。</li>
+              </ol>
+            </div>
+            <div class="body-grid system-panel" data-system-panel="codex-plus-windows" hidden>
+              <ol class="steps">
+                <li>
+                  打开
+                  <a href="https://github.com/BigPizzaV3/CodexPlusPlus/releases" target="_blank" rel="noopener noreferrer">codex++ releases</a>
+                  ，选择标记为 Latest 的版本。
+                </li>
+                <li>
+                  在 Assets 中下载 <code data-codex-plus-windows-package>xxx-windows-x64-setup.exe</code>。
+                </li>
+                <li>运行安装包并按系统提示完成安装。</li>
+                <li>安装完成后重新打开 Codex 或终端，再检查 Codex++ 是否正常加载。</li>
+              </ol>
+            </div>
+            <p class="note-line system-only-note" data-system-note="macos">
+              macOS 如果提示无法打开来自互联网的应用，请在
+              <a href="x-apple.systempreferences:com.apple.preference.security?Privacy" rel="noopener noreferrer">“系统设置 → 隐私与安全性”</a>
+              中允许打开对应应用。
+            </p>
+          </div>
+        </div>
+
+        <div class="step" id="register-account">
+          <div class="step-marker">
+            <span>03</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第三步：注册账号</h2>
+                <p>
+                  前往
+                  <a href="http://124.222.133.97" target="_blank" rel="noopener noreferrer">嘉合杉升AI接入系统</a>
+                  完成注册。注册时用户名请使用真名，方便管理员识别并给予额度。本系统获得的 API Key 只能用于 Codex，不可接入龙虾或其他工具。
+                </p>
+              </div>
+            </div>
+            <div class="body-grid text-panel">
+              <ol class="steps">
+                <li>
+                  打开
+                  <a href="http://124.222.133.97/register" target="_blank" rel="noopener noreferrer">注册页面</a>。
+                </li>
+                <li>用户名填写本人真名，避免使用昵称或缩写。</li>
+                <li>提交注册后等待管理员审核并分配额度。</li>
+                <li>额度生效后，只在 Codex 中使用对应 API Key，不要接入龙虾或其他工具。</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="step" id="create-token">
+          <div class="step-marker">
+            <span>04</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第四步：添加令牌</h2>
+              </div>
+            </div>
+            <div class="body-grid text-panel">
+              <ol class="steps">
+                <li>
+                  登录嘉合杉升 AI 接入系统，进入<a href="http://124.222.133.97/console" target="_blank" rel="noopener noreferrer">控制台</a>。
+                </li>
+                <li>
+                  在控制台中打开
+                  <a href="http://124.222.133.97/console/token" target="_blank" rel="noopener noreferrer">“令牌管理”</a>
+                  。
+                </li>
+                <li>点击“添加令牌”。</li>
+                <li>在“基本信息”中填写“名称”，名称可以随便命名。</li>
+                <li>复制创建令牌后生成的密钥，确认它以 <code>sk-</code> 开头。</li>
+                <li>将 API Key 保存到本地，后续配置 Codex 时会用到。</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <div class="step" id="configure-provider">
+          <div class="step-marker">
+            <span>05</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第五步：配置供应商</h2>
+                <p>确认桌面上已有 Codex、Codex++ 和 Codex++ 管理工具。先关闭后台中的相关应用会话，再打开 Codex++ 管理工具，按右侧表单填写供应商配置。</p>
+              </div>
+            </div>
+            <div class="body-grid">
+              <ol class="steps">
+                <li>确认后台中的 Codex、Codex++ 和 Codex++ 管理工具会话都已关闭。</li>
+                <li>打开 Codex++ 管理工具。</li>
+                <li>在侧边栏选择“供应商配置”。</li>
+                <li>点击“+ 添加供应商”。</li>
+                <li>按照右侧表单完成配置，其中 Key 使用第四步保存的内容。</li>
+                <li>点击上方“保存”按钮保存配置。</li>
+              </ol>
+              <div class="provider-form" role="group" aria-label="供应商配置表单示例">
+                <div class="form-field">
+                  <span class="field-label">名称</span>
+                  <div class="field-value">
+                    <button class="copy-button" type="button" aria-label="复制名称">
+                      <span>复制</span>
+                    </button>
+                    <code>jhss</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">接入模式</span>
+                  <div class="field-value">
+                    <code>选择“纯 API”</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">配置模型</span>
+                  <div class="field-value">
+                    <code>无需填写</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">Codex 目标</span>
+                  <div class="field-value">
+                    <code>勾选“启用目标功能”</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">Base URL</span>
+                  <div class="field-value">
+                    <button class="copy-button" type="button" aria-label="复制 Base URL">
+                      <span>复制</span>
+                    </button>
+                    <code>http://124.222.133.97/v1</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">Key</span>
+                  <div class="field-value">
+                    <code>使用第四步保存的 API Key</code>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <span class="field-label">上游协议</span>
+                  <div class="field-value">
+                    <code>选择“Responses API”</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step" id="launch-codex">
+          <div class="step-marker">
+            <span>06</span>
+          </div>
+          <div class="step-content">
+            <div class="section-head">
+              <div>
+                <h2>第六步：启动配置好的 Codex</h2>
+              </div>
+            </div>
+            <div class="body-grid text-panel">
+              <ol class="steps">
+                <li>回到“供应商配置”列表。</li>
+                <li>选择并使用刚刚添加的供应商配置。</li>
+                <li>点击上方“重启 Codex++”按钮，让配置生效。</li>
+                <li>双击桌面上的 Codex++（注意不是Codex），启动已经配置好的 Codex。</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+        </section>
+      </div>
+
+      </main>
+      {{article-footer}}
+    </div>
+    <script src="../../site.js" defer></script>
+  </body>
+</html>
