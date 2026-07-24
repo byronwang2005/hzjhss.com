@@ -23,6 +23,7 @@ export class DriveAiQa extends LitElement {
     scope: { type: String },
     topicId: { type: String, attribute: "topic-id" },
     topicName: { type: String, attribute: "topic-name" },
+    displayName: { type: String, attribute: "display-name" },
     ready: { type: Boolean },
     question: { state: true },
     messages: { state: true },
@@ -34,6 +35,7 @@ export class DriveAiQa extends LitElement {
   accessor scope: "global" | "topic" = "topic";
   accessor topicId = "";
   accessor topicName = "";
+  accessor displayName = "";
   accessor ready = false;
   private accessor question = "";
   private accessor messages: QaChatMessage[] = [];
@@ -133,7 +135,9 @@ export class DriveAiQa extends LitElement {
   }
 
   private renderEmptyState(): TemplateResult {
-    const readyTitle = this.scope === "global" ? "在全资料库内提问" : `对${this.topicName || "当前专题"}提问`;
+    const readyTitle = this.scope === "global"
+      ? `欢迎回来，${this.displayName}👋`
+      : `对${this.topicName || "当前专题"}提问`;
     const suggestions = this.scope === "global"
       ? [
           ["calendar-dots", "近期变化", "请汇总各专题最近的关键变化，并分别标明资料日期和来源。"],
@@ -145,20 +149,11 @@ export class DriveAiQa extends LitElement {
           ["warning", "检查近期风险", "结合最近的时效资料，当前有哪些风险、反例或待核验事项？"],
           ["link", "定位引用", "请列出支持关键结论的文件和具体位置。"],
         ];
-    const capabilities = [
-      ["database", "方法论指导"],
-      ["calendar-dots", "时效资料举证"],
-      ["link", "来源引用"],
-      ["chat-circle-dots", "连续追问"],
-    ];
     return html`
       <div class="drive-ai-qa-empty">
         <div><h3>${this.ready ? readyTitle : "等待文件处理"}</h3><p>${this.ready ? "直接提问，或从下面三个方向开始。回答会尽量标明资料来源。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
         ${this.ready
           ? html`
-              <div class="drive-ai-qa-capabilities" aria-label="问答能力">
-                ${capabilities.map(([icon, label]) => html`<span>${renderIcon(icon)}${label}</span>`)}
-              </div>
               <div class="drive-ai-qa-suggestions" aria-label="问题建议">
                 ${suggestions.map(([icon, label, prompt]) => html`
                   <button type="button" @click=${() => this.useSuggestion(prompt)}>${renderIcon(icon)}<span>${label}</span></button>

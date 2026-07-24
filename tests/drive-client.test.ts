@@ -44,12 +44,20 @@ describe("knowledge client surface", () => {
 
   it("keeps only Q&A and administrator file management", () => {
     expect(source).toContain('<drive-ai-qa scope="global"');
+    expect(source).toContain(".displayName=${state.displayName}");
     expect(source).toContain('<drive-ai-qa scope="topic"');
     expect(source).toContain('state.role === "admin"');
     expect(source).not.toContain("Agent");
     expect(source).not.toContain("成果");
     expect(source).not.toContain("Context");
     expect(source).not.toContain("owner");
+  });
+
+  it("keeps the overview compact and exposes topic creation only to administrators", () => {
+    expect(source).not.toContain('<span class="drive-eyebrow">知识工作台</span>');
+    expect(source).not.toContain("从全部资料中提问，快速获得带来源的可靠答案。");
+    expect(source).toContain('<div class="drive-topic-panel-actions">');
+    expect(source).toContain('state.role === "admin" ? html`<button class="drive-control" data-action="create-topic"');
   });
 
   it("validates supported formats, PDF pages and upload progress", () => {

@@ -13,6 +13,7 @@ async function mountQa(scope: "global" | "topic" = "global"): Promise<DriveAiQa>
   qa.scope = scope;
   qa.topicId = scope === "topic" ? "t_abcdefghijkl" : "";
   qa.topicName = scope === "topic" ? "新能源" : "";
+  qa.displayName = scope === "global" ? "汪旭" : "";
   qa.ready = true;
   document.body.appendChild(qa);
   await qa.updateComplete;
@@ -108,18 +109,17 @@ describe("drive AI Q&A component", () => {
     const globalQa = await mountQa("global");
     const topicQa = await mountQa("topic");
 
-    expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("在全资料库内提问");
+    expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("欢迎回来，汪旭👋");
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("对新能源提问");
     expect(globalQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("全部专题");
     expect(topicQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("新能源");
   });
 
-  it("shows grounded capabilities and scope-aware suggestions", async () => {
+  it("shows scope-aware suggestions without capability badges", async () => {
     const globalQa = await mountQa("global");
     const topicQa = await mountQa("topic");
 
-    expect(globalQa.querySelector(".drive-ai-qa-capabilities")?.textContent).toContain("方法论指导");
-    expect(globalQa.querySelector(".drive-ai-qa-capabilities")?.textContent).toContain("连续追问");
+    expect(globalQa.querySelector(".drive-ai-qa-capabilities")).toBeNull();
     expect(globalQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("跨专题比较");
     expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("按方法论分析");
     expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("定位引用");
@@ -137,6 +137,7 @@ describe("drive AI Q&A component", () => {
     expect(readyQa.classList.contains("has-notice")).toBe(false);
     expect(readyQa.querySelector(".drive-ai-qa")?.classList.contains("has-notice")).toBe(false);
     expect(waitingQa.querySelector(".drive-ai-qa")?.classList.contains("has-notice")).toBe(true);
+    expect(waitingQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("等待文件处理");
   });
 
   it("does not impose a product-level question length limit", async () => {

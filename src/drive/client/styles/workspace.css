@@ -386,6 +386,19 @@
   font-size: 12px;
 }
 
+.drive-topic-panel-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.drive-topic-panel-actions > span {
+  color: var(--jh-color-text-muted);
+  font-size: 12px;
+}
+
 .drive-output-card,
 .drive-topic-card {
   display: grid;
@@ -1513,6 +1526,10 @@ body.drive-body {
 
 .drive-panel-head > span {
   color: var(--jh-color-text-muted);
+  font-size: 11px;
+}
+
+.drive-topic-panel-actions > span {
   font-size: 11px;
 }
 
@@ -3024,35 +3041,6 @@ drive-pdf-preview {
   font-size: clamp(27px, 3vw, 40px);
 }
 
-.drive-ai-qa-capabilities {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 20px;
-}
-
-.drive-ai-qa-capabilities > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 5px 9px;
-  color: var(--jh-color-text-muted);
-  background: var(--jh-color-surface-subtle);
-  border: 1px solid var(--jh-color-border-soft);
-  border-radius: var(--jh-radius-pill);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.drive-ai-qa-capabilities .ui-icon {
-  color: var(--jh-color-brand);
-}
-
-.drive-ai-qa-suggestions {
-  margin-top: 22px;
-}
-
 @media (max-width: 760px) {
   .drive-file-role-tabs {
     gap: 5px;
@@ -3111,16 +3099,6 @@ drive-pdf-preview {
     font-size: 27px;
   }
 
-  .drive-ai-qa-capabilities {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .drive-ai-qa-capabilities > span {
-    justify-content: flex-start;
-    min-width: 0;
-  }
 }
 
 @media (max-width: 440px) {

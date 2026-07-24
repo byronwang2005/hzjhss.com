@@ -387,9 +387,7 @@ function renderLogin(): TemplateResult {
     <div class="drive-login-story">
       <div class="drive-brand-lockup"><img src="/assets/jhss-logo-cropped.png" alt="嘉合杉升"><span>嘉合杉升</span></div>
       <div class="drive-login-copy">
-        <span class="drive-eyebrow">企业知识工作台</span>
         <h1>把知识，<br>变成答案。</h1>
-        <p>从分散资料中快速提取结论、核验风险，并回到每一处可信来源。</p>
       </div>
       <div class="drive-login-principles" aria-label="知识库能力">
         <span>${renderIcon("database")}跨专题检索</span>
@@ -409,10 +407,10 @@ function renderLogin(): TemplateResult {
 }
 
 function renderShell(): TemplateResult {
-  const title = state.mode === "topic" ? state.topic?.name : state.mode === "create" ? "新建专题" : `欢迎回来，${state.displayName}`;
+  const title = state.mode === "topic" ? state.topic?.name : "新建专题";
   const description = state.mode === "topic"
     ? state.topic?.ready ? "从当前专题中提问，或管理专题资料。" : "资料仍在处理中，完成后即可开始问答。"
-    : state.mode === "create" ? "建立一个独立的资料范围，让后续问答更聚焦。" : "从全部资料中提问，快速获得带来源的可靠答案。";
+    : "建立一个独立的资料范围，让后续问答更聚焦。";
   return html`<section class="drive-dashboard">
     <header class="drive-appbar">
       <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" data-action="back" aria-label="返回知识库首页">
@@ -421,10 +419,12 @@ function renderShell(): TemplateResult {
       <div class="drive-appbar-meta"><a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a>${renderThemeToggle()}<span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
     </header>
     <main class="drive-dashboard-main">
-      <div class="drive-page-head"><div>
-        ${state.mode !== "overview" ? html`<button class="drive-back-link" type="button" data-action="back">${renderIcon("arrow-left")}返回知识库</button>` : html`<span class="drive-eyebrow">知识工作台</span>`}
-        <h1>${title}</h1><p>${description}</p>
-      </div><div class="drive-head-actions">${state.mode === "overview" && state.role === "admin" ? html`<button class="drive-control" data-action="create-topic" type="button">${renderIcon("folder-plus")}新建专题</button>` : nothing}</div></div>
+      ${state.mode === "overview" ? nothing : html`
+        <div class="drive-page-head"><div>
+          <button class="drive-back-link" type="button" data-action="back">${renderIcon("arrow-left")}返回知识库</button>
+          <h1>${title}</h1><p>${description}</p>
+        </div></div>
+      `}
       ${renderStatus()}
       ${state.loading ? renderLoading() : state.mode === "overview" ? renderOverview() : state.mode === "create" ? renderCreate() : renderTopic()}
     </main>
@@ -433,7 +433,7 @@ function renderShell(): TemplateResult {
 
 function renderOverview(): TemplateResult {
   const ready = state.topics.some((topic) => topic.ready);
-  return html`<div class="drive-two-column"><drive-ai-qa scope="global" .ready=${ready}></drive-ai-qa><aside class="drive-panel drive-topic-panel"><div class="drive-panel-head"><div><span class="drive-eyebrow">资料范围</span><h2>专题</h2></div><span>${state.topics.length} 个</span></div>
+  return html`<div class="drive-two-column"><drive-ai-qa scope="global" .displayName=${state.displayName} .ready=${ready}></drive-ai-qa><aside class="drive-panel drive-topic-panel"><div class="drive-panel-head"><div><span class="drive-eyebrow">资料范围</span><h2>专题</h2></div><div class="drive-topic-panel-actions"><span>${state.topics.length} 个</span>${state.role === "admin" ? html`<button class="drive-control" data-action="create-topic" type="button">${renderIcon("folder-plus")}新建专题</button>` : nothing}</div></div>
     ${state.topics.length ? html`<div class="drive-topic-grid">${repeat(state.topics, (topic) => topic.id, (topic) => html`<button class="drive-topic-card" type="button" data-action="open-topic" data-topic-id=${topic.id}><span class="drive-topic-card-icon">${renderIcon("folder")}</span><span><strong>${topic.name}</strong><small class=${topic.ready ? "is-ready" : ""}>${topic.ready ? "可问答" : "处理中"}</small></span>${renderIcon("arrow-right")}</button>`)}</div>` : html`<div class="drive-empty">${renderIcon("folder")}<h3>还没有专题</h3><p>创建专题并上传资料后，即可开始可追溯问答。</p></div>`}
   </aside></div>`;
 }
