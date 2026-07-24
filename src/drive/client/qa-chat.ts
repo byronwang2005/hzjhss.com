@@ -17,6 +17,29 @@ interface QaChatMessage {
 }
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: false });
+const GREETING_TYPE_SPEED_MS = 70;
+const GREETING_HOLD_MS = 1_800;
+const GREETING_DELETE_SPEED_MS = 35;
+const GREETING_GAP_MS = 250;
+
+function greetingOptions(displayName: string): string[] {
+  const name = displayName.trim() || "朋友";
+  return [
+    `欢迎回来，${name}👋`,
+    `Welcome back, ${name} 👋`,
+    `おかえりなさい、${name}👋`,
+    `다시 오신 것을 환영합니다, ${name} 👋`,
+    `Bon retour, ${name} 👋`,
+    `Qué bueno verte de nuevo, ${name} 👋`,
+  ];
+}
+
+function splitGraphemes(value: string): string[] {
+  if (typeof Intl.Segmenter === "function") {
+    return [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)].map(({ segment }) => segment);
+  }
+  return Array.from(value);
+}
 
 export class DriveAiQa extends LitElement {
   static properties = {
@@ -30,6 +53,9 @@ export class DriveAiQa extends LitElement {
     streaming: { state: true },
     status: { state: true },
     statusTone: { state: true },
+    typedGreeting: { state: true },
+    greetingLabel: { state: true },
+    reduceGreetingMotion: { state: true },
   };
 
   accessor scope: "global" | "topic" = "topic";
@@ -42,17 +68,37 @@ export class DriveAiQa extends LitElement {
   private accessor streaming = false;
   private accessor status = "";
   private accessor statusTone: "neutral" | "danger" | "success" = "neutral";
+  private accessor typedGreeting = "";
+  private accessor greetingLabel = "";
+  private accessor reduceGreetingMotion = false;
 
   private abortController: AbortController | null = null;
   private conversationKey = "";
+  private greetingTimer: number | undefined;
+  private greetingGeneration = 0;
+  private greetingIndex = -1;
+  private greetingMotionQuery: MediaQueryList | null = null;
 
   protected createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
   }
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    if (typeof window.matchMedia === "function") {
+      this.greetingMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+      this.reduceGreetingMotion = this.greetingMotionQuery.matches;
+      this.greetingMotionQuery.addEventListener?.("change", this.handleGreetingMotionChange);
+    }
+    if (this.hasUpdated) this.reconcileGreetingAnimation();
+  }
+
   disconnectedCallback(): void {
     this.abortController?.abort();
     this.abortController = null;
+    this.stopGreetingAnimation();
+    this.greetingMotionQuery?.removeEventListener?.("change", this.handleGreetingMotionChange);
+    this.greetingMotionQuery = null;
     super.disconnectedCallback();
   }
 
@@ -64,6 +110,15 @@ export class DriveAiQa extends LitElement {
     this.conversationKey = nextKey;
     if (changed.has("ready") && !this.ready && this.streaming) {
       this.abortController?.abort();
+    }
+    if (
+      changed.has("scope")
+      || changed.has("ready")
+      || changed.has("displayName")
+      || changed.has("messages")
+      || changed.has("reduceGreetingMotion")
+    ) {
+      this.reconcileGreetingAnimation();
     }
   }
 
@@ -135,9 +190,9 @@ export class DriveAiQa extends LitElement {
   }
 
   private renderEmptyState(): TemplateResult {
-    const readyTitle = this.scope === "global"
-      ? `欢迎回来，${this.displayName}👋`
-      : `对${this.topicName || "当前专题"}提问`;
+    const isAnimatedGreeting = this.scope === "global" && this.ready;
+    const fallbackGreeting = greetingOptions(this.displayName)[0];
+    const readyTitle = isAnimatedGreeting ? fallbackGreeting : `对${this.topicName || "当前专题"}提问`;
     const suggestions = this.scope === "global"
       ? [
           ["calendar-dots", "近期变化", "请汇总各专题最近的关键变化，并分别标明资料日期和来源。"],
@@ -151,7 +206,15 @@ export class DriveAiQa extends LitElement {
         ];
     return html`
       <div class="drive-ai-qa-empty">
-        <div><h3>${this.ready ? readyTitle : "等待文件处理"}</h3><p>${this.ready ? "直接提问，或从下面三个方向开始。回答会尽量标明资料来源。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
+        <div><h3
+          class=${isAnimatedGreeting ? "drive-ai-qa-typewriter-title" : nothing}
+          aria-label=${isAnimatedGreeting ? this.greetingLabel || fallbackGreeting : nothing}
+          aria-live=${isAnimatedGreeting ? "off" : nothing}
+        >${this.ready
+            ? isAnimatedGreeting
+              ? html`<span class=${classMap({ "drive-ai-qa-typewriter": true, "is-active": !this.reduceGreetingMotion })} aria-hidden="true">${this.typedGreeting}</span>`
+              : readyTitle
+            : "等待文件处理"}</h3><p>${this.ready ? "直接提问，或从下面三个方向开始。回答会尽量标明资料来源。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
         ${this.ready
           ? html`
               <div class="drive-ai-qa-suggestions" aria-label="问题建议">
@@ -163,6 +226,99 @@ export class DriveAiQa extends LitElement {
           : nothing}
       </div>
     `;
+  }
+
+  private handleGreetingMotionChange = (event: MediaQueryListEvent): void => {
+    this.reduceGreetingMotion = event.matches;
+  };
+
+  private reconcileGreetingAnimation(): void {
+    if (!this.shouldAnimateGreeting()) {
+      this.stopGreetingAnimation();
+      return;
+    }
+    if (this.reduceGreetingMotion) {
+      this.showStaticGreeting();
+      return;
+    }
+    this.startGreetingAnimation();
+  }
+
+  private shouldAnimateGreeting(): boolean {
+    return this.isConnected && this.scope === "global" && this.ready && this.messages.length === 0;
+  }
+
+  private showStaticGreeting(): void {
+    this.stopGreetingAnimation();
+    const greeting = this.selectNextGreeting();
+    this.greetingLabel = greeting;
+    this.typedGreeting = greeting;
+  }
+
+  private startGreetingAnimation(): void {
+    this.stopGreetingAnimation();
+    const generation = this.greetingGeneration;
+    this.typeNextGreeting(generation);
+  }
+
+  private typeNextGreeting(generation: number): void {
+    if (!this.isGreetingGenerationActive(generation)) return;
+    const greeting = this.selectNextGreeting();
+    const graphemes = splitGraphemes(greeting);
+    let length = 0;
+    this.greetingLabel = greeting;
+    this.typedGreeting = "";
+
+    const typeNext = (): void => {
+      if (!this.isGreetingGenerationActive(generation)) return;
+      length += 1;
+      this.typedGreeting = graphemes.slice(0, length).join("");
+      if (length < graphemes.length) {
+        this.scheduleGreeting(typeNext, GREETING_TYPE_SPEED_MS);
+      } else {
+        this.scheduleGreeting(deleteNext, GREETING_HOLD_MS);
+      }
+    };
+
+    const deleteNext = (): void => {
+      if (!this.isGreetingGenerationActive(generation)) return;
+      length -= 1;
+      this.typedGreeting = graphemes.slice(0, length).join("");
+      if (length > 0) {
+        this.scheduleGreeting(deleteNext, GREETING_DELETE_SPEED_MS);
+      } else {
+        this.scheduleGreeting(() => this.typeNextGreeting(generation), GREETING_GAP_MS);
+      }
+    };
+
+    this.scheduleGreeting(typeNext, GREETING_TYPE_SPEED_MS);
+  }
+
+  private selectNextGreeting(): string {
+    const greetings = greetingOptions(this.displayName);
+    if (this.greetingIndex < 0) {
+      this.greetingIndex = Math.floor(Math.random() * greetings.length);
+    } else {
+      const candidate = Math.floor(Math.random() * (greetings.length - 1));
+      this.greetingIndex = candidate >= this.greetingIndex ? candidate + 1 : candidate;
+    }
+    return greetings[this.greetingIndex];
+  }
+
+  private scheduleGreeting(callback: () => void, delay: number): void {
+    this.greetingTimer = window.setTimeout(callback, delay);
+  }
+
+  private stopGreetingAnimation(): void {
+    this.greetingGeneration += 1;
+    if (this.greetingTimer !== undefined) {
+      window.clearTimeout(this.greetingTimer);
+      this.greetingTimer = undefined;
+    }
+  }
+
+  private isGreetingGenerationActive(generation: number): boolean {
+    return generation === this.greetingGeneration && !this.reduceGreetingMotion && this.shouldAnimateGreeting();
   }
 
   private renderMessage(message: QaChatMessage): TemplateResult {

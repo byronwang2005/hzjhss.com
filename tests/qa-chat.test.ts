@@ -5,8 +5,25 @@ import { DriveAiQa } from "../src/drive/client/qa-chat";
 
 afterEach(() => {
   document.body.replaceChildren();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+function stubMedia(options: { reducedMotion?: boolean; coarsePointer?: boolean } = {}): void {
+  vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)"
+      ? Boolean(options.reducedMotion)
+      : query === "(pointer: coarse)" && Boolean(options.coarsePointer),
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
+}
 
 async function mountQa(scope: "global" | "topic" = "global"): Promise<DriveAiQa> {
   const qa = new DriveAiQa();
@@ -106,10 +123,14 @@ describe("drive AI Q&A component", () => {
   });
 
   it("uses scope-specific empty-state titles", async () => {
+    stubMedia({ reducedMotion: true });
+    vi.spyOn(Math, "random").mockReturnValue(0);
     const globalQa = await mountQa("global");
     const topicQa = await mountQa("topic");
 
     expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("欢迎回来，汪旭👋");
+    expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.getAttribute("aria-label")).toBe("欢迎回来，汪旭👋");
+    expect(globalQa.querySelector(".drive-ai-qa-typewriter")?.getAttribute("aria-hidden")).toBe("true");
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("对新能源提问");
     expect(globalQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("全部专题");
     expect(topicQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("新能源");
@@ -123,6 +144,109 @@ describe("drive AI Q&A component", () => {
     expect(globalQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("跨专题比较");
     expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("按方法论分析");
     expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("定位引用");
+  });
+
+  it("renders all six localized greetings with the display name", async () => {
+    stubMedia({ reducedMotion: true });
+    const expected = [
+      "欢迎回来，汪旭👋",
+      "Welcome back, 汪旭 👋",
+      "おかえりなさい、汪旭👋",
+      "다시 오신 것을 환영합니다, 汪旭 👋",
+      "Bon retour, 汪旭 👋",
+      "Qué bueno verte de nuevo, 汪旭 👋",
+    ];
+    const random = vi.spyOn(Math, "random");
+
+    for (let index = 0; index < expected.length; index += 1) {
+      random.mockReturnValue((index + 0.1) / expected.length);
+      const qa = await mountQa("global");
+      expect(qa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe(expected[index]);
+      qa.remove();
+    }
+  });
+
+  it("types, holds, deletes whole graphemes, and picks a different next language", async () => {
+    vi.useFakeTimers();
+    stubMedia();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const qa = await mountQa("global");
+    const title = qa.querySelector(".drive-ai-qa-empty h3")!;
+    const typed = qa.querySelector(".drive-ai-qa-typewriter")!;
+
+    expect(title.getAttribute("aria-label")).toBe("欢迎回来，汪旭👋");
+    expect(typed.textContent).toBe("");
+
+    await vi.advanceTimersByTimeAsync(70 * 8);
+    await qa.updateComplete;
+    expect(typed.textContent).toBe("欢迎回来，汪旭👋");
+
+    await vi.advanceTimersByTimeAsync(1_800);
+    await qa.updateComplete;
+    expect(typed.textContent).toBe("欢迎回来，汪旭");
+    expect(typed.textContent).not.toContain("\uFFFD");
+
+    await vi.advanceTimersByTimeAsync(35 * 7 + 250);
+    await qa.updateComplete;
+    expect(title.getAttribute("aria-label")).toBe("Welcome back, 汪旭 👋");
+    expect(typed.textContent).toBe("");
+  });
+
+  it("shows one complete random greeting when reduced motion is requested", async () => {
+    vi.useFakeTimers();
+    stubMedia({ reducedMotion: true });
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const qa = await mountQa("global");
+    const title = qa.querySelector(".drive-ai-qa-empty h3")!;
+    const typed = qa.querySelector(".drive-ai-qa-typewriter")!;
+
+    expect(title.getAttribute("aria-live")).toBe("off");
+    expect(title.getAttribute("aria-label")).toBe("Qué bueno verte de nuevo, 汪旭 👋");
+    expect(typed.textContent).toBe("Qué bueno verte de nuevo, 汪旭 👋");
+    expect(typed.classList.contains("is-active")).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(typed.textContent).toBe("Qué bueno verte de nuevo, 汪旭 👋");
+  });
+
+  it("falls back to a friendly name and stops typing after disconnect", async () => {
+    vi.useFakeTimers();
+    stubMedia();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const qa = await mountQa("global");
+    qa.displayName = " ";
+    await qa.updateComplete;
+    const title = qa.querySelector(".drive-ai-qa-empty h3")!;
+    const typed = qa.querySelector(".drive-ai-qa-typewriter")!;
+
+    expect(title.getAttribute("aria-label")).toContain("朋友");
+    expect(title.getAttribute("aria-label")).not.toContain("汪旭");
+    await vi.advanceTimersByTimeAsync(70);
+    await qa.updateComplete;
+    const beforeDisconnect = typed.textContent;
+    qa.remove();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(typed.textContent).toBe(beforeDisconnect);
+  });
+
+  it("stops the greeting during a conversation and restarts after clearing it", async () => {
+    vi.useFakeTimers();
+    stubMedia();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('event: delta\ndata: {"content":"回答"}\n\n')));
+    const qa = await mountQa("global");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "开始问答";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+
+    expect(qa.querySelector(".drive-ai-qa-typewriter")).toBeNull();
+    qa.querySelector<HTMLButtonElement>(".drive-ai-qa-clear")!.click();
+    await qa.updateComplete;
+    expect(qa.querySelector(".drive-ai-qa-typewriter")).not.toBeNull();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
   });
 
   it("marks only unavailable knowledge states as having a notice row", async () => {

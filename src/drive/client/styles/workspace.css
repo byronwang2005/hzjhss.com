@@ -3041,6 +3041,34 @@ drive-pdf-preview {
   font-size: clamp(27px, 3vw, 40px);
 }
 
+.drive-ai-qa-typewriter-title {
+  min-height: 2.3em;
+}
+
+.drive-ai-qa-typewriter::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.84em;
+  margin-left: 0.08em;
+  background: currentColor;
+  border-radius: var(--jh-radius-pill);
+  vertical-align: -0.04em;
+  opacity: 0;
+}
+
+.drive-ai-qa-typewriter.is-active::after {
+  opacity: 1;
+  animation: drive-typewriter-cursor 800ms var(--jh-motion-control) infinite;
+}
+
+@keyframes drive-typewriter-cursor {
+  0%,
+  45% { opacity: 1; }
+  55%,
+  100% { opacity: 0; }
+}
+
 @media (max-width: 760px) {
   .drive-file-role-tabs {
     gap: 5px;
