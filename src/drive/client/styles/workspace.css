@@ -847,39 +847,6 @@
   color: var(--jh-color-text-muted);
 }
 
-.drive-ai-qa-suggestions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: 100%;
-  margin-top: 28px;
-  border-top: 1px solid var(--jh-color-border-soft);
-}
-
-.drive-ai-qa-suggestions button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 54px;
-  padding: 12px 14px;
-  color: var(--jh-color-text-muted);
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--jh-color-border-soft);
-  cursor: pointer;
-  font-weight: 700;
-  text-align: left;
-  transition: color var(--jh-duration-fast) var(--jh-motion-control), background-color var(--jh-duration-fast) var(--jh-motion-control), transform var(--jh-duration-fast) var(--jh-motion-control);
-}
-
-.drive-ai-qa-suggestions button:last-child { border-right: 0; }
-
-.drive-ai-qa-suggestions button:hover {
-  color: var(--jh-color-brand);
-  background: var(--jh-color-brand-soft);
-}
-
-.drive-ai-qa-suggestions button:active { transform: scale(0.98); }
-
 .drive-ai-qa-form {
   display: grid;
   justify-items: center;
@@ -1664,26 +1631,6 @@ body.drive-body {
   line-height: 1.7;
 }
 
-.drive-ai-qa-suggestions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 38px;
-  border-top-color: var(--jh-color-border-soft);
-}
-
-.drive-ai-qa-suggestions button {
-  min-height: 62px;
-  padding: 14px 13px;
-  color: var(--jh-color-text-muted);
-  border-right-color: var(--jh-color-border-soft);
-  font-size: 12px;
-  font-weight: 610;
-}
-
-.drive-ai-qa-suggestions button:hover {
-  color: var(--jh-color-brand-hover);
-  background: var(--jh-color-brand-soft);
-}
-
 .drive-ai-qa-form {
   padding: 16px 20px 20px;
   background: var(--jh-color-surface);
@@ -2026,17 +1973,6 @@ wa-callout {
 
   .drive-ai-qa-empty h3 {
     font-size: 32px;
-  }
-
-  .drive-ai-qa-suggestions {
-    grid-template-columns: 1fr;
-    margin-top: 28px;
-  }
-
-  .drive-ai-qa-suggestions button {
-    min-height: 50px;
-    border-right: 0;
-    border-bottom: 1px solid var(--jh-color-border-soft);
   }
 
   .drive-ai-qa-form {
@@ -2580,19 +2516,6 @@ drive-pdf-preview {
 
   .drive-ai-qa-clear {
     align-self: flex-start;
-  }
-
-  .drive-ai-qa-suggestions {
-    grid-template-columns: 1fr;
-  }
-
-  .drive-ai-qa-suggestions button {
-    border-right: 0;
-    border-bottom: 1px solid var(--jh-color-border-soft);
-  }
-
-  .drive-ai-qa-suggestions button:last-child {
-    border-bottom: 0;
   }
 
   .drive-ai-qa-form {

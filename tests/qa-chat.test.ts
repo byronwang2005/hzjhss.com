@@ -136,14 +136,15 @@ describe("drive AI Q&A component", () => {
     expect(topicQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("新能源");
   });
 
-  it("shows scope-aware suggestions without capability badges", async () => {
+  it("keeps ready empty states focused on direct questions", async () => {
     const globalQa = await mountQa("global");
     const topicQa = await mountQa("topic");
 
     expect(globalQa.querySelector(".drive-ai-qa-capabilities")).toBeNull();
-    expect(globalQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("跨专题比较");
-    expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("按方法论分析");
-    expect(topicQa.querySelector(".drive-ai-qa-suggestions")?.textContent).toContain("定位引用");
+    expect(globalQa.querySelector(".drive-ai-qa-suggestions")).toBeNull();
+    expect(topicQa.querySelector(".drive-ai-qa-suggestions")).toBeNull();
+    expect(globalQa.textContent).not.toContain("直接提问，或从下面三个方向开始");
+    expect(topicQa.textContent).not.toContain("直接提问，或从下面三个方向开始");
   });
 
   it("renders all six localized greetings with the display name", async () => {

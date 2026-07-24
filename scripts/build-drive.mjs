@@ -22,7 +22,7 @@ const iconSets = {
     "moon", "sun", "user-switch", "warning", "windows-logo", "x", "x-circle",
   ],
   bold: [
-    "arrow-right", "broadcast", "check", "clipboard-text", "copy", "download-simple",
+    "arrow-right", "broadcast", "check", "clipboard-text", "copy", "database", "download-simple",
     "file-arrow-up", "floppy-disk", "folder-plus", "folder-simple-plus", "link", "paper-plane-tilt", "plus",
     "trash", "upload-simple", "user-switch",
   ],

@@ -193,17 +193,6 @@ export class DriveAiQa extends LitElement {
     const isAnimatedGreeting = this.scope === "global" && this.ready;
     const fallbackGreeting = greetingOptions(this.displayName)[0];
     const readyTitle = isAnimatedGreeting ? fallbackGreeting : `对${this.topicName || "当前专题"}提问`;
-    const suggestions = this.scope === "global"
-      ? [
-          ["calendar-dots", "近期变化", "请汇总各专题最近的关键变化，并分别标明资料日期和来源。"],
-          ["files", "跨专题比较", "请比较各专题的共同信号、差异和风险，并分别说明依据。"],
-          ["link", "来源追溯", "请列出支持关键结论的文件和具体位置。"],
-        ]
-      : [
-          ["database", "按方法论分析", "请按照专题方法论分析当前资料，并给出有来源的核心结论。"],
-          ["warning", "检查近期风险", "结合最近的时效资料，当前有哪些风险、反例或待核验事项？"],
-          ["link", "定位引用", "请列出支持关键结论的文件和具体位置。"],
-        ];
     return html`
       <div class="drive-ai-qa-empty">
         <div><h3
@@ -214,16 +203,7 @@ export class DriveAiQa extends LitElement {
             ? isAnimatedGreeting
               ? html`<span class=${classMap({ "drive-ai-qa-typewriter": true, "is-active": !this.reduceGreetingMotion })} aria-hidden="true">${this.typedGreeting}</span>`
               : readyTitle
-            : "等待文件处理"}</h3><p>${this.ready ? "直接提问，或从下面三个方向开始。回答会尽量标明资料来源。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p></div>
-        ${this.ready
-          ? html`
-              <div class="drive-ai-qa-suggestions" aria-label="问题建议">
-                ${suggestions.map(([icon, label, prompt]) => html`
-                  <button type="button" @click=${() => this.useSuggestion(prompt)}>${renderIcon(icon)}<span>${label}</span></button>
-                `)}
-              </div>
-            `
-          : nothing}
+            : "等待文件处理"}</h3>${this.ready ? nothing : html`<p>索引完成后，这里会提供基于资料的可追溯回答。</p>`}</div>
       </div>
     `;
   }
@@ -485,11 +465,6 @@ export class DriveAiQa extends LitElement {
       completed.push(user, assistant);
     }
     return completed;
-  }
-
-  private useSuggestion(prompt: string): void {
-    this.question = prompt;
-    void this.updateComplete.then(() => this.querySelector<HTMLTextAreaElement>("textarea")?.focus());
   }
 
   private syncTextareaHeight(): void {

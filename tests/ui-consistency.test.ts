@@ -65,6 +65,11 @@ describe("shared UI system", () => {
     }
   });
 
+  it("includes the bold methodology upload icon", () => {
+    const sprite = readFileSync("dist/assets/phosphor-sprite.svg", "utf8");
+    expect(sprite).toContain('id="ph-bold-database"');
+  });
+
   it("hides role upload inputs and defines compact ready-state Q&A rows", () => {
     expect(cssSource).toContain('.drive-file-role-panel > input[type="file"][hidden]');
     expect(cssSource).toContain("display: none !important;");
