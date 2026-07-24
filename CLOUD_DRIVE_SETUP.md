@@ -54,6 +54,7 @@ Variables：
 - `AI_BASE_URL`：OpenAI-compatible API 根地址
 - `AI_MODEL`：Chat Completions 模型名
 - `AI_MAX_OUTPUT_TOKENS`：默认 `2500`
+- `AI_CONTEXT_WINDOW_TOKENS`：必填，当前模型公开的完整上下文窗口 token 数；系统会扣除输出预算和 5% 安全余量后动态装填资料
 - `PROCESSOR_WEBHOOK_URL`：文件处理 SCF 的 HTTPS Web 函数地址
 - `INDEXER_WEBHOOK_URL`：索引构建 SCF 的 HTTPS Web 函数地址
 
@@ -79,6 +80,14 @@ ai-knowledge-base/
         ├── search-index.json
         └── manifest.json
 ```
+
+每个文件通过元数据区分知识角色：
+
+- `reference`：研报原件，只存储和下载，不调用 OCR、不进入索引。
+- `methodology`：每专题唯一的 `__methodology__.md`，直接读取 Markdown 并进入方法论检索池。
+- `evidence`：周报等时效资料，按现有文档解析流程处理并进入时效检索池。
+
+缺少角色字段的旧文件按 `evidence` 处理。
 
 Bucket 配置：
 
@@ -168,17 +177,20 @@ SCF 角色额外需要：
 
 - PNG/JPG/JPEG/BMP、XLS/XLSX、MD、TXT、WPS：最大 10 MB
 - PDF、DOC/DOCX、PPT/PPTX：最大 100 MB
-- PDF：最多 300 页
+- 需要 AI 处理的 PDF：最多 300 页；仅存档下载的研报原件不校验页数
 - CSV 和未列出的格式不允许上传
 
-上传完成后服务端使用 COS HEAD 复核大小、Content-Type 和 ETag。PDF 在 SCF 内使用 `pdfjs-dist` 再校验真实页数，超过 300 页不会调用腾讯解析。图片使用精简 OCR；其余文档使用多模态解析。处理结果切块后由 MiniSearch 建立每专题关键词索引。
+上传完成后服务端使用 COS HEAD 复核大小、Content-Type 和 ETag。需要 AI 处理的 PDF 在 SCF 内再次校验真实页数，超过 300 页不会调用腾讯解析。图片使用精简 OCR，方法论 Markdown 直接读取，其余时效文档使用多模态解析。处理结果切块后由 MiniSearch 建立每专题关键词索引。
 
 ## 问答
 
 - 专题问答只检索当前专题索引。
 - 全局问答并行检索所有就绪专题索引。
-- 每次最多向模型发送 8 个命中片段，总长度最多 18000 个 UTF-16 字符。
+- 方法论和时效资料分别检索，不设置固定片段数或字符数；系统按 `AI_CONTEXT_WINDOW_TOKENS` 动态装填检索资料和对话历史。
+- 输入预算等于模型窗口减去最大输出 token 和 5% 安全余量；超过预算时先移除最旧完整问答，再停止加入低排名资料。
+- 每次请求注入 `Asia/Shanghai` 当前日期；包含“最新、本周、近期、截至”等时间意图时，对相关的近期周报增加有界时效权重。
 - 回答必须引用文件名以及页码、工作表、幻灯片或章节。
+- 方法论只作为分析框架，对成员显示为“专题方法论”，不暴露内部文件名和位置。
 - 未命中时不调用模型，直接返回资料不足。
 
 ## 本地验证

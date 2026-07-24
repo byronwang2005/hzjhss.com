@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getDriveConfig, KNOWLEDGE_ROOT_PREFIX, type DriveEnv } from "../src/drive/server/config";
+import { getAiConfig, getDriveConfig, KNOWLEDGE_ROOT_PREFIX, type DriveEnv } from "../src/drive/server/config";
 import {
   completeUpload,
+  createDownloadUrl,
   createKnowledgeTopic,
   createUpload,
   filePolicy,
   listKnowledgeFiles,
   listKnowledgeTopics,
+  METHODOLOGY_PATH,
+  patchKnowledgeFile,
   processingStatusPath,
+  readKnowledgeTopic,
   sourcePath,
   tempUploadPath,
 } from "../src/drive/server/knowledge";
@@ -50,6 +54,16 @@ describe("new COS namespace and policies", () => {
     expect(filePolicy("a.xlsx").maxBytes).toBe(10 * 1024 * 1024);
     expect(() => filePolicy("a.csv")).toThrow("仅支持");
   });
+
+  it("requires an explicit AI context window larger than the output budget", () => {
+    expect(() => getAiConfig({ AI_API_KEY: "key", AI_BASE_URL: "https://ai.example.com", AI_MODEL: "long" })).toThrow("AI_CONTEXT_WINDOW_TOKENS");
+    expect(getAiConfig({
+      AI_API_KEY: "key",
+      AI_BASE_URL: "https://ai.example.com",
+      AI_MODEL: "long",
+      AI_CONTEXT_WINDOW_TOKENS: "1000000",
+    }).contextWindowTokens).toBe(1_000_000);
+  });
 });
 
 describe("knowledge topic and upload flow", () => {
@@ -80,6 +94,134 @@ describe("knowledge topic and upload flow", () => {
     storage.set(tempUploadPath(signature.uploadId), { body: "wrong", contentType: "text/plain", etag: "etag" });
     await expect(completeUpload(config, { topicId: topic.id, uploadId: signature.uploadId, relativePath: "a.txt", size: 3, contentType: "text/plain", uploadedBy: "汪旭" })).rejects.toThrow("实际大小");
     expect(storage.has(tempUploadPath(signature.uploadId))).toBe(false);
+  });
+
+  it("stores references without processing and keeps one hidden canonical methodology", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "机器人");
+
+    const reference = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "研报/深度报告.pdf",
+      size: 3,
+      contentType: "application/pdf",
+      knowledgeRole: "reference",
+    });
+    storage.set(tempUploadPath(reference.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-reference" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: reference.uploadId,
+      relativePath: reference.path,
+      size: 3,
+      contentType: "application/pdf",
+      knowledgeRole: "reference",
+      uploadedBy: "汪旭",
+    });
+    expect(storage.has(processingStatusPath(topic.id, reference.path))).toBe(false);
+    expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(1);
+
+    const methodology = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "任意名称.md",
+      size: 8,
+      contentType: "text/markdown",
+      knowledgeRole: "methodology",
+    });
+    expect(methodology.path).toBe(METHODOLOGY_PATH);
+    storage.set(tempUploadPath(methodology.uploadId), { body: "# 方法", contentType: "text/markdown", etag: "etag-method" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: methodology.uploadId,
+      relativePath: methodology.path,
+      size: 8,
+      contentType: "text/markdown",
+      knowledgeRole: "methodology",
+      uploadedBy: "汪旭",
+    });
+
+    const memberFiles = await listKnowledgeFiles(config, topic.id, "");
+    const adminFiles = await listKnowledgeFiles(config, topic.id, "", null, { includeMethodology: true });
+    expect(memberFiles.files.some((file) => file.knowledgeRole === "methodology")).toBe(false);
+    expect(adminFiles.files.some((file) => file.knowledgeRole === "methodology")).toBe(true);
+    await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH)).rejects.toThrow("无权下载");
+    await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH, { includeMethodology: true })).resolves.toMatchObject({ name: METHODOLOGY_PATH });
+
+    const patched = await patchKnowledgeFile(config, {
+      topicId: topic.id,
+      relativePath: reference.path,
+      incorporated: true,
+      updatedBy: "汪旭",
+    });
+    expect(patched.indexChanged).toBe(false);
+    expect(patched.metadata).toMatchObject({ incorporatedBy: "汪旭" });
+  });
+
+  it("treats the reserved methodology path as hidden even when its metadata is missing", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "异常状态");
+    storage.set(sourcePath(topic.id, METHODOLOGY_PATH), {
+      body: "# 不应泄露",
+      contentType: "text/markdown",
+      etag: "etag-orphan-method",
+    });
+
+    const memberFiles = await listKnowledgeFiles(config, topic.id, "");
+    const adminFiles = await listKnowledgeFiles(config, topic.id, "", null, { includeMethodology: true });
+    expect(memberFiles.files).toHaveLength(0);
+    expect(adminFiles.files[0]).toMatchObject({ path: METHODOLOGY_PATH, knowledgeRole: "methodology" });
+    await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH)).rejects.toThrow("无权下载");
+  });
+
+  it("rejects unknown roles and cross-role overwrites instead of stranding the index", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "角色校验");
+    await expect(createUpload(config, {
+      topicId: topic.id,
+      relativePath: "报告.pdf",
+      size: 3,
+      contentType: "application/pdf",
+      knowledgeRole: "evdience",
+    })).rejects.toThrow("资料类型无效");
+
+    const evidence = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "报告.pdf",
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(evidence.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-evidence" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: evidence.uploadId,
+      relativePath: evidence.path,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    });
+    const versionBefore = (await readKnowledgeTopic(config, topic.id)).indexVersion;
+
+    const reference = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "报告.pdf",
+      size: 3,
+      contentType: "application/pdf",
+      knowledgeRole: "reference",
+    });
+    storage.set(tempUploadPath(reference.uploadId), { body: "new", contentType: "application/pdf", etag: "etag-reference" });
+    await expect(completeUpload(config, {
+      topicId: topic.id,
+      uploadId: reference.uploadId,
+      relativePath: reference.path,
+      size: 3,
+      contentType: "application/pdf",
+      knowledgeRole: "reference",
+      uploadedBy: "汪旭",
+    })).rejects.toThrow("不能直接变更资料类型");
+    expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(versionBefore);
   });
 });
 

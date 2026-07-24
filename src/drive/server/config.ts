@@ -18,6 +18,7 @@ export interface DriveEnv {
   AI_BASE_URL?: string;
   AI_MODEL?: string;
   AI_MAX_OUTPUT_TOKENS?: string;
+  AI_CONTEXT_WINDOW_TOKENS?: string;
 }
 
 export interface AiConfig {
@@ -25,6 +26,7 @@ export interface AiConfig {
   baseURL: string;
   model: string;
   maxOutputTokens: number;
+  contextWindowTokens: number;
 }
 
 export interface DriveConfig {
@@ -79,11 +81,17 @@ export function getDriveConfig(env: DriveEnv): DriveConfig {
 }
 
 export function getAiConfig(env: DriveEnv): AiConfig {
+  const contextWindowTokens = parseRequiredPositiveInt(env.AI_CONTEXT_WINDOW_TOKENS, "AI_CONTEXT_WINDOW_TOKENS");
+  const maxOutputTokens = parsePositiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULT_AI_MAX_OUTPUT_TOKENS);
+  if (contextWindowTokens <= maxOutputTokens) {
+    throw new Error("AI_CONTEXT_WINDOW_TOKENS 必须大于 AI_MAX_OUTPUT_TOKENS");
+  }
   return {
     apiKey: getRequiredEnv(env, "AI_API_KEY"),
     baseURL: normalizeAiBaseUrl(getRequiredEnv(env, "AI_BASE_URL")),
     model: getRequiredEnv(env, "AI_MODEL"),
-    maxOutputTokens: parsePositiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULT_AI_MAX_OUTPUT_TOKENS),
+    maxOutputTokens,
+    contextWindowTokens,
   };
 }
 
@@ -112,4 +120,12 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseRequiredPositiveInt(value: string | undefined, name: string): number {
+  const parsed = Number.parseInt(value || "", 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} 必须配置为正整数`);
+  }
+  return parsed;
 }

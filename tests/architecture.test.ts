@@ -4,7 +4,6 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   FILE_LIMITS,
-  QA_LIMITS,
   SUPPORTED_FILE_EXTENSIONS,
   filePolicyForExtension,
 } from "../src/drive/shared/policy";
@@ -24,11 +23,13 @@ describe("shared application policy", () => {
     }
   });
 
-  it("provides one question policy to client and server", () => {
-    expect(QA_LIMITS.questionCharacters).toBe(3_000);
-    expect(QA_LIMITS.historyRounds).toBe(6);
-    expect(readFileSync("src/drive/client/qa-chat.ts", "utf8")).toContain("QA_LIMITS");
-    expect(readFileSync("src/drive/server/qa.ts", "utf8")).toContain("QA_LIMITS");
+  it("does not impose product-level question, history, or retrieval limits", () => {
+    const client = readFileSync("src/drive/client/qa-chat.ts", "utf8");
+    const server = readFileSync("src/drive/server/qa.ts", "utf8");
+    expect(client).not.toContain("maxlength=");
+    expect(client).not.toContain("historyRounds");
+    expect(server).toContain("contextWindowTokens");
+    expect(server).toContain("safetyTokens");
   });
 });
 

@@ -1,5 +1,5 @@
 import MiniSearch from "minisearch";
-import { assertWebhook, getJson, head, listAll, putJson, ROOT_PREFIX, sourceKey } from "../shared/common.mjs";
+import { assertWebhook, fileMetaKey, getJson, head, listAll, putJson, ROOT_PREFIX, sourceKey } from "../shared/common.mjs";
 
 export async function main(event, context) {
   assertWebhook(event);
@@ -14,11 +14,28 @@ export async function main(event, context) {
   for (const key of chunkKeys) {
     const set = await getJson(key);
     if (!set?.path || !set?.sourceEtag || !Array.isArray(set.chunks)) continue;
-    const current = await head(sourceKey(topicId, set.path));
-    if (current?.etag === set.sourceEtag) validSets.push(set);
+    const [current, metadata] = await Promise.all([
+      head(sourceKey(topicId, set.path)),
+      getJson(fileMetaKey(topicId, set.path)),
+    ]);
+    const knowledgeRole = normalizeKnowledgeRole(metadata?.knowledgeRole, set.path);
+    if (current?.etag === set.sourceEtag && knowledgeRole !== "reference") {
+      validSets.push({ ...set, knowledgeRole, reportDate: metadata?.reportDate });
+    }
   }
-  const chunks = validSets.flatMap((set) => set.chunks.map((chunk) => ({ ...chunk, topicName: topic.name })));
-  const search = new MiniSearch({ fields: ["content", "fileName", "locator", "topicName"], storeFields: [], tokenize, processTerm: (term) => term, idField: "id" });
+  const chunks = validSets.flatMap((set) => set.chunks.map((chunk) => ({
+    ...chunk,
+    topicName: topic.name,
+    knowledgeRole: set.knowledgeRole,
+    ...(set.reportDate ? { reportDate: set.reportDate } : {}),
+  })));
+  const search = new MiniSearch({
+    fields: ["content", "fileName", "locator", "topicName"],
+    storeFields: ["knowledgeRole", "reportDate", "topicId"],
+    tokenize,
+    processTerm: (term) => term,
+    idField: "id",
+  });
   search.addAll(chunks);
   const now = new Date().toISOString();
   const currentTopic = await getJson(topicKey);
@@ -26,7 +43,7 @@ export async function main(event, context) {
     return { ok: false, reason: "topic changed during build" };
   }
   if (!(await snapshotIsCurrent(topicId, validSets))) return { ok: false, reason: "source changed during build" };
-  await putJson(`${ROOT_PREFIX}topics/${topicId}/index/search-index.json`, { version: 1, topicId, topicName: topic.name, indexVersion, generatedAt: now, chunks, index: search.toJSON() });
+  await putJson(`${ROOT_PREFIX}topics/${topicId}/index/search-index.json`, { version: 2, topicId, topicName: topic.name, indexVersion, generatedAt: now, chunks, index: search.toJSON() });
   if (!(await snapshotIsCurrent(topicId, validSets))) return { ok: false, reason: "source changed before publish" };
   const publishTopic = await getJson(topicKey);
   if (!publishTopic || publishTopic.indexVersion !== indexVersion || publishTopic.name !== topic.name) {
@@ -71,6 +88,11 @@ export function extractTopicId(event, context) {
     || readTopicId(event?.clientContext)
     || readTopicId(context?.client_context)
     || readTopicId(context?.clientContext);
+}
+
+function normalizeKnowledgeRole(value, path) {
+  if (path === "__methodology__.md") return "methodology";
+  return value === "reference" || value === "methodology" ? value : "evidence";
 }
 
 function readTopicId(value) {

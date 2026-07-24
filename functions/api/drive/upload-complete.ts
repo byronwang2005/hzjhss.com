@@ -18,6 +18,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
         size: file.size,
         contentType: file.contentType,
         pdfPages: file.pdfPages,
+        knowledgeRole: file.knowledgeRole,
         uploadedBy: session.displayName,
       });
       files.push(completed);

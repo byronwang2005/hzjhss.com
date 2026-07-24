@@ -1,4 +1,5 @@
 import MiniSearch, { type Options, type SearchResult } from "minisearch";
+import type { KnowledgeRole, ReportDateSource } from "../shared/contracts";
 
 export interface SearchChunk {
   id: string;
@@ -9,10 +10,13 @@ export interface SearchChunk {
   content: string;
   locator: string;
   etag: string;
+  knowledgeRole?: KnowledgeRole;
+  reportDate?: string;
+  reportDateSource?: ReportDateSource;
 }
 
 export interface SerializedSearchIndex {
-  version: 1;
+  version: 1 | 2;
   topicId: string;
   topicName: string;
   indexVersion: number;
@@ -23,6 +27,7 @@ export interface SerializedSearchIndex {
 
 export interface RetrievedChunk extends SearchChunk {
   score: number;
+  knowledgeRole: KnowledgeRole;
 }
 
 const segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter("zh-CN", { granularity: "word" }) : null;
@@ -52,7 +57,7 @@ export function tokenizeKnowledgeText(input: string): string[] {
 export function miniSearchOptions(): Options<SearchChunk> {
   return {
     fields: ["content", "fileName", "locator", "topicName"],
-    storeFields: [],
+    storeFields: ["knowledgeRole", "reportDate", "topicId"],
     tokenize: tokenizeKnowledgeText,
     processTerm: (term) => term,
     idField: "id",
@@ -63,7 +68,7 @@ export function buildSerializedSearchIndex(topicId: string, topicName: string, c
   const search = new MiniSearch<SearchChunk>(miniSearchOptions());
   search.addAll(chunks);
   return {
-    version: 1,
+    version: 2,
     topicId,
     topicName,
     indexVersion,
@@ -73,15 +78,53 @@ export function buildSerializedSearchIndex(topicId: string, topicName: string, c
   };
 }
 
-export function searchSerializedIndex(envelope: SerializedSearchIndex, query: string, limit = 8): RetrievedChunk[] {
+export function searchSerializedIndex(
+  envelope: SerializedSearchIndex,
+  query: string,
+  options: number | { role?: KnowledgeRole; limit?: number; now?: Date } = {},
+): RetrievedChunk[] {
   const search = MiniSearch.loadJSON<SearchChunk>(JSON.stringify(envelope.index), miniSearchOptions());
   const byId = new Map(envelope.chunks.map((chunk) => [chunk.id, chunk]));
-  return search.search(query, {
+  const normalizedOptions = typeof options === "number" ? { limit: options } : options;
+  const temporal = isTemporalQuery(query);
+  const now = normalizedOptions.now || new Date();
+  const results = search.search(query, {
     prefix: (term) => term.length >= 3,
     fuzzy: (term) => term.length >= 5 ? 0.1 : false,
     boost: { fileName: 2, locator: 1.4, topicName: 1.2 },
-  }).slice(0, limit).flatMap((result: SearchResult) => {
-    const chunk = byId.get(String(result.id));
-    return chunk ? [{ ...chunk, score: result.score }] : [];
+    filter: (result) => {
+      if (!normalizedOptions.role) return true;
+      return knowledgeRoleOf(byId.get(String(result.id))) === normalizedOptions.role;
+    },
+    boostDocument: (id) => {
+      const chunk = byId.get(String(id));
+      return temporal && knowledgeRoleOf(chunk) === "evidence"
+        ? reportDateBoost(chunk?.reportDate, now)
+        : 1;
+    },
   });
+  const limited = normalizedOptions.limit === undefined ? results : results.slice(0, normalizedOptions.limit);
+  return limited.flatMap((result: SearchResult) => {
+    const chunk = byId.get(String(result.id));
+    return chunk ? [{ ...chunk, knowledgeRole: knowledgeRoleOf(chunk), score: result.score }] : [];
+  });
+}
+
+export function isTemporalQuery(query: string): boolean {
+  return /最新|本周|这周|最近|近期|截至|当前|近况|今日|今天/.test(query);
+}
+
+function knowledgeRoleOf(chunk: SearchChunk | undefined): KnowledgeRole {
+  return chunk?.knowledgeRole === "reference" || chunk?.knowledgeRole === "methodology"
+    ? chunk.knowledgeRole
+    : "evidence";
+}
+
+function reportDateBoost(reportDate: string | undefined, now: Date): number {
+  if (!reportDate) return 1;
+  const timestamp = Date.parse(`${reportDate}T00:00:00Z`);
+  if (!Number.isFinite(timestamp)) return 1;
+  const ageDays = Math.max(0, (now.getTime() - timestamp) / 86_400_000);
+  if (ageDays >= 90) return 1;
+  return 1 + 0.5 * (1 - ageDays / 90);
 }

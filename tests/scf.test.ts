@@ -38,6 +38,27 @@ describe("SCF event routing and chunking", () => {
     expect(processor.splitMarkdown("# 资产负债表\n\n这是工作表中的主要数据和说明。", "xlsx")[0].locator).toBe("工作表：资产负债表");
   });
 
+  it("parses methodology Markdown locally without the document OCR response shape", () => {
+    const parsed = processor.parseMethodologyMarkdown("# 核心框架\n\n先看供需，再看库存。", "方法论.md");
+    expect(parsed.raw).toEqual({ format: "markdown", source: "方法论.md" });
+    expect(parsed.chunks[0]).toMatchObject({ locator: "章节：核心框架" });
+  });
+
+  it("extracts report dates from file names, parsed headings, and upload fallback", () => {
+    expect(processor.extractReportDate("周报-2026-07-18.pdf", "", "2026-07-20T00:00:00Z")).toEqual({
+      reportDate: "2026-07-18",
+      reportDateSource: "filename",
+    });
+    expect(processor.extractReportDate("周报.pdf", "# 统计周期：2026年7月14日—2026年7月20日", "2026-07-21T00:00:00Z")).toEqual({
+      reportDate: "2026-07-20",
+      reportDateSource: "content",
+    });
+    expect(processor.extractReportDate("周报.pdf", "无明确日期", "2026-07-21T00:00:00Z")).toEqual({
+      reportDate: "2026-07-21",
+      reportDateSource: "upload",
+    });
+  });
+
   it("uses the same Chinese n-gram strategy as the Worker", () => {
     expect(indexer.tokenize("新能源库存")).toEqual(expect.arrayContaining(["新能源", "库存"]));
   });

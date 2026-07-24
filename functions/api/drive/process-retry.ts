@@ -1,7 +1,7 @@
 import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
 import { getObjectText, headObject, putObjectText } from "../../../src/drive/server/cos";
 import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/server/http";
-import { fileMetaPath, processingStatusPath, sourcePath, type FileMetadata, type ProcessingStatus } from "../../../src/drive/server/knowledge";
+import { fileMetaPath, knowledgeRoleOf, processingStatusPath, sourcePath, type FileMetadata, type ProcessingStatus } from "../../../src/drive/server/knowledge";
 import { notifyProcessor } from "../../../src/drive/server/webhooks";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
@@ -16,6 +16,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, wai
     const metaText = await getObjectText(config, fileMetaPath(topicId, path));
     if (!metaText) throw new Error("文件元数据不存在");
     const metadata = JSON.parse(metaText) as FileMetadata;
+    if (knowledgeRoleOf(metadata, path) === "reference") throw new Error("研报原件不参与 AI 处理");
     const current = await headObject(config, sourcePath(topicId, path));
     if (!current || current.etag !== metadata.etag) throw new Error("源文件已变化，请刷新后重试");
     const status: ProcessingStatus = { version: 1, topicId, path, sourceEtag: metadata.etag, state: "queued", processingKind: metadata.processingKind, updatedAt: new Date().toISOString() };

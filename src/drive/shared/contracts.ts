@@ -1,5 +1,7 @@
 export type UserRole = "admin" | "viewer";
 export type ProcessingState = "queued" | "processing" | "indexing" | "ready" | "failed";
+export type KnowledgeRole = "reference" | "methodology" | "evidence";
+export type ReportDateSource = "filename" | "content" | "upload" | "manual";
 
 export interface TopicSummary {
   version: 1;
@@ -34,6 +36,11 @@ export interface KnowledgeFile {
   contentType?: string;
   uploadedBy?: string;
   uploadedAt?: string;
+  knowledgeRole: KnowledgeRole;
+  reportDate?: string;
+  reportDateSource?: ReportDateSource;
+  incorporatedAt?: string;
+  incorporatedBy?: string;
   processing?: ProcessingStatus;
 }
 

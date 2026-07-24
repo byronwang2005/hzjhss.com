@@ -13,6 +13,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       size: body.size,
       contentType: body.contentType,
       pdfPages: body.pdfPages,
+      knowledgeRole: body.knowledgeRole,
     }));
   } catch (error) { return errorResponse(error); }
 };

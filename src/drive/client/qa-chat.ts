@@ -5,7 +5,6 @@ import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import MarkdownIt from "markdown-it";
 import { renderIcon } from "./icons";
-import { QA_LIMITS } from "../shared/policy";
 import { DRIVE_API_ROOT } from "../shared/runtime";
 
 interface QaChatMessage {
@@ -109,7 +108,6 @@ export class DriveAiQa extends LitElement {
             <textarea
               name="qaQuestion"
               rows="2"
-              maxlength=${String(QA_LIMITS.questionCharacters)}
               aria-label="您的问题"
               placeholder=${isGlobal ? "询问跨专题结论、风险或来源" : "请输入关于该专题的问题"}
               .value=${this.question}
@@ -205,11 +203,6 @@ export class DriveAiQa extends LitElement {
       this.setStatus("请输入问题。", "danger");
       return;
     }
-    if (question.length > QA_LIMITS.questionCharacters) {
-      this.setStatus(`问题不能超过 ${QA_LIMITS.questionCharacters} 字。`, "danger");
-      return;
-    }
-
     const history = this.completedHistory();
     const userMessage: QaChatMessage = { id: this.messageId(), role: "user", content: question };
     const assistantMessage: QaChatMessage = { id: this.messageId(), role: "assistant", content: "", pending: true };
@@ -324,7 +317,7 @@ export class DriveAiQa extends LitElement {
       if (user.role !== "user" || assistant.role !== "assistant" || assistant.pending || assistant.error || assistant.excludeFromHistory) continue;
       completed.push(user, assistant);
     }
-    return completed.slice(-(QA_LIMITS.historyRounds * 2));
+    return completed;
   }
 
   private useSuggestion(prompt: string): void {

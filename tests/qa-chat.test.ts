@@ -77,6 +77,11 @@ describe("drive AI Q&A component", () => {
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("对新能源提问");
   });
 
+  it("does not impose a product-level question length limit", async () => {
+    const qa = await mountQa("global");
+    expect(qa.querySelector("textarea")?.hasAttribute("maxlength")).toBe(false);
+  });
+
   it("renders an integrated composer and submits with Enter on fine pointers", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response('event: delta\ndata: {"content":"回答"}\n\n')));
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));

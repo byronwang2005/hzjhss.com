@@ -45,6 +45,8 @@ async function processRecord(record) {
     if (!value) throw new Error("文件元数据尚未登记");
     return value;
   }, { retries: 5, minTimeout: 1000, maxTimeout: 3000 });
+  const knowledgeRole = normalizeKnowledgeRole(metadata.knowledgeRole, source.path);
+  if (knowledgeRole === "reference") return;
   const previous = await getJson(`${processedBase(source.topicId, source.path)}status.json`);
   if (previous?.sourceEtag === metadata.etag && ["processing", "indexing", "ready"].includes(previous.state)) return;
   const current = await head(source.sourceKey);
@@ -53,11 +55,19 @@ async function processRecord(record) {
   if (!(await writeStatus(base, metadata, "processing"))) return;
   try {
     const ext = extension(source.path);
-    const output = ["png", "jpg", "jpeg", "bmp"].includes(ext)
+    const output = knowledgeRole === "methodology"
+      ? await documentLimit(() => processMarkdown(source.sourceKey, metadata))
+      : ["png", "jpg", "jpeg", "bmp"].includes(ext)
       ? await imageLimit(() => processImage(source.sourceKey, metadata))
       : await documentLimit(() => processDocument(source.sourceKey, metadata, ext));
     const latest = await head(source.sourceKey);
     if (!latest || latest.etag !== metadata.etag) return;
+    const report = knowledgeRole === "evidence"
+      ? metadata.reportDateSource === "manual" && metadata.reportDate
+        ? { reportDate: metadata.reportDate, reportDateSource: "manual" }
+        : extractReportDate(metadata.name, output.markdown, metadata.uploadedAt)
+      : {};
+    const nextMetadata = { ...metadata, knowledgeRole, ...report };
     const chunks = output.chunks.map((chunk, index) => ({
       id: `${source.topicId}:${metadata.etag}:${index}`,
       topicId: source.topicId,
@@ -66,8 +76,11 @@ async function processRecord(record) {
       content: chunk.content,
       locator: chunk.locator,
       etag: metadata.etag,
+      knowledgeRole,
+      ...(report.reportDate ? { reportDate: report.reportDate } : {}),
     }));
     await Promise.all([
+      putJson(fileMetaKey(source.topicId, source.path), nextMetadata),
       putText(`${base}result.md`, output.markdown),
       putJson(`${base}result.json`, output.raw),
       putJson(`${base}chunks.json`, { version: 1, topicId: source.topicId, path: source.path, sourceEtag: metadata.etag, chunks }),
@@ -78,6 +91,21 @@ async function processRecord(record) {
     await writeStatus(base, metadata, "failed", undefined, safeError(error));
     throw error;
   }
+}
+
+async function processMarkdown(key, metadata) {
+  const response = await cosCall("getObject", { Bucket: bucket, Region: region, Key: key });
+  const markdown = Buffer.from(response.Body).toString("utf8").replace(/^\uFEFF/, "");
+  return parseMethodologyMarkdown(markdown, metadata.name);
+}
+
+export function parseMethodologyMarkdown(markdown, sourceName) {
+  if (!markdown.trim()) throw new Error("专题方法论 Markdown 为空");
+  return {
+    markdown,
+    raw: { format: "markdown", source: sourceName },
+    chunks: splitMarkdown(markdown, "md"),
+  };
 }
 
 async function processImage(key, metadata) {
@@ -187,6 +215,35 @@ function fileType(ext) {
   if (ext === "txt") return 6;
   if (ext === "wps") return 8;
   throw new Error(`不支持的文档格式: ${ext}`);
+}
+
+export function extractReportDate(fileName, markdown, uploadedAt) {
+  const fromFileName = datesInText(String(fileName || ""));
+  if (fromFileName.length) {
+    return { reportDate: fromFileName.at(-1), reportDateSource: "filename" };
+  }
+  const fromContent = datesInText(String(markdown || "").slice(0, 2000));
+  if (fromContent.length) {
+    return { reportDate: fromContent.at(-1), reportDateSource: "content" };
+  }
+  const fallback = /^\d{4}-\d{2}-\d{2}/.exec(String(uploadedAt || ""))?.[0];
+  return fallback ? { reportDate: fallback, reportDateSource: "upload" } : {};
+}
+
+function datesInText(input) {
+  const dates = new Set();
+  const pattern = /(?<!\d)(20\d{2})\s*(?:年|[-/.])\s*(\d{1,2})\s*(?:月|[-/.])\s*(\d{1,2})\s*日?(?!\d)/g;
+  for (const match of input.matchAll(pattern)) {
+    const value = `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+    const date = new Date(`${value}T00:00:00Z`);
+    if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value) dates.add(value);
+  }
+  return [...dates].sort();
+}
+
+function normalizeKnowledgeRole(value, path) {
+  if (path === "__methodology__.md") return "methodology";
+  return value === "reference" || value === "methodology" ? value : "evidence";
 }
 
 async function writeStatus(base, metadata, state, requestId, error) {

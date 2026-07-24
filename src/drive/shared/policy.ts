@@ -6,14 +6,6 @@ export const FILE_LIMITS = {
   pdfPages: 300,
 } as const;
 
-export const QA_LIMITS = {
-  historyRounds: 6,
-  questionCharacters: 3_000,
-  assistantCharacters: 20_000,
-  retrievalResults: 8,
-  contextCharacters: 18_000,
-} as const;
-
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp"] as const;
 export const LARGE_DOCUMENT_EXTENSIONS = ["pdf", "doc", "docx", "ppt", "pptx"] as const;
 export const SMALL_DOCUMENT_EXTENSIONS = ["xls", "xlsx", "md", "txt", "wps"] as const;
