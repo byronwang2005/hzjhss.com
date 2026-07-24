@@ -5,6 +5,7 @@ import pRetry from "p-retry";
 import tencentcloud from "tencentcloud-sdk-nodejs";
 import unzipper from "unzipper";
 import { assertWebhook, bucket, cosCall, extension, fileMetaKey, getJson, head, parseSourceKey, processedBase, putJson, putText, region, required, ROOT_PREFIX, safeError, signedUrl, sourceKey } from "../shared/common.mjs";
+import { knowledgeRoleForPath } from "../../drive/shared/methodology.ts";
 import { FILE_LIMITS } from "../../drive/shared/policy.ts";
 
 const OcrClient = tencentcloud.ocr.v20181119.Client;
@@ -45,7 +46,7 @@ async function processRecord(record) {
     if (!value) throw new Error("文件元数据尚未登记");
     return value;
   }, { retries: 5, minTimeout: 1000, maxTimeout: 3000 });
-  const knowledgeRole = normalizeKnowledgeRole(metadata.knowledgeRole, source.path);
+  const knowledgeRole = knowledgeRoleForPath(metadata.knowledgeRole, source.path);
   if (knowledgeRole === "reference") return;
   const previous = await getJson(`${processedBase(source.topicId, source.path)}status.json`);
   if (previous?.sourceEtag === metadata.etag && ["processing", "indexing", "ready"].includes(previous.state)) return;
@@ -239,11 +240,6 @@ function datesInText(input) {
     if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value) dates.add(value);
   }
   return [...dates].sort();
-}
-
-function normalizeKnowledgeRole(value, path) {
-  if (path === "__methodology__.md") return "methodology";
-  return value === "reference" || value === "methodology" ? value : "evidence";
 }
 
 async function writeStatus(base, metadata, state, requestId, error) {

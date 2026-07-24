@@ -1,5 +1,6 @@
 import MiniSearch from "minisearch";
 import { assertWebhook, fileMetaKey, getJson, head, listAll, putJson, ROOT_PREFIX, sourceKey } from "../shared/common.mjs";
+import { knowledgeRoleForPath } from "../../drive/shared/methodology.ts";
 
 export async function main(event, context) {
   assertWebhook(event);
@@ -18,7 +19,7 @@ export async function main(event, context) {
       head(sourceKey(topicId, set.path)),
       getJson(fileMetaKey(topicId, set.path)),
     ]);
-    const knowledgeRole = normalizeKnowledgeRole(metadata?.knowledgeRole, set.path);
+    const knowledgeRole = knowledgeRoleForPath(metadata?.knowledgeRole, set.path, topic.methodologyPath);
     if (current?.etag === set.sourceEtag && knowledgeRole !== "reference") {
       validSets.push({ ...set, knowledgeRole, reportDate: metadata?.reportDate });
     }
@@ -88,11 +89,6 @@ export function extractTopicId(event, context) {
     || readTopicId(event?.clientContext)
     || readTopicId(context?.client_context)
     || readTopicId(context?.clientContext);
-}
-
-function normalizeKnowledgeRole(value, path) {
-  if (path === "__methodology__.md") return "methodology";
-  return value === "reference" || value === "methodology" ? value : "evidence";
 }
 
 function readTopicId(value) {

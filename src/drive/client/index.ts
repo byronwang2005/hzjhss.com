@@ -12,7 +12,7 @@ import { renderIcon } from "./icons";
 import "./qa-chat";
 import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse } from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
-import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "./utils";
+import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "./utils";
 import { api, ApiError, withTimeout } from "./api";
 import { state, type TopicView } from "./state";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
@@ -270,7 +270,15 @@ async function handleChange(event: Event): Promise<void> {
     : input.matches("[data-reference-input]")
       ? "reference"
       : "evidence";
-  await uploadFiles(knowledgeRole === "methodology" ? files.slice(0, 1) : files, (file) => file.name, knowledgeRole);
+  await uploadFiles(
+    knowledgeRole === "methodology" ? files.slice(0, 1) : files,
+    (file) => knowledgeRole === "methodology" && state.topic?.methodologyPath
+      ? state.topic.methodologyPath
+      : knowledgeRole === "methodology"
+        ? "专题方法论.md"
+        : file.name,
+    knowledgeRole,
+  );
 }
 
 async function uploadFiles(files: File[], pathForFile: (file: File) => string, knowledgeRole: KnowledgeRole): Promise<void> {
@@ -279,7 +287,9 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
   try {
     const prepared = [] as Array<{ file: File; relativePath: string; knowledgeRole: KnowledgeRole; pdfPages?: number }>;
     for (const file of files) {
-      const relativePath = normalizeClientRelativePath(`${state.prefix}${pathForFile(file)}`);
+      const relativePath = normalizeClientRelativePath(
+        knowledgeRole === "methodology" ? pathForFile(file) : `${state.prefix}${pathForFile(file)}`,
+      );
       validateFileSizeAndType(file, relativePath);
       if (knowledgeRole === "methodology" && !relativePath.toLowerCase().endsWith(".md")) throw new Error("专题方法论只支持 Markdown 文件");
       prepared.push({
@@ -575,7 +585,7 @@ function renderFileList(listing: FileListResponse, files: KnowledgeFile[], prese
 function renderFileRow(file: KnowledgeFile): TemplateResult {
   const processing = processingDisplay(file);
   const presentation = FILE_ROLE_PRESENTATION[file.knowledgeRole];
-  const displayName = file.knowledgeRole === "methodology" ? "专题方法论.md" : file.name;
+  const displayName = methodologyDisplayName(file);
   const status = file.knowledgeRole === "reference"
     ? file.incorporatedAt ? "已纳入方法论" : "待纳入方法论"
     : file.knowledgeRole === "methodology"

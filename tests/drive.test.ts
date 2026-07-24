@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { getAiConfig, getDriveConfig, KNOWLEDGE_ROOT_PREFIX, type DriveEnv } from "../src/drive/server/config";
 import {
+  brandedMethodologyPath,
   completeUpload,
   createDownloadUrl,
   createKnowledgeTopic,
@@ -14,6 +15,7 @@ import {
   readKnowledgeTopic,
   sourcePath,
   tempUploadPath,
+  updateKnowledgeTopic,
 } from "../src/drive/server/knowledge";
 import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/server/session";
 import { jsonResponse } from "../src/drive/server/http";
@@ -124,7 +126,12 @@ describe("knowledge topic and upload flow", () => {
 
     const topics = await listKnowledgeTopics(config);
     expect(topics).toHaveLength(1);
-    expect(topics[0]).toMatchObject({ id: topic.id, name: "新能源", ready: false });
+    expect(topics[0]).toMatchObject({
+      id: topic.id,
+      name: "新能源",
+      methodologyPath: "嘉合杉升新能源方法论.md",
+      ready: false,
+    });
     const files = await listKnowledgeFiles(config, topic.id, "");
     expect(files.folders[0].name).toBe("报告");
   });
@@ -169,9 +176,9 @@ describe("knowledge topic and upload flow", () => {
       contentType: "text/markdown",
       knowledgeRole: "methodology",
     });
-    expect(methodology.path).toBe(METHODOLOGY_PATH);
+    expect(methodology.path).toBe("嘉合杉升机器人方法论.md");
     storage.set(tempUploadPath(methodology.uploadId), { body: "# 方法", contentType: "text/markdown", etag: "etag-method" });
-    await completeUpload(config, {
+    const firstMethodology = await completeUpload(config, {
       topicId: topic.id,
       uploadId: methodology.uploadId,
       relativePath: methodology.path,
@@ -180,13 +187,42 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "methodology",
       uploadedBy: "汪旭",
     });
+    expect(firstMethodology).toMatchObject({
+      path: "嘉合杉升机器人方法论.md",
+      name: "嘉合杉升机器人方法论.md",
+      knowledgeRole: "methodology",
+    });
+
+    const replacement = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "另一份框架.md",
+      size: 11,
+      contentType: "text/markdown",
+      knowledgeRole: "methodology",
+    });
+    expect(replacement.path).toBe(methodology.path);
+    storage.set(tempUploadPath(replacement.uploadId), { body: "# 新方法", contentType: "text/markdown", etag: "etag-method-new" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: replacement.uploadId,
+      relativePath: "伪造名称.md",
+      size: 11,
+      contentType: "text/markdown",
+      knowledgeRole: "methodology",
+      uploadedBy: "汪旭",
+    });
 
     const memberFiles = await listKnowledgeFiles(config, topic.id, "");
     const adminFiles = await listKnowledgeFiles(config, topic.id, "", null, { includeMethodology: true });
     expect(memberFiles.files.some((file) => file.knowledgeRole === "methodology")).toBe(false);
-    expect(adminFiles.files.some((file) => file.knowledgeRole === "methodology")).toBe(true);
-    await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH)).rejects.toThrow("无权下载");
-    await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH, { includeMethodology: true })).resolves.toMatchObject({ name: METHODOLOGY_PATH });
+    expect(adminFiles.files.filter((file) => file.knowledgeRole === "methodology")).toHaveLength(1);
+    expect(adminFiles.files.find((file) => file.knowledgeRole === "methodology")).toMatchObject({
+      path: methodology.path,
+      name: methodology.path,
+      etag: "etag-method-new",
+    });
+    await expect(createDownloadUrl(config, topic.id, methodology.path)).rejects.toThrow("无权下载");
+    await expect(createDownloadUrl(config, topic.id, methodology.path, { includeMethodology: true })).resolves.toMatchObject({ name: methodology.path });
 
     const patched = await patchKnowledgeFile(config, {
       topicId: topic.id,
@@ -198,10 +234,11 @@ describe("knowledge topic and upload flow", () => {
     expect(patched.metadata).toMatchObject({ incorporatedBy: "汪旭" });
   });
 
-  it("treats the reserved methodology path as hidden even when its metadata is missing", async () => {
+  it("treats the configured methodology path as hidden even when its metadata is missing", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "异常状态");
-    storage.set(sourcePath(topic.id, METHODOLOGY_PATH), {
+    const methodologyPath = brandedMethodologyPath(topic.name);
+    storage.set(sourcePath(topic.id, methodologyPath), {
       body: "# 不应泄露",
       contentType: "text/markdown",
       etag: "etag-orphan-method",
@@ -210,8 +247,72 @@ describe("knowledge topic and upload flow", () => {
     const memberFiles = await listKnowledgeFiles(config, topic.id, "");
     const adminFiles = await listKnowledgeFiles(config, topic.id, "", null, { includeMethodology: true });
     expect(memberFiles.files).toHaveLength(0);
-    expect(adminFiles.files[0]).toMatchObject({ path: METHODOLOGY_PATH, knowledgeRole: "methodology" });
+    expect(adminFiles.files[0]).toMatchObject({ path: methodologyPath, knowledgeRole: "methodology" });
+    await expect(createDownloadUrl(config, topic.id, methodologyPath)).rejects.toThrow("无权下载");
+  });
+
+  it("keeps historical topics on the legacy methodology path without migration", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "历史专题");
+    makeTopicLegacy(storage, topic.id);
+
+    const methodology = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "任意历史名称.md",
+      size: 11,
+      contentType: "text/markdown",
+      knowledgeRole: "methodology",
+    });
+    expect(methodology.path).toBe(METHODOLOGY_PATH);
+    storage.set(tempUploadPath(methodology.uploadId), { body: "# 旧方法", contentType: "text/markdown", etag: "etag-legacy-method" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: methodology.uploadId,
+      relativePath: methodology.path,
+      size: 11,
+      contentType: "text/markdown",
+      knowledgeRole: "methodology",
+      uploadedBy: "汪旭",
+    });
+
+    expect(storage.has(sourcePath(topic.id, METHODOLOGY_PATH))).toBe(true);
+    expect(storage.has(sourcePath(topic.id, brandedMethodologyPath(topic.name)))).toBe(false);
+    const memberFiles = await listKnowledgeFiles(config, topic.id, "");
+    expect(memberFiles.files).toHaveLength(0);
     await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH)).rejects.toThrow("无权下载");
+  });
+
+  it("reserves both the active and legacy methodology paths from ordinary uploads", async () => {
+    installCosMock();
+    const topic = await createKnowledgeTopic(config, "路径保护");
+    await expect(createUpload(config, {
+      topicId: topic.id,
+      relativePath: topic.methodologyPath,
+      size: 1,
+      contentType: "text/markdown",
+      knowledgeRole: "evidence",
+    })).rejects.toThrow("由专题方法论保留");
+    await expect(createUpload(config, {
+      topicId: topic.id,
+      relativePath: METHODOLOGY_PATH,
+      size: 1,
+      contentType: "text/markdown",
+      knowledgeRole: "evidence",
+    })).rejects.toThrow("由专题方法论保留");
+  });
+
+  it("rejects path separators in topic names and keeps the stored methodology path on rename", async () => {
+    installCosMock();
+    await expect(createKnowledgeTopic(config, "行业/机器人")).rejects.toThrow("不能包含");
+    await expect(createKnowledgeTopic(config, "行业\\机器人")).rejects.toThrow("不能包含");
+
+    const topic = await createKnowledgeTopic(config, "机器人");
+    const renamed = await updateKnowledgeTopic(config, topic.id, "具身智能");
+    expect(renamed).toMatchObject({
+      name: "具身智能",
+      methodologyPath: "嘉合杉升机器人方法论.md",
+    });
+    await expect(updateKnowledgeTopic(config, topic.id, "具身/智能")).rejects.toThrow("不能包含");
   });
 
   it("rejects unknown roles and cross-role overwrites instead of stranding the index", async () => {
@@ -311,6 +412,15 @@ function installCosMock(): Map<string, Stored> {
     return new Response(stored.body, { headers: { "content-type": stored.contentType, etag: `"${stored.etag}"` } });
   };
   return storage;
+}
+
+function makeTopicLegacy(storage: Map<string, Stored>, topicId: string): void {
+  const key = `topics/${topicId}/topic.json`;
+  const stored = storage.get(key);
+  if (!stored) throw new Error("topic fixture missing");
+  const topic = JSON.parse(stored.body) as Record<string, unknown>;
+  delete topic.methodologyPath;
+  storage.set(key, { ...stored, body: JSON.stringify(topic, null, 2) });
 }
 
 function listResponse(storage: Map<string, Stored>, rawPrefix: string, delimiter: string | null): Response {

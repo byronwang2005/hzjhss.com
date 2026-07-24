@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { knowledgeRoleForPath } from "../src/drive/shared/methodology";
 
 let processor: typeof import("../src/scf/file-processor/index.mjs");
 let indexer: typeof import("../src/scf/index-builder/index.mjs");
@@ -42,6 +43,13 @@ describe("SCF event routing and chunking", () => {
     const parsed = processor.parseMethodologyMarkdown("# 核心框架\n\n先看供需，再看库存。", "方法论.md");
     expect(parsed.raw).toEqual({ format: "markdown", source: "方法论.md" });
     expect(parsed.chunks[0]).toMatchObject({ locator: "章节：核心框架" });
+  });
+
+  it("recognizes branded methodology metadata and the legacy reserved path", () => {
+    const brandedPath = "嘉合杉升机器人方法论.md";
+    expect(knowledgeRoleForPath("methodology", brandedPath)).toBe("methodology");
+    expect(knowledgeRoleForPath(undefined, brandedPath, brandedPath)).toBe("methodology");
+    expect(knowledgeRoleForPath(undefined, "__methodology__.md", brandedPath)).toBe("methodology");
   });
 
   it("extracts report dates from file names, parsed headings, and upload fallback", () => {

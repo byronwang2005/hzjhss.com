@@ -21,13 +21,20 @@ import {
   type ProcessingKind,
 } from "../shared/policy";
 import type { KnowledgeRole, ProcessingState, ReportDateSource } from "../shared/contracts";
+import {
+  isReservedMethodologyPath,
+  knowledgeRoleForPath,
+  LEGACY_METHODOLOGY_PATH,
+  METHODOLOGY_FILE_PREFIX,
+  METHODOLOGY_FILE_SUFFIX,
+} from "../shared/methodology";
 
 export const IMAGE_MAX_BYTES = FILE_LIMITS.compactBytes;
 export const DOCUMENT_MAX_BYTES = FILE_LIMITS.documentBytes;
 export const MAX_PDF_PAGES = FILE_LIMITS.pdfPages;
 
 const TOPIC_ID_PATTERN = /^t_[A-Za-z0-9_-]{12,32}$/;
-export const METHODOLOGY_PATH = "__methodology__.md";
+export const METHODOLOGY_PATH = LEGACY_METHODOLOGY_PATH;
 export type { ProcessingKind } from "../shared/policy";
 export type { ProcessingState } from "../shared/contracts";
 
@@ -38,6 +45,7 @@ export interface TopicMetadata {
   createdAt: string;
   updatedAt: string;
   indexVersion: number;
+  methodologyPath?: string;
 }
 
 export interface TopicSummary extends TopicMetadata {
@@ -104,7 +112,16 @@ export function normalizeTopicName(input: unknown): string {
   if (!name) throw new Error("请填写专题名称");
   if (name.length > 80) throw new Error("专题名称过长");
   if (/[\u0000-\u001f\u007f]/.test(name)) throw new Error("专题名称包含非法字符");
+  if (/[\\/]/.test(name)) throw new Error("专题名称不能包含 / 或 \\");
   return name;
+}
+
+export function brandedMethodologyPath(topicName: string): string {
+  return `${METHODOLOGY_FILE_PREFIX}${normalizeTopicName(topicName)}${METHODOLOGY_FILE_SUFFIX}`;
+}
+
+export function methodologyPathForTopic(topic: Pick<TopicMetadata, "methodologyPath">): string {
+  return topic.methodologyPath || METHODOLOGY_PATH;
 }
 
 export function filePolicy(path: string): FilePolicy {
@@ -118,13 +135,11 @@ export function filePolicy(path: string): FilePolicy {
 export function knowledgeRoleOf(
   metadata: Pick<FileMetadata, "knowledgeRole"> | null | undefined,
   relativePath?: string,
+  methodologyPath = METHODOLOGY_PATH,
 ): KnowledgeRole {
   // The reserved path is an authorization boundary, not merely metadata. Fail
   // closed if metadata is missing or from an older schema.
-  if (relativePath === METHODOLOGY_PATH) return "methodology";
-  return metadata?.knowledgeRole === "reference" || metadata?.knowledgeRole === "methodology"
-    ? metadata.knowledgeRole
-    : "evidence";
+  return knowledgeRoleForPath(metadata?.knowledgeRole, relativePath, methodologyPath);
 }
 
 export function topicPrefix(topicId: string): string {
@@ -161,7 +176,16 @@ export function topicIndexManifestPath(topicId: string): string {
 
 export async function createKnowledgeTopic(config: DriveConfig, nameInput: unknown): Promise<TopicMetadata> {
   const now = new Date().toISOString();
-  const topic: TopicMetadata = { version: 1, id: createTopicId(), name: normalizeTopicName(nameInput), createdAt: now, updatedAt: now, indexVersion: 1 };
+  const name = normalizeTopicName(nameInput);
+  const topic: TopicMetadata = {
+    version: 1,
+    id: createTopicId(),
+    name,
+    createdAt: now,
+    updatedAt: now,
+    indexVersion: 1,
+    methodologyPath: brandedMethodologyPath(name),
+  };
   await putObjectText(config, `${topicPrefix(topic.id)}topic.json`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
   return topic;
 }
@@ -179,6 +203,18 @@ export async function readKnowledgeTopic(config: DriveConfig, topicIdInput: unkn
   if (!text) throw new Error("专题不存在");
   const parsed = JSON.parse(text) as Partial<TopicMetadata>;
   if (parsed.version !== 1 || parsed.id !== topicId || typeof parsed.name !== "string") throw new Error("专题元数据无效");
+  if (parsed.methodologyPath !== undefined) {
+    if (
+      typeof parsed.methodologyPath !== "string"
+      || normalizeRelativeFilePath(parsed.methodologyPath) !== parsed.methodologyPath
+      || parsed.methodologyPath === METHODOLOGY_PATH
+      || parsed.methodologyPath.includes("/")
+      || !parsed.methodologyPath.startsWith(METHODOLOGY_FILE_PREFIX)
+      || !parsed.methodologyPath.endsWith(METHODOLOGY_FILE_SUFFIX)
+    ) {
+      throw new Error("专题方法论路径无效");
+    }
+  }
   return parsed as TopicMetadata;
 }
 
@@ -212,7 +248,8 @@ export async function listKnowledgeFiles(
   options: { includeMethodology?: boolean } = {},
 ): Promise<{ prefix: string; folders: DriveFolder[]; files: KnowledgeFile[]; nextCursor: string | null }> {
   const topicId = normalizeTopicId(topicIdInput);
-  await readKnowledgeTopic(config, topicId);
+  const topic = await readKnowledgeTopic(config, topicId);
+  const methodologyPath = methodologyPathForTopic(topic);
   const relativePrefix = relativePrefixInput ? normalizeDirectoryPrefix(relativePrefixInput) : "";
   const storagePrefix = `${topicPrefix(topicId)}files/${relativePrefix}`;
   const listed = await listObjects(config, storagePrefix, cursor);
@@ -222,7 +259,7 @@ export async function listKnowledgeFiles(
       readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
       readJson<ProcessingStatus>(config, processingStatusPath(topicId, relativePath)),
     ]);
-    const knowledgeRole = knowledgeRoleOf(meta, relativePath);
+    const knowledgeRole = knowledgeRoleOf(meta, relativePath, methodologyPath);
     if (knowledgeRole === "methodology" && !options.includeMethodology) return null;
     return {
       ...file,
@@ -250,10 +287,11 @@ export async function listKnowledgeFiles(
 
 export async function createUpload(config: DriveConfig, input: { topicId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown }): Promise<{ url: string; uploadId: string; path: string; contentType: string; knowledgeRole: KnowledgeRole; maxFileBytes: number; requiredHeaders: Record<string, string>; expiresIn: number }> {
   const topicId = normalizeTopicId(input.topicId);
-  await readKnowledgeTopic(config, topicId);
+  const topic = await readKnowledgeTopic(config, topicId);
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
-  const relativePath = knowledgeRole === "methodology" ? METHODOLOGY_PATH : normalizeRelativeFilePath(input.relativePath);
-  if (knowledgeRole !== "methodology" && relativePath === METHODOLOGY_PATH) throw new Error("该文件路径由专题方法论保留");
+  const methodologyPath = methodologyPathForTopic(topic);
+  const relativePath = knowledgeRole === "methodology" ? methodologyPath : normalizeRelativeFilePath(input.relativePath);
+  if (knowledgeRole !== "methodology" && isReservedMethodologyPath(relativePath, methodologyPath)) throw new Error("该文件路径由专题方法论保留");
   const policy = filePolicy(relativePath);
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const size = normalizePositiveSize(input.size);
@@ -280,8 +318,9 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   const topicId = normalizeTopicId(input.topicId);
   const topic = await readKnowledgeTopic(config, topicId);
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
-  const relativePath = knowledgeRole === "methodology" ? METHODOLOGY_PATH : normalizeRelativeFilePath(input.relativePath);
-  if (knowledgeRole !== "methodology" && relativePath === METHODOLOGY_PATH) throw new Error("该文件路径由专题方法论保留");
+  const methodologyPath = methodologyPathForTopic(topic);
+  const relativePath = knowledgeRole === "methodology" ? methodologyPath : normalizeRelativeFilePath(input.relativePath);
+  if (knowledgeRole !== "methodology" && isReservedMethodologyPath(relativePath, methodologyPath)) throw new Error("该文件路径由专题方法论保留");
   const policy = filePolicy(relativePath);
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const declaredSize = normalizePositiveSize(input.size);
@@ -310,7 +349,7 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     await deleteObject(config, temporaryPath);
     throw new Error("同名文件的元数据缺失，请先删除后再上传");
   }
-  if (previousMetadata && knowledgeRoleOf(previousMetadata, relativePath) !== knowledgeRole) {
+  if (previousMetadata && knowledgeRoleOf(previousMetadata, relativePath, methodologyPath) !== knowledgeRole) {
     await deleteObject(config, temporaryPath);
     throw new Error("同名文件不能直接变更资料类型，请先删除后再上传");
   }
@@ -379,7 +418,7 @@ export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unk
     readKnowledgeTopic(config, topicId),
     readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
   ]);
-  const affectsIndex = knowledgeRoleOf(metadata, relativePath) !== "reference";
+  const affectsIndex = knowledgeRoleOf(metadata, relativePath, methodologyPathForTopic(topic)) !== "reference";
   const updatedAt = new Date().toISOString();
   await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify({ ...topic, updatedAt, indexVersion: topic.indexVersion + (affectsIndex ? 1 : 0) }, null, 2), "application/json; charset=utf-8");
   const deletions: Promise<unknown>[] = [
@@ -397,8 +436,11 @@ export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unk
 export async function createDownloadUrl(config: DriveConfig, topicIdInput: unknown, relativePathInput: unknown, options: { includeMethodology?: boolean } = {}): Promise<{ url: string; name: string; expiresIn: number }> {
   const topicId = normalizeTopicId(topicIdInput);
   const relativePath = normalizeRelativeFilePath(relativePathInput);
-  const metadata = await readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath));
-  if (knowledgeRoleOf(metadata, relativePath) === "methodology" && !options.includeMethodology) {
+  const [topic, metadata] = await Promise.all([
+    readKnowledgeTopic(config, topicId),
+    readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
+  ]);
+  if (knowledgeRoleOf(metadata, relativePath, methodologyPathForTopic(topic)) === "methodology" && !options.includeMethodology) {
     const error = new Error("无权下载专题方法论");
     error.name = "DriveForbiddenError";
     throw error;

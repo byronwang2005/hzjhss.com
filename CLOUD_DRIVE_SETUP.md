@@ -88,10 +88,11 @@ ai-knowledge-base/
 每个文件通过元数据区分知识角色：
 
 - `reference`：研报原件，只存储和下载，不调用 OCR、不进入索引。
-- `methodology`：每专题唯一的 `__methodology__.md`，直接读取 Markdown 并进入方法论检索池。
+- `methodology`：每专题唯一，升级后新建专题使用 `嘉合杉升{专题名称}方法论.md`，历史专题继续使用 `__methodology__.md`；文件直接读取 Markdown 并进入方法论检索池，不执行历史路径迁移。
 - `evidence`：周报等时效资料，按现有文档解析流程处理并进入时效检索池。
 
 缺少角色字段的旧文件按 `evidence` 处理。
+新专题元数据会持久化 `methodologyPath`，后续替换始终覆盖该路径；后端修改专题名称不会同步修改已经确定的方法论路径。专题名称不能包含 `/` 或 `\`。
 
 Bucket 配置：
 

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, filesForKnowledgeRole, formatBytes, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
+import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
 
 describe("knowledge client helpers", () => {
@@ -14,6 +14,17 @@ describe("knowledge client helpers", () => {
     expect(fileIconName("data.xlsx")).toBe("file-xls");
     expect(formatBytes(2 * 1024 * 1024)).toBe("2.0 MB");
     expect(directoryPrefix("a/b/")).toBe("a/");
+    expect(fileNameFromPath("报告/年度总结.pdf")).toBe("年度总结.pdf");
+    expect(methodologyDisplayName({
+      knowledgeRole: "methodology",
+      name: "__methodology__.md",
+      path: "__methodology__.md",
+    })).toBe("专题方法论.md");
+    expect(methodologyDisplayName({
+      knowledgeRole: "methodology",
+      name: "嘉合杉升机器人方法论.md",
+      path: "嘉合杉升机器人方法论.md",
+    })).toBe("嘉合杉升机器人方法论.md");
   });
 
   it("stops polling files whose processing never started", () => {

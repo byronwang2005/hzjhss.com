@@ -1,4 +1,5 @@
 import type { KnowledgeFile, KnowledgeRole, ProcessingState, UserRole } from "../shared/contracts";
+import { LEGACY_METHODOLOGY_PATH } from "../shared/methodology";
 import { PROCESSING_STALE_AFTER_MS } from "../shared/runtime";
 
 export interface FileRolePresentation {
@@ -70,6 +71,11 @@ export function directoryPrefix(path: string): string {
 
 export function fileNameFromPath(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
+}
+
+export function methodologyDisplayName(file: Pick<KnowledgeFile, "knowledgeRole" | "name" | "path">): string {
+  if (file.knowledgeRole !== "methodology") return file.name;
+  return file.path === LEGACY_METHODOLOGY_PATH ? "专题方法论.md" : file.name;
 }
 
 export function formatBytes(bytes: number): string {

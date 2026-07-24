@@ -35,6 +35,7 @@ export interface TopicSummary {
   createdAt: string;
   updatedAt: string;
   indexVersion: number;
+  methodologyPath?: string;
   ready: boolean;
 }
 
