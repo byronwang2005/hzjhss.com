@@ -2783,6 +2783,10 @@ drive-pdf-preview {
   border-bottom: 1px solid var(--jh-color-border-soft);
 }
 
+.drive-file-role-tabs.is-two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .drive-file-role-tab {
   display: flex;
   align-items: center;

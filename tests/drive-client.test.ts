@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, filesForKnowledgeRole, formatBytes, normalizeClientRelativePath, processingDisplay } from "../src/drive/client/utils";
+import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, filesForKnowledgeRole, formatBytes, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
 
 describe("knowledge client helpers", () => {
@@ -35,10 +35,18 @@ describe("knowledge client helpers", () => {
     expect(FILE_ROLE_PRESENTATION.evidence.label).toBe("时效资料");
     expect(filesForKnowledgeRole(files, "evidence").map((file) => file.name)).toEqual(["weekly.pdf"]);
   });
+
+  it("renders administrator roles separately from the member two-column roles", () => {
+    expect(visibleFileRoles("admin")).toEqual(["reference", "methodology", "evidence"]);
+    expect(visibleFileRoles("viewer")).toEqual(["reference", "evidence"]);
+    expect(visibleFileRole("viewer", "methodology")).toBe("evidence");
+    expect(visibleFileRole("admin", "methodology")).toBe("methodology");
+  });
 });
 
 describe("knowledge client surface", () => {
   const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+  const workspaceStyles = readFileSync(new URL("../src/drive/client/styles/workspace.css", import.meta.url), "utf8");
   const uploadPolicy = readFileSync(new URL("../src/drive/client/upload-policy.ts", import.meta.url), "utf8");
   const sharedPolicy = readFileSync(new URL("../src/drive/shared/policy.ts", import.meta.url), "utf8");
 
@@ -74,6 +82,10 @@ describe("knowledge client surface", () => {
 
   it("renders role tabs, contextual uploads and accessible table cells", () => {
     expect(source).toContain('data-action="file-role-view"');
+    expect(source).toContain('state.role === "admin" ? "" : " is-two-column"');
+    expect(source).toContain("visibleFileRole(state.role, state.fileRoleView)");
+    expect(workspaceStyles).toContain(".drive-file-role-tabs.is-two-column");
+    expect(workspaceStyles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(source).toContain('role="tabpanel"');
     expect(source).toContain('role="columnheader"');
     expect(source).toContain('data-label="状态"');

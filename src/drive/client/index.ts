@@ -12,7 +12,7 @@ import { renderIcon } from "./icons";
 import "./qa-chat";
 import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse } from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
-import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay } from "./utils";
+import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "./utils";
 import { api, ApiError, withTimeout } from "./api";
 import { state, type TopicView } from "./state";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
@@ -465,17 +465,16 @@ function renderTopic(): TemplateResult {
 
 function renderFiles(): TemplateResult {
   const listing = state.listing;
-  const role = state.fileRoleView;
+  const role = visibleFileRole(state.role, state.fileRoleView);
+  const roles = visibleFileRoles(state.role);
   const presentation = FILE_ROLE_PRESENTATION[role];
   const roleFiles = listing ? filesForKnowledgeRole(listing.files, role) : [];
   const methodologyExists = Boolean(listing?.files.some((file) => file.knowledgeRole === "methodology"));
   const uploadLabel = role === "methodology" && methodologyExists ? "替换专题方法论" : presentation.uploadLabel;
   return html`
     <section class=${`drive-tab-panel drive-files-panel is-${role}`}>
-      <div class="drive-file-role-tabs" role="tablist" aria-label="资料类型">
-        ${renderFileRoleTab("reference", listing)}
-        ${renderFileRoleTab("methodology", listing)}
-        ${renderFileRoleTab("evidence", listing)}
+      <div class=${`drive-file-role-tabs${state.role === "admin" ? "" : " is-two-column"}`} role="tablist" aria-label="资料类型">
+        ${repeat(roles, (entry) => entry, (entry) => renderFileRoleTab(entry, role, listing))}
       </div>
       <div
         id="file-role-panel"
@@ -522,9 +521,9 @@ function renderFiles(): TemplateResult {
   `;
 }
 
-function renderFileRoleTab(role: KnowledgeRole, listing: FileListResponse | null): TemplateResult {
+function renderFileRoleTab(role: KnowledgeRole, selectedRole: KnowledgeRole, listing: FileListResponse | null): TemplateResult {
   const presentation = FILE_ROLE_PRESENTATION[role];
-  const selected = state.fileRoleView === role;
+  const selected = selectedRole === role;
   const count = listing ? filesForKnowledgeRole(listing.files, role).length : 0;
   return html`
     <button

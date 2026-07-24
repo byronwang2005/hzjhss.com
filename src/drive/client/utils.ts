@@ -1,4 +1,4 @@
-import type { KnowledgeFile, KnowledgeRole, ProcessingState } from "../shared/contracts";
+import type { KnowledgeFile, KnowledgeRole, ProcessingState, UserRole } from "../shared/contracts";
 import { PROCESSING_STALE_AFTER_MS } from "../shared/runtime";
 
 export interface FileRolePresentation {
@@ -43,6 +43,16 @@ export const FILE_ROLE_PRESENTATION: Record<KnowledgeRole, FileRolePresentation>
 
 export function filesForKnowledgeRole(files: KnowledgeFile[], role: KnowledgeRole): KnowledgeFile[] {
   return files.filter((file) => file.knowledgeRole === role);
+}
+
+export function visibleFileRoles(userRole: UserRole): KnowledgeRole[] {
+  return userRole === "admin"
+    ? ["reference", "methodology", "evidence"]
+    : ["reference", "evidence"];
+}
+
+export function visibleFileRole(userRole: UserRole, requestedRole: KnowledgeRole): KnowledgeRole {
+  return userRole !== "admin" && requestedRole === "methodology" ? "evidence" : requestedRole;
 }
 
 export function normalizeClientRelativePath(input: string): string {
