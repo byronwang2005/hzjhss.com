@@ -3079,6 +3079,529 @@ drive-pdf-preview {
   }
 }
 
+.drive-codex-handoff-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 20px;
+  padding: 9px 9px 9px 16px;
+  color: var(--jh-color-text);
+  background: color-mix(in srgb, var(--jh-color-brand-soft) 54%, var(--jh-color-surface));
+  border: 1px solid color-mix(in srgb, var(--jh-color-brand) 30%, var(--jh-color-border-soft));
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--jh-highlight) 72%, transparent),
+    0 12px 30px color-mix(in srgb, var(--jh-color-brand) 9%, transparent);
+  animation: drive-handoff-enter var(--jh-duration-slow) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-entry > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.drive-codex-handoff-entry strong {
+  font-size: 13px;
+}
+
+.drive-codex-handoff-entry > div span {
+  color: var(--jh-color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.drive-codex-handoff-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 10px;
+  min-height: 46px;
+  padding: 5px 6px 5px 17px;
+  color: var(--jh-color-on-brand);
+  background: var(--jh-color-brand);
+  border: 0;
+  border-radius: var(--jh-radius-pill);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  box-shadow: 0 9px 24px color-mix(in srgb, var(--jh-color-brand) 24%, transparent);
+  transition:
+    background-color var(--jh-duration-medium) var(--jh-motion-control),
+    box-shadow var(--jh-duration-medium) var(--jh-motion-control),
+    transform var(--jh-duration-medium) var(--jh-motion-control);
+}
+
+.drive-codex-handoff-cta:hover {
+  background: var(--jh-color-brand-hover);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--jh-color-brand) 32%, transparent);
+  transform: translateY(-1px);
+}
+
+.drive-codex-handoff-cta:active {
+  transform: scale(0.98);
+}
+
+.drive-codex-handoff-cta-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--jh-color-on-brand);
+  background: color-mix(in srgb, var(--jh-highlight) 14%, transparent);
+  border-radius: 50%;
+  transition: transform var(--jh-duration-medium) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-cta:hover .drive-codex-handoff-cta-icon {
+  transform: translate(2px, -1px) scale(1.04);
+}
+
+.drive-codex-handoff {
+  margin-top: 20px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--jh-color-brand) 8%, var(--jh-color-surface-muted));
+  border: 1px solid color-mix(in srgb, var(--jh-color-brand) 22%, var(--jh-color-border-soft));
+  border-radius: 17px;
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--jh-color-brand) 10%, transparent);
+  animation: drive-handoff-enter var(--jh-duration-slow) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-core {
+  padding: 17px 18px 16px;
+  background: var(--jh-color-surface);
+  border: 1px solid color-mix(in srgb, var(--jh-highlight) 62%, var(--jh-color-border-soft));
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--jh-highlight) 78%, transparent);
+}
+
+.drive-codex-handoff-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.drive-codex-handoff-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.drive-codex-handoff-heading strong {
+  font-size: 14px;
+}
+
+.drive-codex-handoff-heading span,
+.drive-codex-handoff-heading small {
+  color: var(--jh-color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.drive-codex-handoff-heading small {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  background: var(--jh-color-surface-subtle);
+  border-radius: var(--jh-radius-pill);
+  font-variant-numeric: tabular-nums;
+}
+
+.drive-codex-handoff-rail {
+  --handoff-progress: 0;
+  position: relative;
+  min-width: 0;
+}
+
+.drive-codex-handoff-line,
+.drive-codex-handoff-line-progress {
+  position: absolute;
+  top: 28px;
+  right: 12.5%;
+  left: 12.5%;
+  height: 2px;
+  border-radius: var(--jh-radius-pill);
+  pointer-events: none;
+}
+
+.drive-codex-handoff-line {
+  background: var(--jh-color-border-soft);
+}
+
+.drive-codex-handoff-line-progress {
+  background: var(--jh-color-brand);
+  transform: scaleX(var(--handoff-progress));
+  transform-origin: left center;
+  transition: transform var(--jh-duration-slow) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-signal {
+  --handoff-signal-x: 0px;
+  position: absolute;
+  z-index: 2;
+  top: 28px;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  background: var(--jh-color-brand);
+  border: 2px solid var(--jh-color-surface);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--jh-color-brand) 17%, transparent),
+    0 0 18px color-mix(in srgb, var(--jh-color-brand) 38%, transparent);
+  transform: translate3d(calc(var(--handoff-signal-x) - 50%), -50%, 0);
+  transition:
+    transform var(--jh-duration-slow) var(--jh-motion-enter),
+    opacity var(--jh-duration-fast) var(--jh-motion-control);
+}
+
+.drive-codex-handoff.is-complete .drive-codex-handoff-signal {
+  opacity: 0;
+}
+
+.drive-codex-handoff-steps {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.drive-codex-handoff-step {
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  gap: 7px;
+  color: var(--jh-color-text-muted);
+}
+
+.drive-codex-handoff-node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  color: var(--jh-color-text-muted);
+  background: var(--jh-color-surface-subtle);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--jh-highlight) 76%, transparent);
+  transition:
+    color var(--jh-duration-medium) var(--jh-motion-control),
+    background-color var(--jh-duration-medium) var(--jh-motion-control),
+    border-color var(--jh-duration-medium) var(--jh-motion-control),
+    transform var(--jh-duration-medium) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-step.is-active .drive-codex-handoff-node {
+  color: var(--jh-color-brand);
+  background: var(--jh-color-brand-soft);
+  border-color: color-mix(in srgb, var(--jh-color-brand) 52%, var(--jh-color-border));
+  transform: translateY(-2px);
+}
+
+.drive-codex-handoff-step.is-done .drive-codex-handoff-node {
+  color: var(--jh-color-success);
+  background: var(--jh-color-success-soft);
+  border-color: color-mix(in srgb, var(--jh-color-success) 40%, var(--jh-color-border-soft));
+}
+
+.drive-codex-handoff-step.is-error .drive-codex-handoff-node {
+  color: var(--jh-color-danger);
+  background: var(--jh-color-danger-soft);
+  border-color: color-mix(in srgb, var(--jh-color-danger) 46%, var(--jh-color-border-soft));
+}
+
+.drive-codex-handoff-visual {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+
+.drive-codex-handoff-visual .ui-icon {
+  position: absolute;
+  width: 23px;
+  height: 23px;
+  transition:
+    opacity var(--jh-duration-medium) var(--jh-motion-control),
+    transform var(--jh-duration-medium) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-visual .ui-icon:first-child {
+  top: 2px;
+  left: 2px;
+}
+
+.drive-codex-handoff-visual .ui-icon:last-child {
+  right: 1px;
+  bottom: 1px;
+  width: 17px;
+  height: 17px;
+  color: var(--jh-color-brand);
+  background: var(--jh-color-surface);
+  border-radius: 5px;
+}
+
+.drive-codex-handoff-check {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--jh-color-success);
+  background: var(--jh-color-surface);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity var(--jh-duration-medium) var(--jh-motion-control),
+    transform var(--jh-duration-medium) var(--jh-motion-enter);
+}
+
+.drive-codex-handoff-check .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.drive-codex-handoff-step.is-done .drive-codex-handoff-visual {
+  opacity: 0.42;
+}
+
+.drive-codex-handoff-step.is-done .drive-codex-handoff-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.drive-codex-handoff-label {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drive-codex-handoff-step.is-active .drive-codex-handoff-label {
+  color: var(--jh-color-brand);
+}
+
+.drive-codex-handoff-step.is-done .drive-codex-handoff-label {
+  color: var(--jh-color-success);
+}
+
+.drive-codex-handoff-step.is-error .drive-codex-handoff-label {
+  color: var(--jh-color-danger);
+}
+
+.drive-codex-handoff-step.is-active .is-dialogue .ui-icon:first-child {
+  animation: drive-handoff-dialogue 1.2s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-dialogue .ui-icon:last-child {
+  animation: drive-handoff-dialogue-copy 1.2s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-retrieval .ui-icon:first-child {
+  animation: drive-handoff-file-scan 1.35s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-retrieval .ui-icon:last-child {
+  animation: drive-handoff-database-scan 1.35s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-package .ui-icon:first-child {
+  animation: drive-handoff-package-close 1.15s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-package .ui-icon:last-child {
+  animation: drive-handoff-link-seal 1.15s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-codex .ui-icon:first-child {
+  animation: drive-handoff-codex-pulse 1.1s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-step.is-active .is-codex .ui-icon:last-child {
+  animation: drive-handoff-codex-open 1.1s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-codex-handoff-status {
+  display: grid;
+  place-items: center;
+  min-height: 24px;
+  margin-top: 11px;
+  color: var(--jh-color-text-secondary);
+  font-size: 11px;
+  text-align: center;
+}
+
+.drive-codex-handoff-recovery {
+  display: grid;
+  gap: 10px;
+  margin-top: 11px;
+  padding-top: 12px;
+  border-top: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-codex-handoff-recovery p {
+  margin: 0;
+  color: var(--jh-color-danger);
+  font-size: 12px;
+}
+
+.drive-codex-handoff-recovery > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drive-codex-handoff-recovery a {
+  text-decoration: none;
+}
+
+.drive-codex-handoff-copy-fallback {
+  display: grid;
+  gap: 6px;
+  color: var(--jh-color-text-muted);
+  font-size: 11px;
+}
+
+.drive-codex-handoff-copy-fallback textarea {
+  width: 100%;
+  min-height: 86px;
+  padding: 10px;
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface-subtle);
+  border: 1px solid var(--jh-color-border);
+  border-radius: var(--jh-radius-control);
+  resize: vertical;
+}
+
+.drive-codex-handoff-expiry {
+  margin-top: 8px;
+  color: var(--jh-color-text-muted);
+  font-size: 10px;
+  text-align: center;
+}
+
+@keyframes drive-handoff-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes drive-handoff-dialogue {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(3px, 2px) scale(0.94); }
+}
+
+@keyframes drive-handoff-dialogue-copy {
+  from { transform: translate(2px, 1px) scale(0.9); opacity: 0.58; }
+  to { transform: translate(-2px, -2px) scale(1); opacity: 1; }
+}
+
+@keyframes drive-handoff-file-scan {
+  from { transform: translate(-2px, 2px); }
+  to { transform: translate(3px, -2px); }
+}
+
+@keyframes drive-handoff-database-scan {
+  from { transform: translate(2px, -1px) scale(0.92); opacity: 0.62; }
+  to { transform: translate(-2px, 2px) scale(1); opacity: 1; }
+}
+
+@keyframes drive-handoff-package-close {
+  from { transform: translateY(-3px) scale(1.04); }
+  to { transform: translateY(1px) scale(0.96); }
+}
+
+@keyframes drive-handoff-link-seal {
+  from { transform: translate(3px, 1px) rotate(5deg); opacity: 0.58; }
+  to { transform: translate(-1px, -2px) rotate(0); opacity: 1; }
+}
+
+@keyframes drive-handoff-codex-pulse {
+  from { transform: scale(0.94); opacity: 0.78; }
+  to { transform: scale(1.04); opacity: 1; }
+}
+
+@keyframes drive-handoff-codex-open {
+  from { transform: translate(-2px, 2px) scale(0.9); opacity: 0.52; }
+  to { transform: translate(2px, -2px) scale(1); opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .drive-codex-handoff-entry {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 13px;
+  }
+
+  .drive-codex-handoff-cta {
+    width: 100%;
+  }
+
+  .drive-codex-handoff-core {
+    padding: 15px 10px 14px;
+  }
+
+  .drive-codex-handoff-heading {
+    margin-inline: 3px;
+  }
+
+  .drive-codex-handoff-recovery > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .drive-codex-handoff-recovery .drive-control {
+    width: 100%;
+  }
+}
+
+@media (max-width: 440px) {
+  .drive-codex-handoff {
+    margin-inline: -2px;
+    padding: 4px;
+  }
+
+  .drive-codex-handoff-core {
+    padding-inline: 7px;
+  }
+
+  .drive-codex-handoff-heading {
+    gap: 8px;
+  }
+
+  .drive-codex-handoff-heading > div > span {
+    display: none;
+  }
+
+  .drive-codex-handoff-node {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+  }
+
+  .drive-codex-handoff-line,
+  .drive-codex-handoff-line-progress,
+  .drive-codex-handoff-signal {
+    top: 23px;
+  }
+
+  .drive-codex-handoff-visual {
+    transform: scale(0.86);
+  }
+
+  .drive-codex-handoff-label {
+    font-size: 9px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

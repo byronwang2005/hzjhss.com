@@ -1,8 +1,9 @@
 import type { DriveEnv } from "../../../src/drive/server/config";
 import { getAiConfig, getDriveConfig } from "../../../src/drive/server/config";
 import { jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/server/http";
-import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, encodeSse, finishQaStreamEvents, normalizeQaMessages, qaProviderDeltaEvents, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/server/qa";
+import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, finishQaStreamEvents, normalizeQaMessages, qaProviderDeltaEvents, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/server/qa";
 import { retrieveKnowledge } from "../../../src/drive/server/retrieval";
+import { encodeSse } from "../../../src/drive/server/sse";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
   const session = await readDriveSession({ request, env });

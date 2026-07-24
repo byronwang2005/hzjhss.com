@@ -2,6 +2,31 @@ export type UserRole = "admin" | "viewer";
 export type ProcessingState = "queued" | "processing" | "indexing" | "ready" | "failed";
 export type KnowledgeRole = "reference" | "methodology" | "evidence";
 export type ReportDateSource = "filename" | "content" | "upload" | "manual";
+export type CodexHandoffServerStage = "retrieving" | "packing" | "sealing";
+export type CodexHandoffStage =
+  | "preparing"
+  | CodexHandoffServerStage
+  | "launching"
+  | "complete"
+  | "error";
+
+export interface CodexHandoffRequest {
+  scope: "global" | "topic";
+  topicId?: string;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+}
+
+export interface CodexHandoffReady {
+  deepLink: string;
+  contextUrl: string;
+  fallbackPrompt: string;
+  expiresAt: string;
+}
+
+export type CodexHandoffSseEvent =
+  | { event: "stage"; data: { stage: CodexHandoffServerStage } }
+  | { event: "ready"; data: CodexHandoffReady }
+  | { event: "error"; data: { stage: CodexHandoffServerStage; message: string } };
 
 export interface TopicSummary {
   version: 1;

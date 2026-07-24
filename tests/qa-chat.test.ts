@@ -327,4 +327,153 @@ describe("drive AI Q&A component", () => {
     await Promise.resolve();
     expect(textarea.style.height).toBe("52px");
   });
+
+  it("shows the Codex CTA only after the latest assistant answer completes", async () => {
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    }), { headers: { "content-type": "text/event-stream" } })));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "继续研究";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await qa.updateComplete;
+    expect(qa.querySelector(".drive-codex-handoff-cta")).toBeNull();
+
+    streamController?.enqueue(encoder.encode('event: delta\ndata: {"content":"完成回答"}\n\n'));
+    streamController?.close();
+    await waitForAnswer(qa);
+    expect(qa.querySelector<HTMLButtonElement>(".drive-codex-handoff-cta")?.textContent).toContain("在 Codex 继续");
+  });
+
+  it("renders four SVG handoff stages and follows real SSE stage events", async () => {
+    let handoffBody: Record<string, unknown> | null = null;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/qa")) {
+        return new Response('event: delta\ndata: {"content":"研究结论"}\n\n');
+      }
+      handoffBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(
+        'event: stage\ndata: {"stage":"retrieving"}\n\n'
+        + 'event: stage\ndata: {"stage":"packing"}\n\n'
+        + 'event: stage\ndata: {"stage":"sealing"}\n\n'
+        + 'event: ready\ndata: {"deepLink":"codex://new?prompt=test","contextUrl":"https://hzjhss.com/context","fallbackPrompt":"继续研究 https://hzjhss.com/context","expiresAt":"2026-07-24T14:00:00.000Z"}\n\n',
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    }));
+    const qa = await mountQa("topic");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "研究问题";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+    qa.querySelector<HTMLButtonElement>(".drive-codex-handoff-cta")!.click();
+    await waitForText(qa, "正在唤起 Codex");
+
+    expect(handoffBody).toMatchObject({
+      scope: "topic",
+      topicId: "t_abcdefghijkl",
+      messages: [
+        { role: "user", content: "研究问题" },
+        { role: "assistant", content: "研究结论" },
+      ],
+    });
+    expect(qa.querySelectorAll(".drive-codex-handoff-step")).toHaveLength(4);
+    expect(qa.querySelectorAll(".drive-codex-handoff-visual svg")).toHaveLength(8);
+    expect(qa.querySelector('[data-handoff-stage="launching"]')).not.toBeNull();
+  });
+
+  it("shows elapsed time for a slow handoff and exposes recovery after launch timeout", async () => {
+    vi.useFakeTimers();
+    stubMedia({ reducedMotion: true });
+    const encoder = new TextEncoder();
+    let handoffController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/qa")) return new Response('event: delta\ndata: {"content":"回答"}\n\n');
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          handoffController = controller;
+          controller.enqueue(encoder.encode('event: stage\ndata: {"stage":"retrieving"}\n\n'));
+        },
+      }), { headers: { "content-type": "text/event-stream" } });
+    }));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "慢速研究";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+    qa.querySelector<HTMLButtonElement>(".drive-codex-handoff-cta")!.click();
+    await vi.advanceTimersByTimeAsync(3_000);
+    await qa.updateComplete;
+    expect(qa.textContent).toContain("已等待 3 秒");
+
+    handoffController?.enqueue(encoder.encode('event: stage\ndata: {"stage":"packing"}\n\nevent: stage\ndata: {"stage":"sealing"}\n\nevent: ready\ndata: {"deepLink":"codex://new?prompt=test","contextUrl":"https://hzjhss.com/context","fallbackPrompt":"继续研究","expiresAt":"2026-07-24T14:00:00.000Z"}\n\n'));
+    handoffController?.close();
+    await Promise.resolve();
+    await qa.updateComplete;
+    await vi.advanceTimersByTimeAsync(2_500);
+    await qa.updateComplete;
+
+    expect(qa.textContent).toContain("未检测到 Codex 打开");
+    expect(qa.textContent).toContain("重新打开 Codex");
+    expect(qa.textContent).toContain("复制交接提示");
+    expect(qa.querySelector('a[href="https://hzjhss.com/docs/articles/codex-setup"]')).not.toBeNull();
+  });
+
+  it("marks the handoff complete when Codex takes window focus", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/qa")) return new Response('event: delta\ndata: {"content":"回答"}\n\n');
+      return new Response('event: ready\ndata: {"deepLink":"codex://new?prompt=test","contextUrl":"https://hzjhss.com/context","fallbackPrompt":"继续研究","expiresAt":"2026-07-24T14:00:00.000Z"}\n\n');
+    }));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "切出测试";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+    qa.querySelector<HTMLButtonElement>(".drive-codex-handoff-cta")!.click();
+    await waitForText(qa, "正在唤起 Codex");
+    window.dispatchEvent(new Event("blur"));
+    await qa.updateComplete;
+
+    expect(qa.textContent).toContain("已交接至 Codex");
+    expect(qa.textContent).toContain("上下文链接将在");
+    expect(qa.querySelector('[data-handoff-stage="complete"]')).not.toBeNull();
+  });
+
+  it("falls back to selectable prompt text when clipboard access fails", async () => {
+    vi.useFakeTimers();
+    stubMedia({ reducedMotion: true });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async () => { throw new Error("denied"); }) },
+    });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/qa")) return new Response('event: delta\ndata: {"content":"回答"}\n\n');
+      return new Response('event: ready\ndata: {"deepLink":"codex://new?prompt=test","contextUrl":"https://hzjhss.com/context","fallbackPrompt":"手动复制内容","expiresAt":"2026-07-24T14:00:00.000Z"}\n\n');
+    }));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "复制测试";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+    qa.querySelector<HTMLButtonElement>(".drive-codex-handoff-cta")!.click();
+    await Promise.resolve();
+    await qa.updateComplete;
+    await vi.advanceTimersByTimeAsync(2_500);
+    await qa.updateComplete;
+    const copy = Array.from(qa.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("复制交接提示"));
+    copy?.click();
+    await Promise.resolve();
+    await qa.updateComplete;
+
+    expect(qa.querySelector<HTMLTextAreaElement>(".drive-codex-handoff-copy-fallback textarea")?.value).toBe("手动复制内容");
+  });
 });

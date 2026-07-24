@@ -345,7 +345,3 @@ export function finishQaStreamEvents(state: QaStreamState): QaStreamEvent[] {
   state.thinkingActive = false;
   return [{ event: "thinking", data: { active: false } }];
 }
-
-export function encodeSse(event: "thinking" | "delta" | "done" | "error", data: unknown): Uint8Array {
-  return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}

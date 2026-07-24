@@ -29,7 +29,7 @@ export async function createSessionCookie(env: DriveEnv, requestUrl: string, dis
     displayName: normalizeDisplayName(displayName),
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signature = await signWithPurpose("drive-session", encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
+  const signature = await signPurposeValue("drive-session", encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
   const secure = new URL(requestUrl).protocol === "https:" ? "; Secure" : "";
   return `${COOKIE_NAME}=${encodedPayload}.${signature}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`;
 }
@@ -58,8 +58,7 @@ export async function getDriveSession(env: DriveEnv, cookieHeader: string | null
     return null;
   }
 
-  const expectedSignature = await signWithPurpose("drive-session", encodedPayload, getRequiredEnv(env, "DRIVE_SESSION_SECRET"));
-  if (!constantTimeEqual(providedSignature, expectedSignature)) {
+  if (!await verifyPurposeValue("drive-session", encodedPayload, providedSignature, getRequiredEnv(env, "DRIVE_SESSION_SECRET"))) {
     return null;
   }
 
@@ -135,8 +134,18 @@ async function sign(value: string, secret: string): Promise<string> {
   return base64UrlEncodeBytes(new Uint8Array(signature));
 }
 
-async function signWithPurpose(purpose: "drive-session", value: string, secret: string): Promise<string> {
+export async function signPurposeValue(purpose: "drive-session" | "codex-handoff", value: string, secret: string): Promise<string> {
   return sign(`${purpose}:${value}`, secret);
+}
+
+export async function verifyPurposeValue(
+  purpose: "drive-session" | "codex-handoff",
+  value: string,
+  providedSignature: string,
+  secret: string,
+): Promise<boolean> {
+  const expectedSignature = await signPurposeValue(purpose, value, secret);
+  return constantTimeEqual(providedSignature, expectedSignature);
 }
 
 async function digest(value: string): Promise<string> {

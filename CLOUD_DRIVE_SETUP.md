@@ -69,6 +69,7 @@ Variables：
 ai-knowledge-base/
 ├── system/
 │   ├── users.json
+│   ├── codex-handoffs/{handoffId}.md
 │   └── temp/{jobId}/...
 └── topics/{topicId}/
     ├── topic.json
@@ -96,8 +97,9 @@ Bucket 配置：
 
 - 私有读写并开启阻止公共访问。
 - 开启 SSE-COS 服务端加密。
-- 开启版本控制，非当前版本生命周期设置为 30 天。
-- `ai-knowledge-base/system/temp/` 生命周期设置为 1 天。
+- 开启版本控制。
+- 当前不配置任何 COS 生命周期或定时删除规则，包括非当前版本、`ai-knowledge-base/system/temp/` 和 `ai-knowledge-base/system/codex-handoffs/`；现有空间冗余度足够，所有底层对象长期保留。
+- Codex 交接读取签名固定在 2 小时后失效，但这只终止外部读取权限，不会删除 `ai-knowledge-base/system/codex-handoffs/` 中的 Markdown 对象。
 - COS、SCF 和数据万象使用同一地域。
 
 CORS：
@@ -118,7 +120,7 @@ CORS：
 
 COS `ObjectCreated` 事件触发文件处理函数，前缀设置为 `ai-knowledge-base/topics/`。函数内部只接受 `topics/{topicId}/files/` 对象，其他对象会被忽略，避免处理结果递归触发。
 
-浏览器预签上传只写入 `ai-knowledge-base/system/temp/{jobId}/source`。`upload-complete` 完成 COS HEAD 校验后，使用 COS 服务端复制把对象转存到正式 `files/` 路径并删除临时对象；没有完成登记的对象由 1 天生命周期自动清理。
+浏览器预签上传只写入 `ai-knowledge-base/system/temp/{jobId}/source`。`upload-complete` 完成 COS HEAD 校验后，使用 COS 服务端复制把对象转存到正式 `files/` 路径并删除临时对象；没有完成登记的临时对象不会自动清理，需要时由管理员手动处理。
 
 ### 文件处理函数
 
