@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 知识库布局 QA 夹具</title>
+    <link rel="stylesheet" href="/dist/assets/drive.css">
+  </head>
+  <body class="drive-body">
+    <main class="drive-page" id="main-content">
+      <div data-drive-root></div>
+    </main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const state = params.get("state") || "overview";
+      const root = document.querySelector("[data-drive-root]");
+      const icon = (name, weight = "regular") => `
+        <svg class="ui-icon" aria-hidden="true" focusable="false">
+          <use href="/dist/assets/phosphor-sprite.svg#ph-${weight}-${name}"></use>
+        </svg>`;
+      const control = (iconName, label, extraClass = "") => `
+        <button class="drive-control ${extraClass}" type="button">${icon(iconName)}${label}</button>`;
+      const appbar = `
+        <header class="drive-appbar">
+          <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" aria-label="返回知识库首页">
+            <img src="/public/assets/jhss-logo-cropped.png" alt="">
+            <span><strong>嘉合杉升</strong><small>AI 知识库</small></span>
+          </button>
+          <div class="drive-appbar-meta">
+            <a class="drive-appbar-docs" href="#">${icon("book-open")}AI 手册</a>
+            <button class="theme-toggle" type="button" aria-label="切换到亮色主题">${icon("sun")}</button>
+            <span class="drive-user-badge">设计验收用户<small>管理员</small></span>
+            <button class="drive-icon-button" type="button" aria-label="刷新">${icon("arrow-clockwise")}</button>
+            <button class="drive-icon-button" type="button" aria-label="退出">${icon("sign-out")}</button>
+          </div>
+        </header>`;
+
+      const topics = Array.from({ length: 14 }, (_, index) => `
+        <button class="drive-topic-card" type="button">
+          <span class="drive-topic-card-icon">${icon("folder")}</span>
+          <span>
+            <strong>${index + 1}. ${index % 2 ? "新能源行业周度跟踪与公司研究资料" : "人工智能产业链专题研究"}</strong>
+            <small class="${index === 3 ? "" : "is-ready"}">${index === 3 ? "处理中" : "可问答"}</small>
+          </span>
+          ${icon("arrow-right")}
+        </button>`).join("");
+
+      const messages = Array.from({ length: 8 }, (_, index) => `
+        <article class="drive-ai-qa-message is-user">
+          <header><span>设计验收用户</span></header>
+          <p>请总结第 ${index + 1} 轮资料中的核心结论、风险和对应来源。</p>
+        </article>
+        <article class="drive-ai-qa-message">
+          <header><span>AI 回答</span><small>基于资料</small></header>
+          <div class="drive-ai-qa-markdown">
+            <p>核心结论显示需求保持增长，但库存和价格仍需持续跟踪。当前证据主要来自周报与行业研究，建议结合后续数据验证趋势是否延续。</p>
+            <ul><li>需求端：主要客户订单保持稳定。</li><li>供给端：新增产能释放节奏存在差异。</li></ul>
+          </div>
+        </article>`).join("");
+
+      function qaPanel({ global = false, long = false } = {}) {
+        return `
+          <section class="drive-ai-qa ${global ? "is-global" : ""}" aria-label="${global ? "向全部资料提问" : "专题问答"}">
+            <header class="drive-ai-qa-head">
+              <div class="drive-ai-qa-heading">
+                <span class="drive-ai-qa-symbol">${icon("chat-circle-dots")}</span>
+                <div><span class="drive-eyebrow">${global ? "AI 检索" : "当前专题"}</span><h2>${global ? "向全部资料提问" : "专题问答"}</h2></div>
+              </div>
+              <div class="drive-ai-qa-head-actions">
+                <span class="drive-ai-qa-scope">${icon(global ? "files" : "folder")}${global ? "全部专题" : "新能源产业链"}</span>
+                ${long ? control("trash", "清空会话", "drive-ai-qa-clear") : ""}
+              </div>
+            </header>
+            <div class="drive-ai-qa-messages" data-qa-messages aria-live="polite">
+              ${long ? messages : `<div class="drive-ai-qa-empty"><div><h3>${global ? "早上好，设计验收用户" : "对新能源产业链提问"}</h3><p>回答将附带来源，方便继续核对资料。</p></div></div>`}
+            </div>
+            <form class="drive-ai-qa-form">
+              <div class="drive-ai-qa-composer">
+                <textarea name="qaQuestion" rows="2" aria-label="您的问题" placeholder="请输入关于该专题的问题"></textarea>
+                <button class="drive-ai-qa-action" type="button" aria-label="发送问题">${icon("paper-plane-tilt", "bold")}</button>
+              </div>
+              <span class="drive-ai-qa-status" role="status">对话仅保存在当前页面。</span>
+            </form>
+          </section>`;
+      }
+
+      const fileRows = Array.from({ length: 30 }, (_, index) => `
+        <div class="drive-file-row is-evidence" role="row">
+          <span class="drive-file-name" role="cell" data-label="名称">
+            <span class="drive-file-type-icon">${icon(index % 3 ? "file-pdf" : "file-ppt")}</span>
+            <span class="drive-file-name-copy">
+              <strong>2026年第${String(index + 1).padStart(2, "0")}周新能源行业跟踪报告${index % 4 === 0 ? "（更新版）" : ""}.${index % 3 ? "pdf" : "pptx"}</strong>
+              <small class="drive-file-role-badge is-evidence">时效资料</small>
+            </span>
+          </span>
+          <span role="cell" data-label="大小">${(2.4 + index / 10).toFixed(1)} MB</span>
+          <span role="cell" data-label="状态">${index === 2 ? "处理中" : "已处理 · 2026-07-25"}</span>
+          <span role="cell" data-label="更新">2026/07/${String(25 - index % 20).padStart(2, "0")}</span>
+          <span class="drive-row-actions" role="cell" data-label="操作">
+            <button class="drive-table-action" type="button">${icon("calendar-dots", "duotone")}日期</button>
+            <button class="drive-table-action" type="button">${icon("download-simple")}下载</button>
+            <button class="drive-table-action is-danger" type="button">${icon("trash")}删除</button>
+          </span>
+        </div>`).join("");
+
+      function pageHead() {
+        return `
+          <div class="drive-page-head"><div>
+            <button class="drive-back-link" type="button">${icon("arrow-left")}返回知识库</button>
+            <h1>新能源产业链</h1>
+            <p>从当前专题中提问，或管理专题资料。</p>
+          </div></div>`;
+      }
+
+      function topicTabs(active) {
+        return `
+          <div class="drive-tabs" role="tablist" aria-label="专题工作区">
+            <button class="${active === "qa" ? "is-active" : ""}" type="button">${icon("chat-circle-dots")}问答</button>
+            <button class="${active === "files" ? "is-active" : ""}" type="button">${icon("files")}文件</button>
+          </div>`;
+      }
+
+      function overview() {
+        return `
+          <div class="drive-two-column">
+            ${qaPanel({ global: true })}
+            <aside class="drive-panel drive-topic-panel">
+              <div class="drive-panel-head">
+                <div><span class="drive-eyebrow">资料范围</span><h2>专题</h2></div>
+                <div class="drive-topic-panel-actions"><span>14 个</span>${control("folder-plus", "新建专题")}</div>
+              </div>
+              <div class="drive-topic-grid">${topics}</div>
+            </aside>
+          </div>`;
+      }
+
+      function topicQa() {
+        return `${pageHead()}${topicTabs("qa")}<div class="drive-topic-view-panel" role="tabpanel" tabindex="0">${qaPanel({ long: true })}</div>`;
+      }
+
+      function files() {
+        return `
+          ${pageHead()}
+          ${topicTabs("files")}
+          <div class="drive-topic-view-panel" role="tabpanel" tabindex="0">
+            <section class="drive-tab-panel drive-files-panel is-evidence">
+              <div class="drive-file-role-tabs" role="tablist" aria-label="资料类型">
+                <button class="drive-file-role-tab is-reference" type="button">
+                  <span class="drive-file-role-tab-icon">${icon("books", "duotone")}</span><span><strong>研报原件</strong><small>8 项</small></span>
+                </button>
+                <button class="drive-file-role-tab is-methodology" type="button">
+                  <span class="drive-file-role-tab-icon">${icon("database", "duotone")}</span><span><strong>专题方法论</strong><small>1 项</small></span>
+                </button>
+                <button class="drive-file-role-tab is-evidence is-active" type="button">
+                  <span class="drive-file-role-tab-icon">${icon("calendar-dots", "duotone")}</span><span><strong>时效资料</strong><small>30 项</small></span>
+                </button>
+              </div>
+              <div class="drive-file-role-panel" role="tabpanel" tabindex="0">
+                <div class="drive-material-toolbar">
+                  <div class="drive-material-heading">
+                    <span class="drive-file-role-symbol">${icon("calendar-dots", "duotone")}</span>
+                    <div><span class="drive-eyebrow">资料管理</span><h2>时效资料</h2><p>持续更新的周报、会议纪要和业务数据，用于回答时效问题。</p></div>
+                  </div>
+                  <div class="drive-upload-actions">${control("upload-simple", "上传时效资料", "drive-control-primary")}</div>
+                </div>
+                <div class="drive-file-table" role="table" aria-label="时效资料">
+                  <div class="drive-file-row drive-file-row-head" role="row">
+                    <span role="columnheader">名称</span><span role="columnheader">大小</span><span role="columnheader">状态</span><span role="columnheader">更新</span><span role="columnheader">操作</span>
+                  </div>
+                  ${fileRows}
+                </div>
+                <div class="drive-topic-danger-zone">
+                  <div><strong>专题管理</strong><span>删除专题会永久移除其中的全部资料。</span></div>
+                  ${control("trash", "删除专题", "drive-control-danger")}
+                </div>
+              </div>
+            </section>
+          </div>`;
+      }
+
+      root.innerHTML = `
+        <section class="drive-dashboard">
+          ${appbar}
+          <main class="drive-dashboard-main is-${state}" data-mode="${state}">
+            ${state === "overview" ? overview() : state === "files" ? files() : topicQa()}
+          </main>
+        </section>`;
+    </script>
+  </body>
+</html>

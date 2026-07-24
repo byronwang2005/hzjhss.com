@@ -1,44 +1,101 @@
-# Product Design QA
+# Product Design QA — AI 知识库视口与密度优化
 
-- Source visual truth: `/Users/macbook/.codex/visualizations/2026/07/21/019f8531-1733-7e33-9517-bbbb93690e75/hzjhss-current-login.png`
-- Implementation screenshot: `/Users/macbook/.codex/visualizations/2026/07/21/019f8531-1733-7e33-9517-bbbb93690e75/hzjhss-redesign-login-final.png`
-- Mobile implementation screenshot: `/Users/macbook/.codex/visualizations/2026/07/21/019f8531-1733-7e33-9517-bbbb93690e75/hzjhss-redesign-login-mobile-final-2.png`
-- Desktop viewport: `1440 × 1024`
-- Mobile viewport: `390 × 844`
-- State: signed-out login screen
+## 范围与视觉基准
 
-**Evidence**
+- 仅检查 AI 知识库；AI 手册未调整。
+- 视觉基准：修改前由当前生产 DOM、图标和设计令牌生成的浏览器画面。
+- 实现画面：修改后使用相同 DOM、数据、主题与视口重新捕获。
+- QA 夹具：`tests/fixtures/knowledge-layout.html`
+- 证据目录：`/Users/macbook/.codex/visualizations/2026/07/24/019f94cf-a4a9-74d1-abf8-825ff6ac268d/hzjhss-knowledge-density-2026-07-25`
+- 桌面视口：`1366 × 768`、`1440 × 810`、`1920 × 1080`
+- 窄屏回退：`390 × 844`
+- 主题：深色
+- 数据状态：首页 14 个专题、专题问答 8 轮长对话、文件管理 30 条文件；首页同时覆盖空对话。
 
-- The source and implementation screenshots were each opened and visually inspected at the same desktop viewport and login state.
-- The implementation was also rendered at the mobile viewport. Measured page width and scroll width are both 390 px, so there is no horizontal overflow.
-- The browser-rendered login fields accepted and cleared text normally. The page reported no browser console errors.
-- Full-view same-canvas comparison is blocked: the user explicitly skipped ImageGen after repeated network failures, and the in-app browser rejected the local comparison canvas under its URL security policy.
-- Focused-region comparison was not attempted because the required shared comparison canvas is unavailable.
+## 同画布对比
 
-**Findings**
+- 首页：`comparisons/overview-1366x768-side-by-side.png`
+- 专题问答：`comparisons/qa-1366x768-side-by-side.png`
+- 文件管理：`comparisons/files-1366x768-side-by-side.png`
+- 专题问答焦点区域：`comparisons/qa-focus-side-by-side.png`
+- 文件管理焦点区域：`comparisons/files-focus-side-by-side.png`
 
-- No P0/P1/P2 defect was observed in the separately opened implementation captures.
-- Fonts and typography: the redesigned page uses the existing system Chinese font stack with clearer display/body hierarchy and no visible clipping at the tested desktop viewport.
-- Spacing and layout rhythm: the desktop split layout is balanced; mobile collapses to one column and remains horizontally contained.
-- Colors and visual tokens: the dark graphite and warm-gold tokens are consistent across branding, form controls, focus states, and actions.
-- Image quality and asset fidelity: the supplied raster brand logo is used directly; existing Phosphor icons remain the only UI icon source.
-- Copy and content: login, AI question, topic, file-management, loading, empty, and role-specific labels preserve the existing product scope.
+以上对比均将修改前与修改后的浏览器截图放在同一画布，使用相同的 `1366 × 768` 视口和数据状态进行判断。
 
-**Comparison History**
+## 滚动测量
 
-1. Initial mobile capture exposed the transparent page canvas as white below the viewport. The root page background was explicitly set to the workspace surface color.
-2. The mobile introductory region was then tightened; the revised page has no horizontal overflow and a total height of 899 px at a 390 × 844 viewport.
+九组桌面状态/视口组合均满足：
 
-**Implementation Checklist**
+- `document.documentElement.scrollHeight === document.documentElement.clientHeight`
+- `document.documentElement.scrollWidth === document.documentElement.clientWidth`
+- 浏览器页面无纵向、横向溢出。
 
-- [x] Desktop login layout and form interaction verified.
-- [x] Mobile responsive width and overflow verified.
-- [x] Browser console checked.
-- [x] Unit tests, typecheck, and production build verified.
-- [ ] Same-canvas visual comparison requires a reachable selected mock or an available comparison surface.
+关键测量：
 
-**Follow-up Polish**
+| 状态 | 1366 × 768 | 1440 × 810 | 1920 × 1080 |
+| --- | --- | --- | --- |
+| 首页 | 页面 `768/768`；专题列表 `812/607` | 页面 `810/810`；专题列表可内部滚动 | 页面 `1080/1080`；专题列表可内部滚动 |
+| 长对话 | 页面 `768/768`；消息区 `2175/354`；输入框底部 `751` | 页面 `810/810`；消息区 `396` 高 | 页面 `1080/1080`；消息区 `589` 高 |
+| 30 条文件 | 页面 `768/768`；文件表 `1721/282`；危险区底部 `741` | 页面 `810/810`；文件表 `324` 高 | 页面 `1080/1080`；文件表 `510` 高 |
 
-- Consider placing the mobile login CTA fully above the first fold in a later content-density pass.
+真实滚轮交互验证：
 
-final result: blocked
+- 对话消息区：内部 `scrollTop 0 → 324.5`，外层 `window.scrollY` 保持 `0`。
+- 专题列表：内部 `scrollTop 0 → 204.5`，外层 `window.scrollY` 保持 `0`。
+- 文件表格：内部 `scrollTop 0 → 560`，外层 `window.scrollY` 保持 `0`。
+- `390 × 844` 下页面宽度和滚动宽度均为 `390`，无横向溢出；按设计恢复自然纵向浏览。
+
+## Product Design Findings
+
+### Typography
+
+- 保留现有中文系统字体、暖金强调色和标题层级。
+- 紧凑密度只压缩尺寸和间距，没有降低正文行距或交互文字可读性。
+- 长对话消息宽度、段落行距和轮次间距在三档桌面视口均无裁切。
+
+### Spacing and layout rhythm
+
+- 基准画面中，首页、问答和文件管理的页面高度分别达到 `1361`、`2897`、`2631` px，属于 P1 级主任务不可达问题。
+- 实现使用 `100dvh`、固定顶栏网格和完整的 `min-height: 0` 高度链路消除了外层溢出。
+- 统一密度变量集中控制顶栏、主区留白、区块间距、面板头、表格行和输入框高度。
+- 1366 × 768 启用紧凑密度，关键按钮仍保持至少 36–40 px 的可操作高度。
+
+### Colors and visual tokens
+
+- 深色石墨背景、暖金主操作、绿色时效资料标记和红色危险操作均沿用现有令牌。
+- 普通文件操作降低对比度，删除操作保持独立危险样式。
+- 焦点样式和键盘可达结构未被覆盖。
+
+### Image quality and asset fidelity
+
+- 继续使用项目现有品牌图片和 Phosphor sprite。
+- 未引入新素材、手绘图标、组件库或视觉风格。
+
+### Copy and content
+
+- 登录、首页、问答、文件类型、上传、状态和删除文案保持原意。
+- DOM 仅增加 `is-overview`、`is-topic`、`is-create` 与 `data-mode` 布局标识；未修改 API、数据结构或共享类型。
+
+## 状态与交互覆盖
+
+- [x] 登录页 1366 × 768 回归：`scrollHeight === clientHeight`，无横向溢出。
+- [x] 首页空对话与长专题列表。
+- [x] 专题长对话，输入框固定在底部。
+- [x] 30 条文件，表头吸顶、表格内部滚动、危险区持续可见。
+- [x] 消息区、专题列表、文件表格的真实滚轮交互。
+- [x] 浏览器控制台无 warning/error。
+- [x] 窄屏自然页面滚动与无横向溢出。
+- [x] 现有加载、空列表、上传进度、错误提示和删除弹窗 DOM/类名保持不变，布局容器为其预留稳定高度。
+- [x] Vitest 布局结构测试、类型检查、生产构建。
+
+## Comparison history
+
+1. 基准审计发现三个知识库主状态均存在外层纵向溢出，专题页标题和文件工具栏占用过多首屏高度。
+2. 第一轮实现将滚动职责收敛到消息、专题和文件三个内容面板，并压缩桌面密度。
+3. 同视口复查确认输入框、专题面板头、文件工具栏、表头和危险区均持续可见；未发现新的 P0/P1/P2 视觉问题。
+
+## 仍需人工确认
+
+- 本地真实入口只具备未登录态；登录后的业务数据画面使用与生产相同类名、资源和 DOM 结构的 QA 夹具验证。建议上线前在真实授权会话中快速走查一次上传中、接口错误和删除确认弹窗的文案长度。
+
+final result: passed

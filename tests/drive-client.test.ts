@@ -80,6 +80,19 @@ describe("knowledge client surface", () => {
     expect(source).toContain('state.role === "admin" ? html`<button class="drive-control" data-action="create-topic"');
   });
 
+  it("keeps desktop scrolling inside the conversation, topic list and file table", () => {
+    expect(source).toContain('class=${`drive-dashboard-main is-${state.mode}`}');
+    expect(source).toContain("data-mode=${state.mode}");
+    expect(workspaceStyles).toContain("@media (min-width: 1024px) and (min-height: 640px)");
+    expect(workspaceStyles).toMatch(/\.drive-page \{[\s\S]*?height: 100dvh;[\s\S]*?overflow: hidden;/);
+    expect(workspaceStyles).toMatch(/\.drive-dashboard \{[\s\S]*?grid-template-rows: var\(--drive-shell-appbar-height\) minmax\(0, 1fr\);/);
+    expect(workspaceStyles).toMatch(/\.drive-dashboard-main \{[\s\S]*?min-height: 0;[\s\S]*?overflow: hidden;/);
+    expect(workspaceStyles).toMatch(/\.drive-ai-qa-messages \{[\s\S]*?overflow-y: auto;[\s\S]*?scrollbar-gutter: stable;/);
+    expect(workspaceStyles).toMatch(/\.drive-topic-grid \{[\s\S]*?overflow-y: auto;[\s\S]*?scrollbar-gutter: stable;/);
+    expect(workspaceStyles).toMatch(/\.drive-file-role-panel > \.drive-file-table \{[\s\S]*?overflow: auto;[\s\S]*?scrollbar-gutter: stable;/);
+    expect(workspaceStyles).toMatch(/\.drive-file-row-head \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
+  });
+
   it("validates supported formats, PDF pages and upload progress", () => {
     expect(sharedPolicy).toContain('"png", "jpg", "jpeg", "bmp"');
     expect(sharedPolicy).toContain('"pdf", "doc", "docx", "ppt", "pptx"');

@@ -514,7 +514,7 @@ function renderShell(): TemplateResult {
       </button>
       <div class="drive-appbar-meta"><a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a>${renderThemeToggle()}<span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
     </header>
-    <main class="drive-dashboard-main">
+    <main class=${`drive-dashboard-main is-${state.mode}`} data-mode=${state.mode}>
       ${state.mode === "overview" ? nothing : html`
         <div class="drive-page-head"><div>
           <button class="drive-back-link" type="button" data-action="back">${renderIcon("arrow-left")}返回知识库</button>
