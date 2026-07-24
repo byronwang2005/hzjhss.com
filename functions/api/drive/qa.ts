@@ -1,7 +1,7 @@
 import type { DriveEnv } from "../../../src/drive/server/config";
 import { getAiConfig, getDriveConfig } from "../../../src/drive/server/config";
 import { jsonResponse, readDriveSession, readJsonBody } from "../../../src/drive/server/http";
-import { buildQaRequestMessages, createQaClient, encodeSse, normalizeQaMessages, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/server/qa";
+import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, encodeSse, finishQaStreamEvents, normalizeQaMessages, qaProviderDeltaEvents, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../../../src/drive/server/qa";
 import { retrieveKnowledge } from "../../../src/drive/server/retrieval";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
@@ -50,12 +50,10 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     const client = createQaClient(aiConfig);
     const createStream = (budgetScale = 1) => {
       const built = buildQaRequestMessages(aiConfig, qaMessages, retrieved, scope === "global", { budgetScale });
-      return client.chat.completions.create({
-        model: aiConfig.model,
-        messages: built.messages,
-        stream: true,
-        max_tokens: aiConfig.maxOutputTokens,
-      }, { signal: request.signal });
+      return client.chat.completions.create(
+        createQaCompletionParams(aiConfig, built.messages),
+        { signal: request.signal },
+      );
     };
     stream = await retryOnceOnContextLength(createStream);
   } catch (error) {
@@ -63,14 +61,23 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
   }
   return new Response(new ReadableStream<Uint8Array>({
     async start(controller) {
+      const streamState = createQaStreamState();
       try {
         for await (const chunk of stream) {
           for (const choice of chunk.choices) {
-            if (choice.delta.content) controller.enqueue(encodeSse("delta", { content: choice.delta.content }));
+            for (const event of qaProviderDeltaEvents(aiConfig.provider, choice.delta, streamState)) {
+              controller.enqueue(encodeSse(event.event, event.data));
+            }
           }
+        }
+        for (const event of finishQaStreamEvents(streamState)) {
+          controller.enqueue(encodeSse(event.event, event.data));
         }
         controller.enqueue(encodeSse("done", { ok: true }));
       } catch (error) {
+        for (const event of finishQaStreamEvents(streamState)) {
+          controller.enqueue(encodeSse(event.event, event.data));
+        }
         controller.enqueue(encodeSse("error", { error: upstreamAiErrorMessage(error) }));
       } finally {
         controller.close();

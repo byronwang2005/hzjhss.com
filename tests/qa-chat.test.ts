@@ -27,6 +27,14 @@ async function waitForAnswer(qa: DriveAiQa): Promise<void> {
   }
 }
 
+async function waitForText(qa: DriveAiQa, text: string): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await qa.updateComplete;
+    if (qa.textContent?.includes(text)) return;
+  }
+}
+
 describe("drive AI Q&A component", () => {
   it("sends global scope and renders streamed Markdown safely", async () => {
     let requestBody: Record<string, unknown> | null = null;
@@ -48,6 +56,33 @@ describe("drive AI Q&A component", () => {
     expect(requestBody).not.toHaveProperty("prefix");
     expect(qa.querySelector("strong")?.textContent).toBe("可追溯回答");
     expect(qa.querySelector(".drive-ai-qa-heading p")).toBeNull();
+  });
+
+  it("shows a thinking status without rendering reasoning content, then streams the final answer", async () => {
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+        controller.enqueue(encoder.encode('event: thinking\ndata: {"active":true}\n\n'));
+      },
+    }), { headers: { "content-type": "text/event-stream" } })));
+    const qa = await mountQa("global");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "需要深度分析";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForText(qa, "正在深度思考");
+
+    expect(qa.textContent).toContain("正在深度思考");
+    expect(qa.textContent).not.toContain("内部思维链");
+
+    streamController?.enqueue(encoder.encode('event: thinking\ndata: {"active":false}\n\nevent: delta\ndata: {"content":"最终结论"}\n\nevent: done\ndata: {"ok":true}\n\n'));
+    streamController?.close();
+    await waitForAnswer(qa);
+    expect(qa.textContent).toContain("最终结论");
+    expect(qa.textContent).toContain("回答完成");
   });
 
   it("sends the topic prefix and resets when the topic changes", async () => {

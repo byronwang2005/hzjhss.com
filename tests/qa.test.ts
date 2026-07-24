@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQaRequestMessages, createRetrievedQaSystemMessage, isContextLengthError, normalizeQaMessages, QaCapacityError, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../src/drive/server/qa";
+import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, createRetrievedQaSystemMessage, finishQaStreamEvents, isContextLengthError, normalizeQaMessages, qaInputTokenBudget, qaProviderDeltaEvents, QaCapacityError, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../src/drive/server/qa";
 import { isMethodologyQuery } from "../src/drive/server/retrieval";
 import { buildSerializedSearchIndex, searchSerializedIndex, tokenizeKnowledgeText } from "../src/drive/server/search";
 
@@ -50,6 +50,55 @@ describe("knowledge retrieval", () => {
 });
 
 describe("retrieval-grounded prompt", () => {
+  it("uses the configured DeepSeek thinking mode and reserves the full completion budget", () => {
+    const params = createQaCompletionParams({
+      model: "deepseek-v4-pro",
+      maxOutputTokens: 384_000,
+      provider: "deepseek",
+      reasoningEffort: "high",
+    }, [{ role: "user", content: "问题" }]);
+    expect(params).toMatchObject({
+      model: "deepseek-v4-pro",
+      stream: true,
+      max_tokens: 384_000,
+      reasoning_effort: "high",
+      thinking: { type: "enabled" },
+    });
+    const compatibleParams = createQaCompletionParams({
+      model: "another-model",
+      maxOutputTokens: 4_000,
+      provider: "openai-compatible",
+      reasoningEffort: "high",
+    }, [{ role: "user", content: "问题" }]);
+    expect(compatibleParams).not.toHaveProperty("thinking");
+    expect(compatibleParams).not.toHaveProperty("reasoning_effort");
+    expect(qaInputTokenBudget({ contextWindowTokens: 1_000_000, maxOutputTokens: 384_000 })).toBe(566_000);
+    expect(createQaClient({
+      apiKey: "key",
+      baseURL: "https://api.deepseek.com",
+      model: "deepseek-v4-pro",
+      maxOutputTokens: 384_000,
+      contextWindowTokens: 1_000_000,
+      provider: "deepseek",
+      reasoningEffort: "high",
+      requestTimeoutMs: 300_000,
+    }).timeout).toBe(300_000);
+  });
+
+  it("turns reasoning deltas into status only and never exposes the raw chain of thought", () => {
+    const state = createQaStreamState();
+    const thinking = qaProviderDeltaEvents("deepseek", { reasoning_content: "内部方法论秘密" }, state);
+    expect(thinking).toEqual([{ event: "thinking", data: { active: true } }]);
+    expect(JSON.stringify(thinking)).not.toContain("内部方法论秘密");
+    expect(qaProviderDeltaEvents("deepseek", { reasoning_content: "更多秘密" }, state)).toEqual([]);
+    expect(qaProviderDeltaEvents("deepseek", { content: "最终回答" }, state)).toEqual([
+      { event: "thinking", data: { active: false } },
+      { event: "delta", data: { content: "最终回答" } },
+    ]);
+    expect(finishQaStreamEvents(state)).toEqual([]);
+    expect(qaProviderDeltaEvents("openai-compatible", { reasoning_content: "供应商私有字段" }, createQaStreamState())).toEqual([]);
+  });
+
   it("requires file and locator citations without exposing COS URLs", () => {
     const prompt = createRetrievedQaSystemMessage([{ topicName: "新能源", fileName: "report.pdf", locator: "第 12 页", content: "库存增长。" }], true);
     expect(prompt).toContain("[文件名，位置]");

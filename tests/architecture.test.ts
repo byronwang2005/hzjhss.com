@@ -29,7 +29,7 @@ describe("shared application policy", () => {
     expect(client).not.toContain("maxlength=");
     expect(client).not.toContain("historyRounds");
     expect(server).toContain("contextWindowTokens");
-    expect(server).toContain("safetyTokens");
+    expect(server).toContain("qaInputTokenBudget");
   });
 });
 

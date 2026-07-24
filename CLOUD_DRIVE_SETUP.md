@@ -52,9 +52,12 @@ Variables：
 - `DRIVE_ROOT_PREFIX`：固定为 `ai-knowledge-base/`
 - `DRIVE_SESSION_MAX_AGE_SECONDS`：默认 `28800`
 - `AI_BASE_URL`：OpenAI-compatible API 根地址
-- `AI_MODEL`：Chat Completions 模型名
+- `AI_MODEL`：Chat Completions 模型名；DeepSeek 应使用当前支持的 `deepseek-v4-pro` 或 `deepseek-v4-flash`
 - `AI_MAX_OUTPUT_TOKENS`：默认 `2500`
 - `AI_CONTEXT_WINDOW_TOKENS`：必填，当前模型公开的完整上下文窗口 token 数；系统会扣除输出预算和 5% 安全余量后动态装填资料
+- `AI_PROVIDER`：可选，支持 `deepseek` 或 `openai-compatible`；模型名以 `deepseek-` 开头时默认使用 `deepseek`，其他模型默认使用标准兼容模式
+- `AI_REASONING_EFFORT`：可选，DeepSeek 思考强度，仅支持 `high` 或 `max`，默认 `high`
+- `AI_REQUEST_TIMEOUT_MS`：可选，模型流式请求超时毫秒数，默认 `300000`（300 秒）
 - `PROCESSOR_WEBHOOK_URL`：文件处理 SCF 的 HTTPS Web 函数地址
 - `INDEXER_WEBHOOK_URL`：索引构建 SCF 的 HTTPS Web 函数地址
 
@@ -188,6 +191,8 @@ SCF 角色额外需要：
 - 全局问答并行检索所有就绪专题索引。
 - 方法论和时效资料分别检索，不设置固定片段数或字符数；系统按 `AI_CONTEXT_WINDOW_TOKENS` 动态装填检索资料和对话历史。
 - 输入预算等于模型窗口减去最大输出 token 和 5% 安全余量；超过预算时先移除最旧完整问答，再停止加入低排名资料。
+- DeepSeek 问答显式开启思考模式并保持流式响应；界面只显示“正在深度思考”状态，服务端不会向浏览器转发、展示或保存原始 `reasoning_content`。
+- `AI_MAX_OUTPUT_TOKENS` 同时覆盖思考过程与最终回答的 completion token；输入与输出总和不能超过模型上下文窗口。例如 1M 窗口、384K 最大输出和 5% 安全余量对应约 566K 可用输入预算。
 - 每次请求注入 `Asia/Shanghai` 当前日期；包含“最新、本周、近期、截至”等时间意图时，对相关的近期周报增加有界时效权重。
 - 回答必须引用文件名以及页码、工作表、幻灯片或章节。
 - 方法论只作为分析框架，对成员显示为“专题方法论”，不暴露内部文件名和位置。

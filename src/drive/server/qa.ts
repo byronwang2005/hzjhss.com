@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { AiConfig } from "./config";
+import type { ChatCompletionCreateParamsStreaming, ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type { AiConfig, AiProvider } from "./config";
 import type { RetrievedKnowledge } from "./retrieval";
 import type { KnowledgeRole } from "../shared/contracts";
 
@@ -75,6 +75,27 @@ export interface BuiltQaMessages {
   estimatedInputTokens: number;
 }
 
+export type QaChatCompletionParams = ChatCompletionCreateParamsStreaming & {
+  thinking?: { type: "enabled" };
+};
+
+export function createQaCompletionParams(
+  config: Pick<AiConfig, "model" | "maxOutputTokens" | "provider" | "reasoningEffort">,
+  messages: ChatCompletionMessageParam[],
+): QaChatCompletionParams {
+  const base: ChatCompletionCreateParamsStreaming = {
+    model: config.model,
+    messages,
+    stream: true,
+    max_tokens: config.maxOutputTokens,
+  };
+  return config.provider === "deepseek" ? {
+    ...base,
+    reasoning_effort: config.reasoningEffort,
+    thinking: { type: "enabled" },
+  } : base;
+}
+
 export function buildQaRequestMessages(
   config: Pick<AiConfig, "contextWindowTokens" | "maxOutputTokens">,
   qaMessages: QaMessage[],
@@ -86,8 +107,7 @@ export function buildQaRequestMessages(
   if (!latest || latest.role !== "user") throw new Error("最新一条对话必须是用户问题");
   const now = options.now || new Date();
   const budgetScale = Math.min(1, Math.max(0.1, options.budgetScale ?? 1));
-  const safetyTokens = Math.ceil(config.contextWindowTokens * 0.05);
-  const inputBudget = config.contextWindowTokens - config.maxOutputTokens - safetyTokens;
+  const inputBudget = qaInputTokenBudget(config);
   const emptySystem = systemMessage([], [], globalScope, shanghaiDate(now));
   const requiredTokens = estimateMessagesTokens([
     { role: "system", content: emptySystem },
@@ -140,6 +160,10 @@ export function buildQaRequestMessages(
     historyCount: history.length,
     estimatedInputTokens: estimateMessagesTokens(messages),
   };
+}
+
+export function qaInputTokenBudget(config: Pick<AiConfig, "contextWindowTokens" | "maxOutputTokens">): number {
+  return config.contextWindowTokens - config.maxOutputTokens - Math.ceil(config.contextWindowTokens * 0.05);
 }
 
 export function estimateTextTokens(input: string): number {
@@ -240,7 +264,7 @@ export function createQaClient(config: AiConfig): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
-    timeout: 120_000,
+    timeout: config.requestTimeoutMs,
     maxRetries: 0,
   });
 }
@@ -276,6 +300,52 @@ export function upstreamAiHttpStatus(error: unknown): number {
   return 502;
 }
 
-export function encodeSse(event: "delta" | "done" | "error", data: unknown): Uint8Array {
+export interface QaStreamState {
+  thinkingActive: boolean;
+  thinkingAnnounced: boolean;
+  answerStarted: boolean;
+}
+
+export type QaStreamEvent =
+  | { event: "thinking"; data: { active: boolean } }
+  | { event: "delta"; data: { content: string } };
+
+export function createQaStreamState(): QaStreamState {
+  return { thinkingActive: false, thinkingAnnounced: false, answerStarted: false };
+}
+
+export function qaProviderDeltaEvents(provider: AiProvider, delta: unknown, state: QaStreamState): QaStreamEvent[] {
+  if (!delta || typeof delta !== "object" || Array.isArray(delta)) return [];
+  const value = delta as { content?: unknown; reasoning_content?: unknown };
+  const events: QaStreamEvent[] = [];
+  if (
+    provider === "deepseek"
+    && typeof value.reasoning_content === "string"
+    && value.reasoning_content.length > 0
+    && !state.thinkingAnnounced
+    && !state.answerStarted
+  ) {
+    state.thinkingAnnounced = true;
+    state.thinkingActive = true;
+    events.push({ event: "thinking", data: { active: true } });
+  }
+  if (typeof value.content === "string" && value.content.length > 0) {
+    state.answerStarted = true;
+    if (state.thinkingActive) {
+      state.thinkingActive = false;
+      events.push({ event: "thinking", data: { active: false } });
+    }
+    events.push({ event: "delta", data: { content: value.content } });
+  }
+  return events;
+}
+
+export function finishQaStreamEvents(state: QaStreamState): QaStreamEvent[] {
+  if (!state.thinkingActive) return [];
+  state.thinkingActive = false;
+  return [{ event: "thinking", data: { active: false } }];
+}
+
+export function encodeSse(event: "thinking" | "delta" | "done" | "error", data: unknown): Uint8Array {
   return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }

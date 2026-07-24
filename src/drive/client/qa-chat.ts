@@ -273,8 +273,10 @@ export class DriveAiQa extends LitElement {
         buffer = buffer.slice(boundary + 2);
         const event = /^event:\s*(.+)$/m.exec(block)?.[1]?.trim();
         const dataText = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-        const data = dataText ? (JSON.parse(dataText) as { content?: unknown; error?: unknown }) : {};
-        if (event === "delta" && typeof data.content === "string") {
+        const data = dataText ? (JSON.parse(dataText) as { active?: unknown; content?: unknown; error?: unknown }) : {};
+        if (event === "thinking" && typeof data.active === "boolean") {
+          this.setStatus(data.active ? "正在深度思考…" : "正在生成回答…");
+        } else if (event === "delta" && typeof data.content === "string") {
           assistantMessage.content += data.content;
           this.messages = [...this.messages];
         } else if (event === "error") {

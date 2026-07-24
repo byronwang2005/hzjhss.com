@@ -57,12 +57,54 @@ describe("new COS namespace and policies", () => {
 
   it("requires an explicit AI context window larger than the output budget", () => {
     expect(() => getAiConfig({ AI_API_KEY: "key", AI_BASE_URL: "https://ai.example.com", AI_MODEL: "long" })).toThrow("AI_CONTEXT_WINDOW_TOKENS");
+    const aiConfig = getAiConfig({
+      AI_API_KEY: "key",
+      AI_BASE_URL: "https://ai.example.com",
+      AI_MODEL: "long",
+      AI_CONTEXT_WINDOW_TOKENS: "1000000",
+    });
+    expect(aiConfig).toMatchObject({
+      contextWindowTokens: 1_000_000,
+      provider: "openai-compatible",
+      reasoningEffort: "high",
+      requestTimeoutMs: 300_000,
+    });
     expect(getAiConfig({
       AI_API_KEY: "key",
       AI_BASE_URL: "https://ai.example.com",
       AI_MODEL: "long",
       AI_CONTEXT_WINDOW_TOKENS: "1000000",
-    }).contextWindowTokens).toBe(1_000_000);
+      AI_PROVIDER: "deepseek",
+      AI_REASONING_EFFORT: "max",
+      AI_REQUEST_TIMEOUT_MS: "450000",
+    })).toMatchObject({ provider: "deepseek", reasoningEffort: "max", requestTimeoutMs: 450_000 });
+    expect(getAiConfig({
+      AI_API_KEY: "key",
+      AI_BASE_URL: "https://api.deepseek.com",
+      AI_MODEL: "deepseek-v4-pro",
+      AI_CONTEXT_WINDOW_TOKENS: "1000000",
+    }).provider).toBe("deepseek");
+    expect(() => getAiConfig({
+      AI_API_KEY: "key",
+      AI_BASE_URL: "https://ai.example.com",
+      AI_MODEL: "long",
+      AI_CONTEXT_WINDOW_TOKENS: "1000000",
+      AI_PROVIDER: "unknown",
+    })).toThrow("AI_PROVIDER 只支持");
+    expect(() => getAiConfig({
+      AI_API_KEY: "key",
+      AI_BASE_URL: "https://ai.example.com",
+      AI_MODEL: "long",
+      AI_CONTEXT_WINDOW_TOKENS: "1000000",
+      AI_REASONING_EFFORT: "medium",
+    })).toThrow("只支持 high 或 max");
+    expect(() => getAiConfig({
+      AI_API_KEY: "key",
+      AI_BASE_URL: "https://ai.example.com",
+      AI_MODEL: "long",
+      AI_CONTEXT_WINDOW_TOKENS: "1000",
+      AI_MAX_OUTPUT_TOKENS: "960",
+    })).toThrow("5% 输入安全余量");
   });
 });
 
