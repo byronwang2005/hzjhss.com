@@ -6,6 +6,8 @@ import {
   createDownloadUrl,
   createKnowledgeTopic,
   createUpload,
+  deleteKnowledgeFile,
+  deleteKnowledgeTopic,
   filePolicy,
   listKnowledgeFiles,
   listKnowledgeTopics,
@@ -145,7 +147,43 @@ describe("knowledge topic and upload flow", () => {
     expect(storage.has(tempUploadPath(signature.uploadId))).toBe(false);
   });
 
-  it("stores references without processing and keeps one hidden canonical methodology", async () => {
+  it("requires exact topic and nested file names before permanent deletion", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "删除确认");
+    const relativePath = "报告/年度总结.txt";
+    const signature = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: "text/plain",
+    });
+    storage.set(tempUploadPath(signature.uploadId), { body: "txt", contentType: "text/plain", etag: "etag-delete" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: signature.uploadId,
+      relativePath,
+      size: 3,
+      contentType: "text/plain",
+      uploadedBy: "汪旭",
+    });
+
+    const versionBeforeDelete = (await readKnowledgeTopic(config, topic.id)).indexVersion;
+    await expect(deleteKnowledgeFile(config, topic.id, relativePath, undefined)).rejects.toThrow("文件名称确认不匹配");
+    await expect(deleteKnowledgeFile(config, topic.id, relativePath, " 年度总结.txt")).rejects.toThrow("文件名称确认不匹配");
+    await expect(deleteKnowledgeFile(config, topic.id, relativePath, "报告/年度总结.txt")).rejects.toThrow("文件名称确认不匹配");
+    expect(storage.has(sourcePath(topic.id, relativePath))).toBe(true);
+    expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(versionBeforeDelete);
+
+    await expect(deleteKnowledgeFile(config, topic.id, relativePath, "年度总结.txt")).resolves.toMatchObject({ indexChanged: true });
+    expect(storage.has(sourcePath(topic.id, relativePath))).toBe(false);
+
+    await expect(deleteKnowledgeTopic(config, topic.id, "删除确认 ")).rejects.toThrow("专题名称确认不匹配");
+    await expect(readKnowledgeTopic(config, topic.id)).resolves.toMatchObject({ name: "删除确认" });
+    await expect(deleteKnowledgeTopic(config, topic.id, "删除确认")).resolves.toMatchObject({ deletedCount: expect.any(Number) });
+    await expect(readKnowledgeTopic(config, topic.id)).rejects.toThrow("专题不存在");
+  });
+
+  it("stores references without processing and gives new topics one branded methodology path", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "机器人");
 

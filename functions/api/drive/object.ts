@@ -8,7 +8,7 @@ export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env, w
     const session = await readDriveAdminSession({ request, env });
     if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    const result = await deleteKnowledgeFile(getDriveConfig(env), body.topicId, body.path);
+    const result = await deleteKnowledgeFile(getDriveConfig(env), body.topicId, body.path, body.confirmName);
     if (result.indexChanged) waitUntil(notifyIndexer(env, { topicId: String(body.topicId) }));
     return jsonResponse({ ok: true });
   } catch (error) { return errorResponse(error); }

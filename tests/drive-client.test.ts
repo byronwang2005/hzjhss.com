@@ -57,6 +57,7 @@ describe("knowledge client helpers", () => {
 
 describe("knowledge client surface", () => {
   const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
+  const stateSource = readFileSync(new URL("../src/drive/client/state.ts", import.meta.url), "utf8");
   const workspaceStyles = readFileSync(new URL("../src/drive/client/styles/workspace.css", import.meta.url), "utf8");
   const uploadPolicy = readFileSync(new URL("../src/drive/client/upload-policy.ts", import.meta.url), "utf8");
   const sharedPolicy = readFileSync(new URL("../src/drive/shared/policy.ts", import.meta.url), "utf8");
@@ -109,5 +110,21 @@ describe("knowledge client surface", () => {
     expect(source).toContain("window.clearTimeout(fileRefreshTimer)");
     expect(source).toContain("void loadFiles(true)");
     expect(source).not.toContain("!file.processing ||");
+  });
+
+  it("requires an exact typed name in an accessible destructive dialog", () => {
+    expect(source).toContain('@awesome.me/webawesome/dist/components/dialog/dialog.js');
+    expect(source).toContain("<wa-dialog");
+    expect(source).toContain('name="deleteConfirmation"');
+    expect(source).toContain("confirmation.input !== confirmation.targetName");
+    expect(source).toContain("fileNameFromPath(path)");
+    expect(source).toContain("confirmName: confirmation.input");
+    expect(source).toContain("@wa-hide=${handleDeleteDialogHide}");
+    expect(source).toContain("event.preventDefault()");
+    expect(source).not.toContain("window.confirm");
+    expect(stateSource).toContain('kind: "topic" | "file"');
+    expect(stateSource).toContain("deleteConfirmation: DeleteConfirmation | null");
+    expect(workspaceStyles).toContain(".drive-delete-warning");
+    expect(workspaceStyles).toContain(".drive-delete-confirm-button");
   });
 });

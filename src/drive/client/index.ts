@@ -1,6 +1,7 @@
 import "@awesome.me/webawesome/dist/styles/webawesome.css";
 import "@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js";
 import "@awesome.me/webawesome/dist/components/callout/callout.js";
+import "@awesome.me/webawesome/dist/components/dialog/dialog.js";
 import "./drive.css";
 
 import Uppy from "@uppy/core";
@@ -130,11 +131,26 @@ function handleInput(event: Event): void {
   if (target.name === "displayName") state.loginName = target.value;
   if (target.name === "accessCode") state.accessCode = target.value;
   if (target.name === "topicName") state.topicName = target.value;
+  if (target.name === "deleteConfirmation" && state.deleteConfirmation) {
+    state.deleteConfirmation.input = target.value;
+    state.deleteConfirmation.error = "";
+    const submit = root.querySelector<HTMLButtonElement>("[data-delete-confirm-submit]");
+    if (submit) submit.disabled = state.deleteConfirmation.pending || target.value !== state.deleteConfirmation.targetName;
+    const error = root.querySelector<HTMLElement>("[data-delete-confirm-error]");
+    if (error) {
+      error.hidden = true;
+      error.textContent = "";
+    }
+  }
 }
 
 async function handleSubmit(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const form = event.target as HTMLFormElement;
+  if (form.matches("[data-delete-confirm-form]")) {
+    await submitDeleteConfirmation();
+    return;
+  }
   if (form.matches("[data-login-form]")) {
     state.loading = true;
     renderApp();
@@ -196,11 +212,20 @@ async function handleClick(event: MouseEvent): Promise<void> {
     const result = await api<{ url: string }>("/download-url", { method: "POST", body: { topicId: state.topic?.id, path: button.dataset.path } });
     window.open(result.url, "_blank", "noopener,noreferrer");
   } else if (action === "delete-file") {
-    const name = String(button.dataset.name || "");
-    if (window.confirm(`确定永久删除“${name}”吗？`)) {
-      await api("/object", { method: "DELETE", body: { topicId: state.topic?.id, path: button.dataset.path } });
-      await loadFiles();
-    }
+    const path = String(button.dataset.path || "");
+    if (!state.topic || !path) return;
+    state.deleteConfirmation = {
+      kind: "file",
+      topicId: state.topic.id,
+      path,
+      targetName: fileNameFromPath(path),
+      input: "",
+      pending: false,
+      error: "",
+    };
+    renderApp();
+  } else if (action === "cancel-delete") {
+    closeDeleteConfirmation();
   } else if (action === "retry-file") {
     await api("/process-retry", { method: "POST", body: { topicId: state.topic?.id, path: button.dataset.path } });
     setStatus("已重新提交处理任务。", "success");
@@ -230,10 +255,71 @@ async function handleClick(event: MouseEvent): Promise<void> {
     setStatus("资料日期已更新，索引正在重建。", "success");
     await loadFiles();
   } else if (action === "delete-topic" && state.topic) {
-    if (window.confirm(`确定永久删除专题“${state.topic.name}”及全部文件吗？`)) {
-      await api("/topic", { method: "DELETE", body: { topicId: state.topic.id, confirmName: state.topic.name } });
+    state.deleteConfirmation = {
+      kind: "topic",
+      topicId: state.topic.id,
+      targetName: state.topic.name,
+      input: "",
+      pending: false,
+      error: "",
+    };
+    renderApp();
+  }
+}
+
+async function submitDeleteConfirmation(): Promise<void> {
+  const confirmation = state.deleteConfirmation;
+  if (!confirmation || confirmation.pending || confirmation.input !== confirmation.targetName) return;
+  confirmation.pending = true;
+  confirmation.error = "";
+  renderApp();
+  try {
+    if (confirmation.kind === "topic") {
+      await api("/topic", {
+        method: "DELETE",
+        body: { topicId: confirmation.topicId, confirmName: confirmation.input },
+      });
+      state.deleteConfirmation = null;
+      state.topic = null;
       await loadOverview();
+    } else {
+      await api("/object", {
+        method: "DELETE",
+        body: {
+          topicId: confirmation.topicId,
+          path: confirmation.path,
+          confirmName: confirmation.input,
+        },
+      });
+      state.deleteConfirmation = null;
+      await loadFiles();
     }
+  } catch (error) {
+    if (state.deleteConfirmation !== confirmation) return;
+    confirmation.pending = false;
+    confirmation.error = error instanceof Error ? error.message : "删除失败，请稍后重试";
+    renderApp();
+  }
+}
+
+function closeDeleteConfirmation(): void {
+  if (!state.deleteConfirmation || state.deleteConfirmation.pending) return;
+  const dialog = root.querySelector<HTMLElement & { open: boolean }>("wa-dialog.drive-delete-dialog");
+  if (dialog) dialog.open = false;
+  else {
+    state.deleteConfirmation = null;
+    renderApp();
+  }
+}
+
+function handleDeleteDialogHide(event: Event): void {
+  if (state.deleteConfirmation?.pending) event.preventDefault();
+}
+
+function handleDeleteDialogAfterHide(): void {
+  if (!state.deleteConfirmation?.pending) {
+    state.deleteConfirmation = null;
+    renderApp();
   }
 }
 
@@ -438,7 +524,74 @@ function renderShell(): TemplateResult {
       ${renderStatus()}
       ${state.loading ? renderLoading() : state.mode === "overview" ? renderOverview() : state.mode === "create" ? renderCreate() : renderTopic()}
     </main>
+    ${renderDeleteConfirmation()}
   </section>`;
+}
+
+function renderDeleteConfirmation(): TemplateResult | typeof nothing {
+  const confirmation = state.deleteConfirmation;
+  if (!confirmation) return nothing;
+  const isTopic = confirmation.kind === "topic";
+  const matches = confirmation.input === confirmation.targetName;
+  const inputDescriptionId = "delete-confirmation-description";
+  return html`
+    <wa-dialog
+      class="drive-delete-dialog"
+      label=${isTopic ? "删除专题" : "删除文件"}
+      with-footer
+      .open=${true}
+      @wa-hide=${handleDeleteDialogHide}
+      @wa-after-hide=${handleDeleteDialogAfterHide}
+    >
+      <form id="drive-delete-confirm-form" class="drive-delete-confirm-form" data-delete-confirm-form>
+        <div class="drive-delete-warning">
+          <span class="drive-delete-warning-icon" aria-hidden="true">${renderIcon("warning")}</span>
+          <div>
+            <strong>${isTopic ? "此操作会永久删除整个专题" : "此操作会永久删除该文件"}</strong>
+            <p>${isTopic ? "专题内的全部资料和索引也会一并移除，删除后无法恢复。" : "相关处理结果和索引数据也会一并移除，删除后无法恢复。"}</p>
+          </div>
+        </div>
+        <div class="drive-delete-target">
+          <span>${isTopic ? "专题名称" : "文件名称"}</span>
+          <strong>${confirmation.targetName}</strong>
+          ${!isTopic && confirmation.path !== confirmation.targetName
+            ? html`<small>完整路径：${confirmation.path}</small>`
+            : nothing}
+        </div>
+        <label class="drive-field drive-delete-confirm-field">
+          <span>请输入${isTopic ? "专题名称" : "文件名称"}以确认</span>
+          <small id=${inputDescriptionId}>必须与上方名称完全一致，包括大小写和空格。</small>
+          <input
+            name="deleteConfirmation"
+            type="text"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            autofocus
+            aria-describedby=${inputDescriptionId}
+            .value=${confirmation.input}
+            ?disabled=${confirmation.pending}
+          >
+        </label>
+        <div
+          class="drive-delete-dialog-error"
+          data-delete-confirm-error
+          role="alert"
+          ?hidden=${!confirmation.error}
+        >${confirmation.error}</div>
+      </form>
+      <div class="drive-delete-dialog-actions" slot="footer">
+        <button class="drive-control" type="button" data-action="cancel-delete" ?disabled=${confirmation.pending}>${renderIcon("x-circle")}取消</button>
+        <button
+          class="drive-control drive-delete-confirm-button"
+          type="submit"
+          form="drive-delete-confirm-form"
+          data-delete-confirm-submit
+          ?disabled=${confirmation.pending || !matches}
+        >${renderIcon("trash", "bold")}${confirmation.pending ? "删除中…" : isTopic ? "永久删除专题" : "永久删除文件"}</button>
+      </div>
+    </wa-dialog>
+  `;
 }
 
 function renderOverview(): TemplateResult {

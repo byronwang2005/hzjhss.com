@@ -411,9 +411,11 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   return metadata;
 }
 
-export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unknown, relativePathInput: unknown): Promise<{ indexChanged: boolean }> {
+export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unknown, relativePathInput: unknown, confirmName: unknown): Promise<{ indexChanged: boolean }> {
   const topicId = normalizeTopicId(topicIdInput);
   const relativePath = normalizeRelativeFilePath(relativePathInput);
+  const expectedName = relativePath.split("/").at(-1) || relativePath;
+  if (confirmName !== expectedName) throw new Error("文件名称确认不匹配");
   const [topic, metadata] = await Promise.all([
     readKnowledgeTopic(config, topicId),
     readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),

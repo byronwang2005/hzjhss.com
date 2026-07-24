@@ -5,6 +5,16 @@ export type TopicView = "qa" | "files";
 export type UploadPhase = "preparing" | "uploading" | "registering";
 export type ThemeName = "light" | "dark";
 
+export interface DeleteConfirmation {
+  kind: "topic" | "file";
+  topicId: string;
+  path?: string;
+  targetName: string;
+  input: string;
+  pending: boolean;
+  error: string;
+}
+
 declare global {
   interface Window {
     jhssTheme: {
@@ -34,6 +44,7 @@ export interface DriveClientState {
   accessCode: string;
   topicName: string;
   theme: ThemeName;
+  deleteConfirmation: DeleteConfirmation | null;
   upload: {
     active: boolean;
     phase: UploadPhase;
@@ -61,5 +72,6 @@ export const state: DriveClientState = {
   accessCode: "",
   topicName: "",
   theme: window.jhssTheme.getResolvedTheme(),
+  deleteConfirmation: null,
   upload: { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 },
 };

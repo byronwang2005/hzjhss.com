@@ -2921,6 +2921,139 @@ drive-pdf-preview {
   font-size: 11px;
 }
 
+.drive-delete-dialog {
+  --width: min(520px, calc(100vw - 32px));
+  --spacing: 22px;
+}
+
+.drive-delete-dialog::part(dialog) {
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface);
+  border: 1px solid color-mix(in srgb, var(--jh-color-danger) 38%, var(--jh-color-border-soft));
+  border-radius: var(--drive-radius);
+  box-shadow: var(--jh-shadow-floating);
+}
+
+.drive-delete-dialog::part(header) {
+  border-bottom: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-delete-dialog::part(title) {
+  color: var(--jh-color-danger);
+  font-weight: 760;
+}
+
+.drive-delete-dialog::part(footer) {
+  border-top: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-delete-confirm-form {
+  display: grid;
+  gap: 18px;
+}
+
+.drive-delete-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  color: var(--jh-color-danger);
+  background: var(--jh-color-danger-soft);
+  border: 1px solid color-mix(in srgb, var(--jh-color-danger) 32%, transparent);
+  border-radius: var(--jh-radius-control);
+}
+
+.drive-delete-warning-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+}
+
+.drive-delete-warning-icon .ui-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.drive-delete-warning strong,
+.drive-delete-warning p {
+  margin: 0;
+}
+
+.drive-delete-warning strong {
+  font-size: 14px;
+}
+
+.drive-delete-warning p {
+  margin-top: 4px;
+  color: var(--jh-color-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.drive-delete-target {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 13px 14px;
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: var(--jh-radius-control);
+}
+
+.drive-delete-target span,
+.drive-delete-target small {
+  color: var(--jh-color-text-muted);
+  font-size: 12px;
+}
+
+.drive-delete-target strong,
+.drive-delete-target small {
+  overflow-wrap: anywhere;
+}
+
+.drive-delete-target strong {
+  font-size: 15px;
+}
+
+.drive-delete-confirm-field input:focus {
+  border-color: var(--jh-color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jh-color-danger) 18%, transparent);
+}
+
+.drive-delete-dialog-error {
+  padding: 10px 12px;
+  color: var(--jh-color-danger);
+  background: var(--jh-color-danger-soft);
+  border-radius: var(--jh-radius-control);
+  font-size: 13px;
+}
+
+.drive-delete-dialog-error[hidden] {
+  display: none;
+}
+
+.drive-delete-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+  width: 100%;
+}
+
+.drive-delete-confirm-button {
+  color: var(--jh-color-on-brand);
+  background: var(--jh-color-danger);
+  border-color: var(--jh-color-danger);
+}
+
+.drive-delete-confirm-button:hover:not(:disabled) {
+  color: var(--jh-color-on-brand);
+  background: color-mix(in srgb, var(--jh-color-danger) 86%, var(--jh-color-text));
+  border-color: color-mix(in srgb, var(--jh-color-danger) 86%, var(--jh-color-text));
+}
+
 .drive-ai-qa {
   grid-template-rows: auto minmax(280px, 1fr) auto;
 }
