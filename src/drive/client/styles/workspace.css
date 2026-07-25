@@ -2375,7 +2375,6 @@ body.drive-body {
 }
 
 .drive-material-toolbar {
-  min-height: 88px;
   padding: 18px 20px;
   border-bottom-color: var(--jh-color-border-soft);
 }
@@ -3496,14 +3495,6 @@ drive-pdf-preview {
   height: 42px;
   margin-top: 2px;
   font-size: 20px;
-}
-
-.drive-material-heading p {
-  max-width: 58ch;
-  margin: 5px 0 0;
-  color: var(--jh-color-text-muted);
-  font-size: 12px;
-  line-height: 1.55;
 }
 
 .drive-file-role-panel > input[type="file"][hidden] {
@@ -5170,7 +5161,6 @@ drive-pdf-preview {
 
   .drive-material-toolbar {
     flex: 0 0 auto;
-    min-height: 72px;
     margin: 0;
     padding: 11px 14px;
     border-bottom: 1px solid var(--jh-color-border-soft);
@@ -5340,13 +5330,7 @@ drive-pdf-preview {
   }
 
   .drive-material-toolbar {
-    min-height: 64px;
     padding: 8px 12px;
-  }
-
-  .drive-material-heading p {
-    margin-top: 3px;
-    line-height: 1.4;
   }
 
   .drive-file-role-symbol {
