@@ -131,7 +131,7 @@
 }
 
 .drive-spin {
-  animation: drive-spin 900ms var(--jh-motion-control) infinite;
+  animation: drive-spin 900ms var(--jh-motion-linear) infinite;
 }
 
 .drive-control,
@@ -1063,7 +1063,7 @@
   inset: 0;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--jh-color-surface) 84%, transparent), transparent);
   transform: translateX(-110%);
-  animation: drive-sheen 1.3s var(--jh-motion-enter) infinite;
+  animation: drive-sheen 1.3s var(--jh-motion-linear) infinite;
 }
 
 .drive-ai-qa-progress {
@@ -2968,7 +2968,7 @@ drive-pdf-preview {
   inset: 0;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--jh-color-surface) 84%, transparent), transparent);
   transform: translateX(-110%);
-  animation: drive-sheen 1.3s var(--jh-motion-enter) infinite;
+  animation: drive-sheen 1.3s var(--jh-motion-linear) infinite;
 }
 
 .drive-pdf-skeleton span {
@@ -4271,7 +4271,7 @@ drive-pdf-preview {
 
 .drive-ai-qa-typewriter.is-active::after {
   opacity: 1;
-  animation: drive-typewriter-cursor 800ms var(--jh-motion-control) infinite;
+  animation: drive-typewriter-cursor 800ms steps(1, end) infinite;
 }
 
 @keyframes drive-typewriter-cursor {
@@ -4738,11 +4738,11 @@ drive-pdf-preview {
 }
 
 .drive-codex-handoff-step.is-active .is-retrieval .ui-icon:first-child {
-  animation: drive-handoff-file-scan 1.35s var(--jh-motion-enter) infinite alternate;
+  animation: drive-handoff-file-scan 1.35s var(--jh-motion-linear) infinite alternate;
 }
 
 .drive-codex-handoff-step.is-active .is-retrieval .ui-icon:last-child {
-  animation: drive-handoff-database-scan 1.35s var(--jh-motion-enter) infinite alternate;
+  animation: drive-handoff-database-scan 1.35s var(--jh-motion-linear) infinite alternate;
 }
 
 .drive-codex-handoff-step.is-active .is-package .ui-icon:first-child {

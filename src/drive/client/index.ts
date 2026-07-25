@@ -29,6 +29,7 @@ import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath
 import { api, apiStream, ApiError, consumeSse } from "./api";
 import { state, type TopicView } from "./state";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
+import { runWorkspaceTransition } from "./workspace-transition";
 import {
   advanceFileTask,
   batchCounts,
@@ -184,14 +185,16 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
   const topic = state.topics.find((entry) => entry.id === topicId);
   if (!topic) return;
   cancelFileLoad();
-  state.topic = topic;
-  state.topicView = view;
-  state.fileRoleView = "evidence";
-  state.prefix = "";
-  state.listing = null;
-  state.fileLoad = null;
-  state.mode = "topic";
-  renderApp();
+  await runWorkspaceTransition("scope-forward", () => {
+    state.topic = topic;
+    state.topicView = view;
+    state.fileRoleView = "evidence";
+    state.prefix = "";
+    state.listing = null;
+    state.fileLoad = null;
+    state.mode = "topic";
+    renderApp();
+  });
   syncFileProgressClock();
   if (state.topicView === "files") await loadFiles();
 }
@@ -479,23 +482,33 @@ async function handleClick(event: MouseEvent): Promise<void> {
     renderApp();
   } else if (action === "back") {
     cancelFileLoad();
-    state.mode = "overview";
-    state.topic = null;
-    state.fileLoad = null;
-    renderApp();
+    await runWorkspaceTransition("scope-back", () => {
+      state.mode = "overview";
+      state.topic = null;
+      state.fileLoad = null;
+      renderApp();
+    });
     syncFileProgressClock();
   } else if (action === "open-topic") {
     await openTopic(String(button.dataset.topicId));
   } else if (action === "topic-view") {
-    if (state.topicView === "files" && button.dataset.view !== "files") cancelFileLoad();
-    state.topicView = button.dataset.view === "files" ? "files" : "qa";
-    renderApp();
+    const nextView = button.dataset.view === "files" ? "files" : "qa";
+    if (state.topicView === nextView) return;
+    if (state.topicView === "files" && nextView !== "files") cancelFileLoad();
+    await runWorkspaceTransition("topic-panel", () => {
+      state.topicView = nextView;
+      renderApp();
+    });
     syncFileProgressClock();
     if (state.topicView === "files") await loadFiles();
   } else if (action === "file-role-view") {
-    state.fileRoleView = normalizeKnowledgeRole(button.dataset.role);
-    state.expandedFilePath = null;
-    renderApp();
+    const nextRole = normalizeKnowledgeRole(button.dataset.role);
+    if (state.fileRoleView === nextRole) return;
+    await runWorkspaceTransition("file-role", () => {
+      state.fileRoleView = nextRole;
+      state.expandedFilePath = null;
+      renderApp();
+    });
   } else if (action === "toggle-file-batch") {
     if (state.uploadBatch) {
       state.uploadBatch.expanded = !state.uploadBatch.expanded;
@@ -1078,6 +1091,7 @@ function renderScopeRail(): TemplateResult {
       </div>
       <nav class="drive-scope-list" aria-label="知识库范围">
         <button class=${`drive-scope-item is-global${state.mode === "overview" ? " is-active" : ""}`} type="button" data-action="back" aria-current=${state.mode === "overview" ? "page" : nothing}>
+          ${state.mode === "overview" ? html`<span class="drive-scope-active-indicator" aria-hidden="true"></span>` : nothing}
           <span class="drive-scope-item-icon">${renderIcon("files", "duotone")}</span>
           <span><strong>全部资料</strong><small>${state.topics.filter((topic) => topic.ready).length} 个专题可问答</small></span>
         </button>
@@ -1091,6 +1105,7 @@ function renderScopeRail(): TemplateResult {
                 data-topic-id=${topic.id}
                 aria-current=${state.topic?.id === topic.id ? "page" : nothing}
               >
+                ${state.topic?.id === topic.id ? html`<span class="drive-scope-active-indicator" aria-hidden="true"></span>` : nothing}
                 <span class="drive-scope-item-icon">${renderIcon("folder")}</span>
                 <span><strong>${topic.name}</strong><small class=${topic.ready ? "is-ready" : ""}>${topic.ready ? "可问答" : "处理中"}</small></span>
               </button>
@@ -1439,6 +1454,7 @@ function renderFileRoleTab(role: KnowledgeRole, selectedRole: KnowledgeRole, lis
       data-action="file-role-view"
       data-role=${role}
     >
+      ${selected ? html`<span class="drive-file-role-active-indicator" aria-hidden="true"></span>` : nothing}
       <span class="drive-file-role-tab-icon">${renderIcon(presentation.icon, "duotone")}</span>
       <span><strong>${presentation.label}</strong><small>${count} 项</small></span>
     </button>
@@ -1657,7 +1673,7 @@ function tabButton(view: TopicView, label: string, icon: string): TemplateResult
       tabindex=${selected ? "0" : "-1"}
       data-action="topic-view"
       data-view=${view}
-    >${renderIcon(icon)}${label}</button>
+    >${selected ? html`<span class="drive-tab-active-indicator" aria-hidden="true"></span>` : nothing}${renderIcon(icon)}<span>${label}</span></button>
   `;
 }
 

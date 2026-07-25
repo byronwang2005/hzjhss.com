@@ -8,13 +8,8 @@ const allPublicHtml = ["dist/index.html", ...htmlFiles].map((file) => readFileSy
 const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts", "src/drive/client/upload-policy.ts"]
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
-const cssSource = [
-  "src/shared/styles/tokens.css",
-  "src/site/styles/base.css",
-  "src/site/styles/pages.css",
-  "src/drive/client/styles/base.css",
-  "src/drive/client/styles/workspace.css",
-]
+const cssSource = globSync("src/**/*.css")
+  .sort()
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
 
@@ -189,10 +184,23 @@ describe("shared UI system", () => {
   it("locks interaction motion to shared nonlinear curves", () => {
     const declarations = cssSource.match(/(?:transition|animation)\s*:[^;]+;/g) || [];
     for (const declaration of declarations) {
-      expect(declaration).not.toMatch(/\bease(?:-in|-out|-in-out)?\b|\blinear\b/);
+      expect(declaration).not.toMatch(/\bease(?:-in|-out|-in-out)?\b/);
       expect(declaration).not.toMatch(/transition\s*:\s*all\b/);
+      if (declaration.includes("var(--jh-motion-linear)")) {
+        expect(declaration).toMatch(/drive-(?:spin|sheen|handoff-file-scan|handoff-database-scan)/);
+      } else {
+        expect(declaration).not.toMatch(/\blinear\b/);
+      }
+      if (declaration.includes("steps(")) {
+        expect(declaration).toMatch(/(?:drive-typewriter-cursor|cursor-blink)/);
+      }
     }
-    expect(cssSource).toContain("--jh-motion-control: cubic-bezier(0.2, 0, 0, 1)");
-    expect(cssSource).toContain("--jh-motion-enter: cubic-bezier(0.32, 0.72, 0, 1)");
+    expect(cssSource).toContain("--jh-motion-ios: cubic-bezier(0.32, 0.72, 0, 1)");
+    expect(cssSource).toContain("--jh-motion-control: var(--jh-motion-ios)");
+    expect(cssSource).toContain("--jh-motion-enter: var(--jh-motion-ios)");
+    expect(cssSource).toContain("--jh-duration-fast: 180ms");
+    expect(cssSource).toContain("--jh-duration-medium: 320ms");
+    expect(cssSource).toContain("--jh-duration-slow: 480ms");
+    expect(cssSource).toContain("--wa-transition-easing: var(--jh-motion-ios)");
   });
 });

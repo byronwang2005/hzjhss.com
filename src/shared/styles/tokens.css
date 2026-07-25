@@ -58,11 +58,17 @@
   --jh-shadow-floating: 0 18px 48px rgb(31 39 48 / 12%);
   --jh-focus-ring: 0 0 0 3px color-mix(in srgb, var(--jh-color-brand) 24%, transparent);
 
-  --jh-motion-control: cubic-bezier(0.2, 0, 0, 1);
-  --jh-motion-enter: cubic-bezier(0.32, 0.72, 0, 1);
-  --jh-duration-fast: 160ms;
-  --jh-duration-medium: 300ms;
-  --jh-duration-slow: 460ms;
+  --jh-motion-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --jh-motion-control: var(--jh-motion-ios);
+  --jh-motion-enter: var(--jh-motion-ios);
+  --jh-motion-linear: linear;
+  --jh-duration-fast: 180ms;
+  --jh-duration-medium: 320ms;
+  --jh-duration-slow: 480ms;
+  --wa-transition-easing: var(--jh-motion-ios);
+  --wa-transition-fast: var(--jh-duration-fast);
+  --wa-transition-normal: var(--jh-duration-medium);
+  --wa-transition-slow: var(--jh-duration-slow);
 }
 
 .ui-icon {

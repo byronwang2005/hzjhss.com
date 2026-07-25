@@ -242,6 +242,19 @@ describe("knowledge client surface", () => {
     expect(fileStyles).toContain(".drive-row-action-menu");
   });
 
+  it("limits page-level motion to explicit workspace navigation", () => {
+    expect(source).toContain('runWorkspaceTransition("scope-forward"');
+    expect(source).toContain('runWorkspaceTransition("scope-back"');
+    expect(source).toContain('runWorkspaceTransition("topic-panel"');
+    expect(source).toContain('runWorkspaceTransition("file-role"');
+    expect(source.match(/runWorkspaceTransition\(/g)).toHaveLength(4);
+    const loadFilesSource = source.slice(source.indexOf("async function loadFiles"), source.indexOf("function fileLoadIsCurrent"));
+    expect(loadFilesSource).not.toContain("runWorkspaceTransition");
+    expect(source).toContain('class="drive-scope-active-indicator"');
+    expect(source).toContain('class="drive-tab-active-indicator"');
+    expect(source).toContain('class="drive-file-role-active-indicator"');
+  });
+
   it("renders the three entry states without showing a success loader before authentication", () => {
     expect(source).toContain('data-entry-state="checking-session"');
     expect(source).toContain('data-entry-state="preparing-workspace"');

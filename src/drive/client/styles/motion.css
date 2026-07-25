@@ -1,0 +1,215 @@
+.drive-scope-item,
+.drive-scope-create,
+.drive-tabs button,
+.drive-file-role-tab,
+.drive-ai-qa-suggestions button,
+.drive-table-action,
+.drive-topic-delete,
+.drive-account-trigger,
+.drive-appbar-docs,
+.drive-file-status {
+  transition:
+    color var(--jh-duration-fast) var(--jh-motion-ios),
+    background-color var(--jh-duration-fast) var(--jh-motion-ios),
+    border-color var(--jh-duration-fast) var(--jh-motion-ios),
+    box-shadow var(--jh-duration-fast) var(--jh-motion-ios),
+    opacity var(--jh-duration-fast) var(--jh-motion-ios),
+    transform var(--jh-duration-fast) var(--jh-motion-ios);
+}
+
+.drive-scope-item,
+.drive-tabs button,
+.drive-file-role-tab {
+  position: relative;
+  isolation: isolate;
+}
+
+.drive-scope-item > *,
+.drive-tabs button > *,
+.drive-file-role-tab > * {
+  position: relative;
+  z-index: 1;
+}
+
+.drive-scope-item.is-active,
+.drive-tabs button.is-active,
+.drive-file-role-tab.is-active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.drive-scope-active-indicator,
+.drive-tab-active-indicator,
+.drive-file-role-active-indicator {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.drive-scope-active-indicator {
+  inset: 0;
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(31 39 48 / 5%);
+  view-transition-name: drive-scope-active;
+}
+
+.drive-tab-active-indicator {
+  inset: 0;
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border);
+  border-radius: 7px;
+  box-shadow: 0 4px 12px rgb(31 39 48 / 5%);
+  view-transition-name: drive-tab-active;
+}
+
+.drive-file-role-active-indicator {
+  inset: 0;
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border);
+  border-radius: 9px;
+  box-shadow: 0 5px 16px rgb(31 39 48 / 5%);
+  view-transition-name: drive-file-role-active;
+}
+
+.drive-topic-workspace-head {
+  view-transition-name: drive-topic-header;
+}
+
+.drive-topic-view-panel {
+  view-transition-name: drive-topic-panel;
+}
+
+drive-ai-qa {
+  view-transition-name: drive-ai-surface;
+}
+
+.drive-file-role-panel {
+  view-transition-name: drive-file-role-panel;
+}
+
+.drive-scope-item:active,
+.drive-scope-create:active,
+.drive-tabs button:active,
+.drive-file-role-tab:active,
+.drive-ai-qa-suggestions button:active,
+.drive-table-action:active,
+.drive-topic-delete:active,
+.drive-account-trigger:active,
+.drive-appbar-docs:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.drive-scope-item:hover .drive-scope-item-icon,
+.drive-file-role-tab:hover .drive-file-role-tab-icon,
+.drive-ai-qa-suggestions button:hover .ui-icon {
+  transform: translateX(2px);
+}
+
+.drive-scope-item-icon,
+.drive-file-role-tab-icon,
+.drive-ai-qa-suggestions button .ui-icon {
+  transition: transform var(--jh-duration-fast) var(--jh-motion-ios);
+}
+
+::view-transition-group(drive-scope-active),
+::view-transition-group(drive-tab-active),
+::view-transition-group(drive-file-role-active),
+::view-transition-group(drive-topic-header),
+::view-transition-group(drive-topic-panel),
+::view-transition-group(drive-ai-surface),
+::view-transition-group(drive-file-role-panel) {
+  animation-duration: var(--jh-duration-medium);
+  animation-timing-function: var(--jh-motion-ios);
+}
+
+::view-transition-old(drive-ai-surface),
+::view-transition-new(drive-ai-surface),
+::view-transition-old(drive-topic-panel),
+::view-transition-new(drive-topic-panel),
+::view-transition-old(drive-file-role-panel),
+::view-transition-new(drive-file-role-panel) {
+  height: 100%;
+  mix-blend-mode: normal;
+  overflow: clip;
+}
+
+html[data-workspace-transition="scope-forward"]::view-transition-new(drive-topic-header) {
+  animation: drive-view-enter-down var(--jh-duration-medium) var(--jh-motion-ios) both;
+}
+
+html[data-workspace-transition="scope-back"]::view-transition-old(drive-topic-header) {
+  animation: drive-view-exit-up var(--jh-duration-fast) var(--jh-motion-ios) both;
+}
+
+html[data-workspace-transition="scope-forward"]::view-transition-old(drive-ai-surface),
+html[data-workspace-transition="scope-back"]::view-transition-old(drive-ai-surface) {
+  animation: drive-view-soft-exit var(--jh-duration-fast) var(--jh-motion-ios) both;
+}
+
+html[data-workspace-transition="scope-forward"]::view-transition-new(drive-ai-surface),
+html[data-workspace-transition="scope-back"]::view-transition-new(drive-ai-surface) {
+  animation: drive-view-soft-enter var(--jh-duration-medium) var(--jh-motion-ios) both;
+}
+
+html[data-workspace-transition="topic-panel"]::view-transition-old(drive-topic-panel),
+html[data-workspace-transition="file-role"]::view-transition-old(drive-file-role-panel) {
+  animation: drive-view-panel-exit var(--jh-duration-fast) var(--jh-motion-ios) both;
+}
+
+html[data-workspace-transition="topic-panel"]::view-transition-new(drive-topic-panel),
+html[data-workspace-transition="file-role"]::view-transition-new(drive-file-role-panel) {
+  animation: drive-view-panel-enter var(--jh-duration-medium) var(--jh-motion-ios) both;
+}
+
+@keyframes drive-view-enter-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes drive-view-exit-up {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes drive-view-soft-exit {
+  from { opacity: 1; }
+  to { opacity: 0.76; }
+}
+
+@keyframes drive-view-soft-enter {
+  from { opacity: 0.72; }
+  to { opacity: 1; }
+}
+
+@keyframes drive-view-panel-exit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes drive-view-panel-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 720px) {
+  .drive-title-button,
+  .drive-tabs button,
+  .drive-file-status {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-scope-active-indicator,
+  .drive-tab-active-indicator,
+  .drive-file-role-active-indicator,
+  .drive-topic-workspace-head,
+  .drive-topic-view-panel,
+  drive-ai-qa,
+  .drive-file-role-panel {
+    view-transition-name: none;
+  }
+}

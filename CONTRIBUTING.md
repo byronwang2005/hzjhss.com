@@ -15,16 +15,9 @@ without prior written authorization from 嘉合杉升.
 Confidential, sensitive, credential, customer, or production data must not be
 submitted to this repository.
 
-## Commit Style
+## Commit Style (Use English)
 
 - `feat: ...`
 - `fix: ...`
 - `chore: ...`
 - `refactor: ...`
-
-example：
-
-- `feat: enhance frontend`
-- `fix: revise the logo size`
-- `chore: remove cursor glow effect`
-- `refactor: simplify the code structure`
