@@ -1332,7 +1332,7 @@ function renderTopic(): TemplateResult {
       tabindex="0"
     >
       ${state.topicView === "qa"
-        ? html`<drive-ai-qa scope="topic" .topicId=${state.topic.id} .topicName=${state.topic.name} .ready=${state.topic.ready}></drive-ai-qa>`
+        ? html`<drive-ai-qa scope="topic" .topicId=${state.topic.id} .topicName=${state.topic.name} .displayName=${state.displayName} .ready=${state.topic.ready}></drive-ai-qa>`
         : renderFiles()}
     </div>`;
 }

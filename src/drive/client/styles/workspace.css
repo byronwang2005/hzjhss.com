@@ -1015,29 +1015,6 @@
   font-weight: 700;
 }
 
-.drive-ai-qa-markdown {
-  color: var(--jh-color-text);
-  line-height: 1.75;
-}
-
-.drive-ai-qa-markdown > :first-child { margin-top: 0; }
-.drive-ai-qa-markdown > :last-child { margin-bottom: 0; }
-
-.drive-ai-qa-markdown pre {
-  overflow: auto;
-  padding: 14px;
-  background: var(--jh-color-surface-muted);
-  border-radius: var(--jh-radius-control);
-}
-
-.drive-ai-qa-markdown code { font-family: var(--drive-mono); }
-
-.drive-ai-qa-markdown a {
-  color: var(--jh-color-brand);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .drive-ai-qa-skeleton {
   display: grid;
   gap: 9px;

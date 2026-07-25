@@ -1,9 +1,8 @@
-import DOMPurify from "dompurify";
 import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { classMap } from "lit/directives/class-map.js";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import MarkdownIt from "markdown-it";
+import { renderAssistantMarkdown } from "./assistant-markdown";
 import { renderIcon } from "./icons";
 import { DRIVE_API_ROOT } from "../shared/runtime";
 import type {
@@ -51,7 +50,6 @@ interface CodexHandoffUi {
   copied: boolean;
 }
 
-const markdown = new MarkdownIt({ html: false, linkify: true, typographer: false });
 const GREETING_TYPE_SPEED_MS = 70;
 const GREETING_HOLD_MS = 1_800;
 const GREETING_DELETE_SPEED_MS = 35;
@@ -150,6 +148,7 @@ export class DriveAiQa extends LitElement {
   private handoffResizeObserver: ResizeObserver | null = null;
   private handoffObservedRail: HTMLElement | null = null;
   private handoffLaunchObserved = false;
+  private readonly renderedMarkdown = new Map<string, { content: string; streaming: boolean; html: string }>();
 
   protected createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
@@ -232,11 +231,12 @@ export class DriveAiQa extends LitElement {
               ${renderIcon("warning")}<span>${isGlobal ? "当前没有可检索的已处理文件。" : "当前专题还没有可检索的已处理文件。"}</span>
             </div>`}
 
-        <div class="drive-ai-qa-messages" data-qa-messages aria-live="polite">
+        <div class="drive-ai-qa-messages" data-qa-messages aria-live="polite" @click=${this.handleMarkdownClick}>
           ${this.messages.length
             ? repeat(this.messages, (message) => message.id, (message, index) => this.renderMessage(message, index))
             : this.renderEmptyState()}
         </div>
+        <span class="drive-ai-qa-copy-status" data-code-copy-status aria-live="polite"></span>
 
         <form class=${classMap({ "drive-ai-qa-form": true, "is-danger": this.statusTone === "danger" })} @submit=${this.handleSubmit}>
           <div class="drive-ai-qa-composer">
@@ -281,7 +281,7 @@ export class DriveAiQa extends LitElement {
     return html`
       <div class="drive-ai-qa-empty">
         <div class="drive-ai-qa-empty-copy">
-          <span class="drive-eyebrow">${isGlobal ? name ? `欢迎回来，${name}` : "AI 知识检索" : `当前专题 · ${this.topicName || "未命名专题"}`}</span>
+          <span class="drive-eyebrow">${name ? `欢迎回来，${name}` : "AI 知识检索"}</span>
           <h3>${this.ready ? isGlobal ? "今天想从资料里确认什么？" : "从这个专题开始提问" : "等待文件处理"}</h3>
           <p>${this.ready ? "描述你想比较、核实或追溯的问题，回答会尽量关联到原始资料。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p>
         </div>
@@ -397,7 +397,7 @@ export class DriveAiQa extends LitElement {
 
   private renderMessage(message: QaChatMessage, index: number): TemplateResult {
     const rendered = message.role === "assistant" && message.content
-      ? DOMPurify.sanitize(markdown.render(message.content))
+      ? this.renderMarkdownMessage(message)
       : "";
     const showHandoff = this.shouldRenderHandoff(message, index);
     return html`
@@ -426,6 +426,57 @@ export class DriveAiQa extends LitElement {
         ${showHandoff ? this.renderCodexHandoff() : nothing}
       </article>
     `;
+  }
+
+  private renderMarkdownMessage(message: QaChatMessage): string {
+    const streaming = Boolean(message.pending);
+    const cached = this.renderedMarkdown.get(message.id);
+    if (cached?.content === message.content && cached.streaming === streaming) return cached.html;
+    const rendered = renderAssistantMarkdown(message.content, {
+      documentId: message.id,
+      streaming,
+    });
+    this.renderedMarkdown.set(message.id, { content: message.content, streaming, html: rendered });
+    return rendered;
+  }
+
+  private handleMarkdownClick = (event: MouseEvent): void => {
+    const eventTarget = event.target as (Element & { closest?: Element["closest"] }) | null;
+    const target = eventTarget?.closest?.("[data-copy-code]") as HTMLButtonElement | null;
+    if (!target) return;
+    const code = target.closest(".drive-ai-qa-code")?.querySelector<HTMLElement>("code");
+    if (!code) return;
+    void this.copyCode(code, target);
+  };
+
+  private async copyCode(code: HTMLElement, button: HTMLButtonElement): Promise<void> {
+    const value = code.textContent || "";
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
+      await navigator.clipboard.writeText(value);
+      this.setCodeCopyFeedback(button, "已复制", "代码已复制");
+    } catch {
+      const selection = window.getSelection?.();
+      if (selection) {
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      this.setCodeCopyFeedback(button, "已选中", "复制失败，代码已选中，请按 Ctrl+C 或 Command+C");
+    }
+  }
+
+  private setCodeCopyFeedback(button: HTMLButtonElement, label: string, announcement: string): void {
+    button.textContent = label;
+    button.classList.toggle("is-copied", label === "已复制");
+    const liveRegion = this.querySelector<HTMLElement>("[data-code-copy-status]");
+    if (liveRegion) liveRegion.textContent = announcement;
+    window.setTimeout(() => {
+      if (!button.isConnected) return;
+      button.textContent = "复制";
+      button.classList.remove("is-copied");
+    }, 2_000);
   }
 
   private renderQaProgress(message: QaChatMessage): TemplateResult {
@@ -1207,6 +1258,7 @@ export class DriveAiQa extends LitElement {
     this.abortController = null;
     this.stopQaElapsedTimer();
     this.resetHandoff();
+    this.renderedMarkdown.clear();
     this.messages = [];
     this.streaming = false;
     this.question = "";

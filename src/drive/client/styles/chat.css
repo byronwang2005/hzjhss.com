@@ -173,6 +173,473 @@
   margin-inline: auto;
 }
 
+.drive-ai-qa-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.drive-ai-qa-markdown {
+  color: var(--jh-color-text);
+  font-family: var(--drive-font);
+  font-size: 15px;
+  line-height: 1.78;
+  overflow-wrap: anywhere;
+  text-rendering: optimizeLegibility;
+}
+
+.drive-ai-qa-markdown > :first-child {
+  margin-top: 0;
+}
+
+.drive-ai-qa-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.drive-ai-qa-markdown :where(p, ul, ol, blockquote, hr, .drive-ai-qa-table-scroll, .drive-ai-qa-code, .katex-block) {
+  margin-block: 1em;
+}
+
+.drive-ai-qa-markdown p {
+  text-wrap: pretty;
+}
+
+.drive-ai-qa-markdown :where(h1, h2, h3, h4, h5, h6) {
+  max-width: 32ch;
+  margin: 1.55em 0 0.62em;
+  color: var(--jh-color-text);
+  font-family: inherit;
+  font-weight: 680;
+  letter-spacing: -0.022em;
+  line-height: 1.28;
+  text-wrap: balance;
+}
+
+.drive-ai-qa-markdown h1 {
+  font-size: 1.56em;
+}
+
+.drive-ai-qa-markdown h2 {
+  padding-bottom: 0.34em;
+  border-bottom: 1px solid var(--jh-color-border-soft);
+  font-size: 1.34em;
+}
+
+.drive-ai-qa-markdown h3 {
+  font-size: 1.16em;
+}
+
+.drive-ai-qa-markdown :where(h4, h5, h6) {
+  font-size: 1em;
+  letter-spacing: -0.01em;
+}
+
+.drive-ai-qa-markdown :where(strong, b) {
+  font-weight: 680;
+}
+
+.drive-ai-qa-markdown :where(ul, ol) {
+  padding-inline-start: 1.45em;
+}
+
+.drive-ai-qa-markdown :where(ul, ol) :where(ul, ol) {
+  margin-block: 0.45em;
+}
+
+.drive-ai-qa-markdown li {
+  padding-inline-start: 0.22em;
+}
+
+.drive-ai-qa-markdown li + li {
+  margin-top: 0.36em;
+}
+
+.drive-ai-qa-markdown li::marker {
+  color: var(--jh-color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.drive-ai-qa-markdown li > p {
+  margin-block: 0.45em;
+}
+
+.drive-ai-qa-markdown blockquote {
+  position: relative;
+  padding: 0.88em 1em 0.94em 1.18em;
+  color: var(--jh-color-text-secondary);
+  background: color-mix(in srgb, var(--jh-color-brand-soft) 42%, var(--jh-color-surface-subtle));
+  border: 0;
+  border-radius: 0 8px 8px 0;
+  font: inherit;
+  font-style: normal;
+}
+
+.drive-ai-qa-markdown blockquote::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: color-mix(in srgb, var(--jh-color-brand) 66%, var(--jh-color-border));
+  content: "";
+}
+
+.drive-ai-qa-markdown blockquote > :first-child {
+  margin-top: 0;
+}
+
+.drive-ai-qa-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.drive-ai-qa-markdown blockquote p {
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+
+.drive-ai-qa-markdown hr:not(.footnotes-sep) {
+  height: 1px;
+  background: var(--jh-color-border-soft);
+  border: 0;
+}
+
+.drive-ai-qa-markdown a {
+  color: var(--jh-color-brand-hover);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 48%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  transition: color var(--jh-duration-fast) var(--jh-motion-control), text-decoration-color var(--jh-duration-fast) var(--jh-motion-control);
+}
+
+.drive-ai-qa-markdown a:hover {
+  color: var(--jh-color-brand);
+  text-decoration-color: currentColor;
+}
+
+.drive-ai-qa-markdown a:focus-visible,
+.drive-ai-qa-code-copy:focus-visible,
+.drive-ai-qa-table-scroll:focus-visible {
+  outline: 2px solid var(--jh-color-brand);
+  outline-offset: 3px;
+}
+
+.drive-ai-qa-markdown code {
+  font-family: var(--drive-mono);
+  font-variant-ligatures: none;
+}
+
+.drive-ai-qa-markdown code:not(pre code) {
+  padding: 0.14em 0.38em;
+  color: var(--jh-color-text-secondary);
+  background: var(--jh-color-surface-muted);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: 4px;
+  font-size: 0.88em;
+  overflow-wrap: break-word;
+}
+
+.drive-ai-qa-code {
+  --drive-code-keyword: #d8a66f;
+  --drive-code-string: #a9c78f;
+  --drive-code-comment: #929ca8;
+  --drive-code-number: #c1a9dc;
+  --drive-code-title: #8fc2cf;
+  overflow: hidden;
+  background: var(--jh-color-code);
+  border: 1px solid var(--jh-color-code-border);
+  border-radius: 9px;
+  box-shadow: 0 10px 28px rgb(18 23 29 / 12%);
+}
+
+.drive-ai-qa-code figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 6px 8px 6px 14px;
+  color: var(--jh-color-code-muted);
+  background: var(--jh-color-code-raised);
+  border-bottom: 1px solid var(--jh-color-code-border);
+  font-family: var(--drive-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.drive-ai-qa-code figcaption > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drive-ai-qa-code-copy {
+  min-width: 50px;
+  min-height: 27px;
+  padding: 5px 8px;
+  color: var(--jh-color-code-muted);
+  background: var(--jh-color-code-control);
+  border: 1px solid color-mix(in srgb, var(--jh-color-code-muted) 20%, transparent);
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: var(--drive-font);
+  font-size: 11px;
+  transition: color var(--jh-duration-fast) var(--jh-motion-control), background-color var(--jh-duration-fast) var(--jh-motion-control), transform var(--jh-duration-fast) var(--jh-motion-control);
+}
+
+.drive-ai-qa-code-copy:hover {
+  color: var(--jh-color-code-text);
+  background: color-mix(in srgb, var(--jh-color-code-control) 76%, var(--jh-color-code-text));
+}
+
+.drive-ai-qa-code-copy:active {
+  transform: scale(0.97);
+}
+
+.drive-ai-qa-code-copy.is-copied {
+  color: var(--jh-color-success-soft);
+  background: var(--jh-color-success);
+}
+
+.drive-ai-qa-code pre {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.drive-ai-qa-code pre:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--jh-color-brand) 75%, white);
+  outline-offset: -2px;
+}
+
+.drive-ai-qa-code pre code {
+  display: block;
+  min-width: max-content;
+  padding: 16px 18px 18px;
+  color: var(--jh-color-code-text);
+  background: transparent;
+  font-size: 12.5px;
+  line-height: 1.65;
+  tab-size: 2;
+}
+
+.drive-ai-qa-code .hljs-comment,
+.drive-ai-qa-code .hljs-quote {
+  color: var(--drive-code-comment);
+  font-style: italic;
+}
+
+.drive-ai-qa-code :where(.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link) {
+  color: var(--drive-code-keyword);
+}
+
+.drive-ai-qa-code :where(.hljs-string, .hljs-doctag, .hljs-regexp, .hljs-template-tag, .hljs-template-variable) {
+  color: var(--drive-code-string);
+}
+
+.drive-ai-qa-code :where(.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-variable, .hljs-attr) {
+  color: var(--drive-code-number);
+}
+
+.drive-ai-qa-code :where(.hljs-title, .hljs-name, .hljs-selector-id, .hljs-selector-class, .hljs-type) {
+  color: var(--drive-code-title);
+}
+
+.drive-ai-qa-code :where(.hljs-built_in, .hljs-meta, .hljs-attribute) {
+  color: #d6bd83;
+}
+
+.drive-ai-qa-code :where(.hljs-emphasis) {
+  font-style: italic;
+}
+
+.drive-ai-qa-code :where(.hljs-strong) {
+  font-weight: 700;
+}
+
+.drive-ai-qa-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--jh-color-border);
+  border-radius: 8px;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.drive-ai-qa-markdown table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  background: var(--jh-color-surface);
+  font-size: 0.9em;
+  line-height: 1.55;
+}
+
+.drive-ai-qa-markdown :where(th, td) {
+  padding: 0.72em 0.86em;
+  text-align: start;
+  vertical-align: top;
+  border-right: 1px solid var(--jh-color-border-soft);
+  border-bottom: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-ai-qa-markdown :where(th, td):last-child {
+  border-right: 0;
+}
+
+.drive-ai-qa-markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+.drive-ai-qa-markdown th {
+  color: var(--jh-color-text-secondary);
+  background: var(--jh-color-surface-muted);
+  font-weight: 680;
+}
+
+.drive-ai-qa-markdown tbody tr:nth-child(even) {
+  background: var(--jh-color-surface-subtle);
+}
+
+.drive-ai-qa-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-block: 1.2em;
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: 8px;
+}
+
+.drive-ai-qa-markdown .katex {
+  font-size: 1.02em;
+}
+
+.drive-ai-qa-markdown .katex .cjk_fallback {
+  font-family: var(--drive-font);
+  font-style: normal;
+}
+
+.drive-ai-qa-markdown .katex-block {
+  max-width: 100%;
+  padding: 0.42em 0.2em 0.56em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  text-align: center;
+}
+
+.drive-ai-qa-markdown .katex-display {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
+
+.drive-ai-qa-markdown .katex-error {
+  padding: 0.12em 0.3em;
+  color: var(--jh-color-text-muted) !important;
+  background: var(--jh-color-surface-muted);
+  border-radius: 4px;
+  font-family: var(--drive-mono);
+  font-size: 0.9em;
+  text-decoration: underline dotted var(--jh-color-warning);
+  text-underline-offset: 0.2em;
+}
+
+.drive-ai-qa-markdown .katex-error .katex :where(.mord, .mrel, .mop, .mbin, .mpunct) {
+  color: inherit !important;
+}
+
+.drive-ai-qa-markdown .footnotes-sep {
+  width: min(100%, 42rem);
+  height: 1px;
+  margin: 1.8em 0 1.05em;
+  background: var(--jh-color-border-soft);
+  border: 0;
+}
+
+.drive-ai-qa-markdown .footnotes {
+  width: min(100%, 48rem);
+  color: var(--jh-color-text-muted);
+  font-size: 0.86em;
+  line-height: 1.62;
+}
+
+.drive-ai-qa-markdown .footnotes-title {
+  margin: 0 0 0.72em;
+  color: var(--jh-color-text-secondary);
+  font-size: 1em;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.drive-ai-qa-markdown .footnotes-list {
+  margin: 0;
+  padding-inline-start: 1.55em;
+}
+
+.drive-ai-qa-markdown .footnote-item {
+  padding-inline-start: 0.32em;
+  scroll-margin-top: 5rem;
+}
+
+.drive-ai-qa-markdown .footnote-item + .footnote-item {
+  margin-top: 0.54em;
+}
+
+.drive-ai-qa-markdown .footnote-item:target {
+  color: var(--jh-color-text-secondary);
+  background: var(--jh-color-brand-soft);
+  border-radius: 4px;
+}
+
+.drive-ai-qa-markdown .footnote-item p {
+  display: inline;
+  margin: 0;
+}
+
+.drive-ai-qa-markdown .footnote-ref {
+  margin-inline: 0.08em;
+  font-size: 0.72em;
+  line-height: 0;
+  vertical-align: super;
+}
+
+.drive-ai-qa-markdown .footnote-ref > a:first-child {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4em;
+  height: 1.4em;
+  padding-inline: 0.22em;
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.drive-ai-qa-markdown .footnote-anchor {
+  scroll-margin-top: 5rem;
+}
+
+.drive-ai-qa-markdown .footnote-backref {
+  display: inline-block;
+  margin-inline-start: 0.32em;
+  color: var(--jh-color-brand);
+  font-size: 0.92em;
+  text-decoration: none;
+}
+
 @media (max-width: 760px) {
   .drive-ai-qa,
   .drive-ai-qa.is-global {
@@ -197,6 +664,37 @@
 
   .drive-ai-qa-messages {
     padding-inline: 16px;
+  }
+
+  .drive-ai-qa-markdown {
+    font-size: 14.5px;
+    line-height: 1.74;
+  }
+
+  .drive-ai-qa-markdown :where(h1, h2, h3, h4, h5, h6) {
+    max-width: 100%;
+  }
+
+  .drive-ai-qa-markdown blockquote {
+    padding-inline: 1em 0.86em;
+  }
+
+  .drive-ai-qa-code {
+    margin-inline: -2px;
+    border-radius: 7px;
+  }
+
+  .drive-ai-qa-code pre code {
+    padding: 14px;
+    font-size: 12px;
+  }
+
+  .drive-ai-qa-markdown table {
+    min-width: 30rem;
+  }
+
+  .drive-ai-qa-markdown .katex-block {
+    text-align: start;
   }
 
   .drive-ai-qa-empty {

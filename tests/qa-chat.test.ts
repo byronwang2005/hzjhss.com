@@ -30,7 +30,7 @@ async function mountQa(scope: "global" | "topic" = "global"): Promise<DriveAiQa>
   qa.scope = scope;
   qa.topicId = scope === "topic" ? "t_abcdefghijkl" : "";
   qa.topicName = scope === "topic" ? "新能源" : "";
-  qa.displayName = scope === "global" ? "汪旭" : "";
+  qa.displayName = "汪旭";
   qa.ready = true;
   document.body.appendChild(qa);
   await qa.updateComplete;
@@ -74,6 +74,61 @@ describe("drive AI Q&A component", () => {
     expect(requestBody).not.toHaveProperty("prefix");
     expect(qa.querySelector("strong")?.textContent).toBe("可追溯回答");
     expect(qa.querySelector(".drive-ai-qa-heading p")).toBeNull();
+  });
+
+  it("copies highlighted code with exact whitespace and announces success", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const answer = "```typescript\nconst total: number = 7;\n```\n";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      `event: delta\ndata: ${JSON.stringify({ content: answer })}\n\nevent: done\ndata: {"ok":true}\n\n`,
+      { headers: { "content-type": "text/event-stream" } },
+    )));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "请给出代码";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+
+    const copy = qa.querySelector<HTMLButtonElement>("[data-copy-code]")!;
+    expect(qa.querySelector(".hljs-keyword")?.textContent).toBe("const");
+    copy.click();
+    await Promise.resolve();
+
+    expect(writeText).toHaveBeenCalledWith("const total: number = 7;\n");
+    expect(copy.textContent).toBe("已复制");
+    expect(qa.querySelector("[data-code-copy-status]")?.textContent).toBe("代码已复制");
+  });
+
+  it("selects code for manual copying when clipboard access fails", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async () => { throw new Error("denied"); }) },
+    });
+    const answer = "```text\n保留  两个空格\n```\n";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      `event: delta\ndata: ${JSON.stringify({ content: answer })}\n\nevent: done\ndata: {"ok":true}\n\n`,
+      { headers: { "content-type": "text/event-stream" } },
+    )));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "复制失败回退";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+
+    const copy = qa.querySelector<HTMLButtonElement>("[data-copy-code]")!;
+    copy.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(copy.textContent).toBe("已选中");
+    expect(window.getSelection()?.toString()).toBe("保留  两个空格\n");
+    expect(qa.querySelector("[data-code-copy-status]")?.textContent).toContain("Command+C");
   });
 
   it("shows a thinking status without rendering reasoning content, then streams the final answer", async () => {
@@ -250,6 +305,8 @@ describe("drive AI Q&A component", () => {
 
     expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("今天想从资料里确认什么？");
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("从这个专题开始提问");
+    expect(topicQa.querySelector(".drive-ai-qa-empty .drive-eyebrow")?.textContent).toBe("欢迎回来，汪旭");
+    expect(topicQa.textContent).not.toContain("当前专题 · 新能源");
     expect(globalQa.querySelector(".drive-ai-qa-typewriter")).toBeNull();
     expect(globalQa.querySelector(".drive-ai-qa-head")).toBeNull();
     expect(globalQa.textContent).not.toContain("回答将标注资料来源");

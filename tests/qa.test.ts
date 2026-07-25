@@ -101,7 +101,9 @@ describe("retrieval-grounded prompt", () => {
 
   it("requires file and locator citations without exposing COS URLs", () => {
     const prompt = createRetrievedQaSystemMessage([{ topicName: "新能源", fileName: "report.pdf", locator: "第 12 页", content: "库存增长。" }], true);
-    expect(prompt).toContain("[文件名，位置]");
+    expect(prompt).toContain("引用编号：[^1]");
+    expect(prompt).toContain("[^编号]: 《文件名》，位置");
+    expect(prompt).toContain("公式中的中文必须写在 \\text{...} 中");
     expect(prompt).toContain("report.pdf");
     expect(prompt).toContain("第 12 页");
     expect(prompt).not.toContain("signedUrl");
