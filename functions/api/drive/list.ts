@@ -1,5 +1,5 @@
 import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
-import { errorResponse, jsonResponse, readDriveSession } from "../../../src/drive/server/http";
+import { jsonResponse, readDriveSession } from "../../../src/drive/server/http";
 import { listKnowledgeFiles } from "../../../src/drive/server/knowledge";
 import { isDriveAdmin } from "../../../src/drive/server/session";
 import { encodeSse } from "../../../src/drive/server/sse";
@@ -19,9 +19,10 @@ export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) =>
   const prefix = url.searchParams.get("prefix") || "";
   const cursor = url.searchParams.get("cursor");
   const includeMethodology = isDriveAdmin(session.displayName);
-  if (!role) return errorResponse(new Error("请指定资料类型"));
+  const requestId = crypto.randomUUID();
+  if (!role) return jsonResponse({ error: "请指定资料类型", code: "FILE_LIST_FAILED", requestId }, 400);
   if (request.headers.get("accept")?.includes("text/event-stream")) {
-    return streamFileList(request, env, { topicId, role, prefix, cursor, includeMethodology });
+    return streamFileList(request, env, { topicId, role, prefix, cursor, includeMethodology, requestId });
   }
   try {
     const response = await listKnowledgeFiles(
@@ -30,10 +31,13 @@ export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) =>
       role,
       prefix,
       cursor,
-      { includeMethodology },
+      { includeMethodology, requestId },
     ) satisfies FileListResponse;
     return jsonResponse(response);
-  } catch (error) { return errorResponse(error); }
+  } catch (error) {
+    console.error("File list failed", { code: "FILE_LIST_FAILED", requestId, error: errorDetails(error) });
+    return jsonResponse({ error: "资料列表读取失败，请重试。", code: "FILE_LIST_FAILED", requestId, retryable: true }, 500);
+  }
 };
 
 function streamFileList(
@@ -45,6 +49,7 @@ function streamFileList(
     prefix: string;
     cursor: string | null;
     includeMethodology: boolean;
+    requestId: string;
   },
 ): Response {
   return new Response(new ReadableStream<Uint8Array>({
@@ -63,6 +68,7 @@ function streamFileList(
           input.cursor,
           {
             includeMethodology: input.includeMethodology,
+            requestId: input.requestId,
             onProgress(update) {
               activeStage = update.stage;
               emit({
@@ -74,15 +80,22 @@ function streamFileList(
         );
         emit({ event: "result", data: result });
         emit({ event: "done", data: { ok: true, totalMs: Date.now() - startedAt } });
-      } catch {
+      } catch (error) {
         if (!request.signal.aborted) {
-          const error: FileListErrorEvent = {
+          console.error("File list stream failed", {
+            code: "FILE_LIST_FAILED",
+            requestId: input.requestId,
+            stage: activeStage,
+            error: errorDetails(error),
+          });
+          const eventError: FileListErrorEvent = {
             stage: activeStage,
             code: "FILE_LIST_FAILED",
+            requestId: input.requestId,
             retryable: true,
             message: fileListErrorMessage(activeStage),
           };
-          emit({ event: "error", data: error });
+          emit({ event: "error", data: eventError });
         }
       } finally {
         try {
@@ -99,6 +112,11 @@ function streamFileList(
       connection: "keep-alive",
     },
   });
+}
+
+function errorDetails(error: unknown): { name: string; message: string; stack?: string } {
+  if (error instanceof Error) return { name: error.name, message: error.message, stack: error.stack };
+  return { name: "UnknownError", message: String(error) };
 }
 
 function fileListErrorMessage(stage: FileListProgressStage): string {

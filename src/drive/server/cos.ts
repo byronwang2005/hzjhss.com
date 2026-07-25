@@ -44,13 +44,13 @@ const parser = new XMLParser({
   trimValues: true,
 });
 
-export async function listObjects(config: DriveConfig, prefix: string, cursor?: string | null): Promise<DriveListResult> {
+export async function listObjects(config: DriveConfig, prefix: string, cursor?: string | null, maxKeys = 1000): Promise<DriveListResult> {
   const cosPrefix = makeObjectKey(config.rootPrefix, prefix);
   const url = new URL(config.endpoint);
   url.searchParams.set("list-type", "2");
   url.searchParams.set("delimiter", "/");
   url.searchParams.set("prefix", cosPrefix);
-  url.searchParams.set("max-keys", "1000");
+  url.searchParams.set("max-keys", String(normalizeMaxKeys(maxKeys)));
   if (cursor) {
     url.searchParams.set("continuation-token", cursor);
   }
@@ -63,12 +63,12 @@ export async function listObjects(config: DriveConfig, prefix: string, cursor?: 
   return parseListObjectsXml(text, config.rootPrefix, prefix);
 }
 
-export async function listObjectPaths(config: DriveConfig, prefix: string, cursor?: string | null): Promise<DriveObjectPathList> {
+export async function listObjectPaths(config: DriveConfig, prefix: string, cursor?: string | null, maxKeys = 1000): Promise<DriveObjectPathList> {
   const cosPrefix = makeObjectKey(config.rootPrefix, prefix);
   const url = new URL(config.endpoint);
   url.searchParams.set("list-type", "2");
   url.searchParams.set("prefix", cosPrefix);
-  url.searchParams.set("max-keys", "1000");
+  url.searchParams.set("max-keys", String(normalizeMaxKeys(maxKeys)));
   if (cursor) {
     url.searchParams.set("continuation-token", cursor);
   }
@@ -79,6 +79,11 @@ export async function listObjectPaths(config: DriveConfig, prefix: string, curso
     throw new Error(`COS 列表请求失败: ${response.status}`);
   }
   return parseObjectPathsXml(text, config.rootPrefix);
+}
+
+function normalizeMaxKeys(value: number): number {
+  if (!Number.isInteger(value) || value < 1 || value > 1000) throw new Error("COS 列表分页大小无效");
+  return value;
 }
 
 export async function createFolder(config: DriveConfig, relativeFolderPath: string): Promise<void> {

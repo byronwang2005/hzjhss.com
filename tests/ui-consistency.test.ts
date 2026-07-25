@@ -35,6 +35,13 @@ describe("shared UI system", () => {
     expect(driveBundle).toContain(workerPath.replace(/^dist\/assets\//, ""));
   });
 
+  it("versions the drive entrypoints so cached clients cannot outlive API changes", () => {
+    const markup = readFileSync("dist/index.html", "utf8");
+    expect(markup).toMatch(/\.\/assets\/drive\.css\?v=[a-f0-9]{12}/);
+    expect(markup).toMatch(/\.\/assets\/drive\.js\?v=[a-f0-9]{12}/);
+    expect(markup).not.toMatch(/drive\.(?:css|js)\?v=[^"']*\?v=/);
+  });
+
   it("loads the shared icon sprite from its deployed assets path", () => {
     const iconSource = readFileSync("src/drive/client/icons.ts", "utf8");
     expect(iconSource).toContain('"/assets/phosphor-sprite.svg');

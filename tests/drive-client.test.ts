@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
-import type { KnowledgeFile } from "../src/drive/shared/contracts";
+import type { FileListResponse, KnowledgeFile } from "../src/drive/shared/contracts";
 import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
 import { createUploadRegistrationScheduler, persistPendingUpload, readPendingUploads, type UploadRegistrationReceipt } from "../src/drive/client/upload-registrations";
+import { loadRemainingFilePages } from "../src/drive/client/file-pagination";
 
 describe("knowledge entry flow", () => {
   it("keeps session checking, successful sign-in and authentication failure distinct", () => {
@@ -155,6 +156,59 @@ describe("upload registration queue", () => {
   });
 });
 
+describe("file list pagination", () => {
+  it.each([420, 1000])("merges all %i files from bounded pages", async (count) => {
+    const pages = Array.from({ length: Math.ceil(count / 50) }, (_, pageIndex): FileListResponse => {
+      const start = pageIndex * 50;
+      return {
+        role: "reference",
+        prefix: "研报/",
+        folders: [],
+        files: Array.from({ length: Math.min(50, count - start) }, (_, offset) => ({
+          name: `${start + offset}.pdf`,
+          path: `研报/${start + offset}.pdf`,
+          relativePath: `研报/${start + offset}.pdf`,
+          size: 3,
+          lastModified: "2026-07-25T00:00:00.000Z",
+          etag: `etag-${start + offset}`,
+          knowledgeRole: "reference",
+        })),
+        nextCursor: pageIndex + 1 < Math.ceil(count / 50) ? String(pageIndex + 1) : null,
+      };
+    });
+    const published: number[] = [];
+    const result = await loadRemainingFilePages(pages[0], {
+      fetchPage: async (cursor) => pages[Number(cursor)],
+      isCurrent: () => true,
+      onPage: (listing) => published.push(listing.files.length),
+    });
+    expect(result?.files).toHaveLength(count);
+    expect(new Set(result?.files.map((file) => file.path)).size).toBe(count);
+    expect(published.at(-1)).toBe(count);
+  });
+
+  it("surfaces a failed later page without discarding the first page", async () => {
+    const first: FileListResponse = { role: "reference", prefix: "", folders: [], files: [], nextCursor: "next" };
+    await expect(loadRemainingFilePages(first, {
+      fetchPage: async () => { throw new Error("分页读取失败"); },
+      isCurrent: () => true,
+      onPage() {},
+    })).rejects.toThrow("分页读取失败");
+    expect(first.nextCursor).toBe("next");
+  });
+
+  it("stops publishing when the role or directory request becomes stale", async () => {
+    const first: FileListResponse = { role: "reference", prefix: "", folders: [], files: [], nextCursor: "next" };
+    const published: FileListResponse[] = [];
+    await expect(loadRemainingFilePages(first, {
+      fetchPage: async () => ({ ...first, files: [], nextCursor: null }),
+      isCurrent: () => false,
+      onPage: (listing) => published.push(listing),
+    })).resolves.toBeNull();
+    expect(published).toEqual([]);
+  });
+});
+
 describe("file processing progress", () => {
   it("keeps file stages monotonic while allowing an explicit failed retry", () => {
     const batch = createUploadBatch("t_abcdefghijkl", "", "evidence", [
@@ -294,9 +348,10 @@ describe("knowledge client surface", () => {
     expect(source).toContain("file.webkitRelativePath || file.name");
     expect(source).toContain("data-reference-folder-input");
     expect(source).toContain("webkitdirectory");
-    expect(source).toContain('data-action="toggle-folder-incorporated"');
-    expect(source).toContain("pendingFolderIncorporationPath");
+    expect(source).toContain('data-action="manage-folder-incorporation"');
+    expect(source).toContain("scanFolderManagement");
     expect(source).toContain('api<FolderIncorporationResult>("/folder"');
+    expect(source).toContain('api<FolderSummaryPage>(`/folder?${query}`');
     expect(source).not.toContain(">上传周报<");
     expect(source).not.toContain("drive-file-role-badge");
   });

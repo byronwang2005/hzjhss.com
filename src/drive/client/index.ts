@@ -9,6 +9,7 @@ import "./drive.css";
 import Uppy from "@uppy/core";
 import type { UppyFile } from "@uppy/core";
 import XHRUpload from "@uppy/xhr-upload";
+import pRetry from "p-retry";
 import { html, nothing, render, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { renderIcon } from "./icons";
@@ -20,6 +21,7 @@ import type {
   FileListProgressStage,
   FileListResponse,
   FolderIncorporationResult,
+  FolderSummaryPage,
   KnowledgeFile,
   KnowledgeFolder,
   KnowledgeRole,
@@ -33,6 +35,7 @@ import { state, type TopicView } from "./state";
 import { createTransientStatusController } from "./transient-status";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 import { runWorkspaceTransition } from "./workspace-transition";
+import { loadRemainingFilePages } from "./file-pagination";
 import {
   createUploadRegistrationScheduler,
   readPendingUploads,
@@ -84,6 +87,7 @@ let fileRefreshTimer: number | undefined;
 let fileProgressClockTimer: number | undefined;
 let fileLoadClockTimer: number | undefined;
 let fileLoadAbortController: AbortController | null = null;
+let folderManagementAbortController: AbortController | null = null;
 let fileLoadRequestId = 0;
 let uploadOperationActive = false;
 let pendingRegistrationResumeActive = false;
@@ -277,15 +281,23 @@ async function loadFiles(background = false): Promise<void> {
     });
     if (streamError) throw new Error((streamError as FileListErrorEvent).message);
     if (!listing) throw new Error("COS 文件列表未返回结果，请重新加载。");
-    const resolvedListing = listing as FileListResponse;
+    let resolvedListing = listing as FileListResponse;
+    publishFileListing(resolvedListing, requestId, topicId, role, prefix);
+    const loadedListing = await loadRemainingFilePages(resolvedListing, {
+      fetchPage: (cursor) => api<FileListResponse>(
+        `/list?topicId=${encodeURIComponent(topicId)}&role=${encodeURIComponent(role)}&prefix=${encodeURIComponent(prefix)}&cursor=${encodeURIComponent(cursor)}`,
+        { signal: controller.signal },
+      ),
+      isCurrent: () => fileLoadIsCurrent(requestId, topicId, role, prefix),
+      onPage: (page) => publishFileListing(page, requestId, topicId, role, prefix),
+    });
+    if (!loadedListing) return;
+    resolvedListing = loadedListing;
     const batchSnapshot = state.uploadBatch?.topicId === topicId ? state.uploadBatch : null;
     const batchListing = batchSnapshot?.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage))
       ? await loadBatchStatusListing(topicId, batchSnapshot, batchSnapshot.prefix === prefix ? resolvedListing : null, controller.signal)
       : resolvedListing;
     if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
-    state.listing = resolvedListing;
-    state.fileRolePrefixes[role] = prefix;
-    state.fileRoleListings[role] = resolvedListing;
     if (state.uploadBatch === batchSnapshot) reconcileUploadBatch(batchSnapshot, topicId, batchListing);
     if (state.fileLoad?.requestId === requestId) {
       state.fileLoad.active = false;
@@ -314,6 +326,25 @@ async function loadFiles(background = false): Promise<void> {
     if (fileLoadAbortController === controller) fileLoadAbortController = null;
     syncFileLoadClock();
   }
+}
+
+function publishFileListing(
+  listing: FileListResponse,
+  requestId: number,
+  topicId: string,
+  role: KnowledgeRole,
+  prefix: string,
+): void {
+  if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
+  state.listing = listing;
+  state.fileRolePrefixes[role] = prefix;
+  state.fileRoleListings[role] = listing;
+  if (state.fileLoad?.requestId === requestId) {
+    state.fileLoad.stage = listing.nextCursor ? "objects" : "assembling";
+    state.fileLoad.completed = listing.files.length;
+    state.fileLoad.total = 0;
+  }
+  renderApp();
 }
 
 function fileLoadIsCurrent(requestId: number, topicId: string, role: KnowledgeRole, prefix: string): boolean {
@@ -626,11 +657,14 @@ async function handleClick(event: MouseEvent): Promise<void> {
     });
     setStatus(button.dataset.incorporated === "true" ? "已取消纳入标记。" : "已标记为已纳入方法论。", "success");
     await loadFiles();
-  } else if (action === "toggle-folder-incorporated") {
-    await toggleFolderIncorporated(
-      String(button.dataset.path || ""),
-      button.dataset.incorporated !== "true",
-    );
+  } else if (action === "manage-folder-incorporation") {
+    openFolderManagement(String(button.dataset.path || ""), String(button.dataset.name || "研报文件夹"));
+  } else if (action === "retry-folder-summary") {
+    if (state.folderManagement) await scanFolderManagement(state.folderManagement);
+  } else if (action === "apply-folder-incorporation") {
+    await applyFolderIncorporation(button.dataset.incorporated === "true");
+  } else if (action === "close-folder-management") {
+    closeFolderManagement();
   } else if (action === "edit-report-date") {
     state.editReportDate = {
       path: String(button.dataset.path || ""),
@@ -658,30 +692,142 @@ async function handleClick(event: MouseEvent): Promise<void> {
   }
 }
 
-async function toggleFolderIncorporated(path: string, incorporated: boolean): Promise<void> {
-  if (!state.topic || !path || state.pendingFolderIncorporationPath) return;
-  state.pendingFolderIncorporationPath = path;
+function openFolderManagement(path: string, name: string): void {
+  if (!state.topic || !path || state.folderManagement) return;
+  const management = {
+    path,
+    name,
+    phase: "loading" as const,
+    scannedCount: 0,
+    referenceCount: 0,
+    incorporatedCount: 0,
+    changedCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+    error: "",
+  };
+  state.folderManagement = management;
+  renderApp();
+  void scanFolderManagement(management);
+}
+
+async function scanFolderManagement(management: NonNullable<typeof state.folderManagement>): Promise<void> {
+  if (!state.topic || state.folderManagement !== management) return;
+  folderManagementAbortController?.abort();
+  const controller = new AbortController();
+  folderManagementAbortController = controller;
+  const topicId = state.topic.id;
+  management.phase = "loading";
+  management.scannedCount = 0;
+  management.referenceCount = 0;
+  management.incorporatedCount = 0;
+  management.error = "";
   renderApp();
   try {
-    const result = await api<FolderIncorporationResult>("/folder", {
-      method: "PATCH",
-      body: { topicId: state.topic.id, prefix: path, incorporated },
-    });
-    if (!result.matchedCount) {
-      setStatus("该文件夹内没有研报原件。", "neutral");
-    } else if (result.failedCount) {
-      setStatus(`已更新 ${result.changedCount} 份研报，${result.failedCount} 份更新失败。`, "danger");
-    } else if (!result.changedCount) {
-      setStatus(incorporated ? "该文件夹内的研报已全部纳入方法论。" : "该文件夹内的研报已全部取消纳入。", "success");
-    } else {
-      setStatus(incorporated ? `已将 ${result.changedCount} 份研报纳入方法论。` : `已取消 ${result.changedCount} 份研报的纳入标记。`, "success");
-    }
+    let cursor: string | null = null;
+    const seen = new Set<string>();
+    do {
+      const query = new URLSearchParams({ topicId, prefix: management.path });
+      if (cursor) query.set("cursor", cursor);
+      const page = await retryFolderPage(
+        () => api<FolderSummaryPage>(`/folder?${query}`, { signal: controller.signal }),
+        controller.signal,
+      );
+      if (state.folderManagement !== management) return;
+      management.scannedCount += page.scannedCount;
+      management.referenceCount += page.referenceCount;
+      management.incorporatedCount += page.incorporatedCount;
+      cursor = page.nextCursor;
+      if (cursor && seen.has(cursor)) throw new Error("文件夹统计分页游标重复，请重试。");
+      if (cursor) seen.add(cursor);
+      renderApp();
+    } while (cursor);
+    management.phase = "ready";
   } catch (error) {
-    showError(error);
+    if (controller.signal.aborted || state.folderManagement !== management) return;
+    management.phase = "error";
+    management.error = error instanceof Error ? error.message : "文件夹统计失败，请重试。";
   } finally {
-    state.pendingFolderIncorporationPath = null;
-    await loadFiles();
+    if (folderManagementAbortController === controller) folderManagementAbortController = null;
+    if (state.folderManagement === management) renderApp();
   }
+}
+
+async function applyFolderIncorporation(incorporated: boolean): Promise<void> {
+  const management = state.folderManagement;
+  if (!state.topic || !management || management.phase !== "ready") return;
+  folderManagementAbortController?.abort();
+  const controller = new AbortController();
+  folderManagementAbortController = controller;
+  const topicId = state.topic.id;
+  management.phase = "updating";
+  management.changedCount = 0;
+  management.skippedCount = 0;
+  management.failedCount = 0;
+  management.error = "";
+  renderApp();
+  try {
+    let cursor: string | null = null;
+    const seen = new Set<string>();
+    do {
+      const result = await retryFolderPage(
+        () => api<FolderIncorporationResult>("/folder", {
+          method: "PATCH",
+          signal: controller.signal,
+          body: { topicId, prefix: management.path, incorporated, cursor },
+        }),
+        controller.signal,
+      );
+      if (state.folderManagement !== management) return;
+      management.changedCount += result.changedCount;
+      management.skippedCount += result.skippedCount;
+      management.failedCount += result.failedCount;
+      cursor = result.nextCursor;
+      if (cursor && seen.has(cursor)) throw new Error("文件夹更新分页游标重复，请重试。");
+      if (cursor) seen.add(cursor);
+      renderApp();
+    } while (cursor);
+    management.incorporatedCount = incorporated
+      ? Math.max(0, management.referenceCount - management.failedCount)
+      : management.failedCount;
+    management.phase = "ready";
+    management.error = management.failedCount
+      ? `${management.failedCount} 份研报更新失败，可再次执行以重试。`
+      : "";
+    setStatus(
+      management.failedCount
+        ? `已更新 ${management.changedCount} 份研报，${management.failedCount} 份失败。`
+        : incorporated
+          ? `已将 ${management.referenceCount} 份研报纳入方法论。`
+          : `已取消 ${management.referenceCount} 份研报的纳入标记。`,
+      management.failedCount ? "danger" : "success",
+    );
+  } catch (error) {
+    if (controller.signal.aborted || state.folderManagement !== management) return;
+    management.phase = "ready";
+    management.error = error instanceof Error ? error.message : "文件夹更新失败，请重试。";
+  } finally {
+    if (folderManagementAbortController === controller) folderManagementAbortController = null;
+    if (state.folderManagement === management) renderApp();
+  }
+}
+
+function closeFolderManagement(): void {
+  if (state.folderManagement?.phase === "loading" || state.folderManagement?.phase === "updating") return;
+  folderManagementAbortController?.abort();
+  folderManagementAbortController = null;
+  state.folderManagement = null;
+  renderApp();
+}
+
+function retryFolderPage<T>(request: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  return pRetry(request, {
+    retries: 2,
+    factor: 2,
+    minTimeout: 400,
+    maxTimeout: 1_600,
+    signal,
+  });
 }
 
 async function submitDeleteConfirmation(): Promise<void> {
@@ -1257,6 +1403,7 @@ function renderShell(): TemplateResult {
     ${renderDeleteConfirmation()}
     ${renderCreateTopicDialog()}
     ${renderReportDateDialog()}
+    ${renderFolderManagementDialog()}
   </section>`;
 }
 
@@ -1454,6 +1601,48 @@ function handleReportDateDialogAfterHide(): void {
     state.editReportDate = null;
     renderApp();
   }
+}
+
+function renderFolderManagementDialog(): TemplateResult | typeof nothing {
+  const management = state.folderManagement;
+  if (!management) return nothing;
+  const busy = management.phase === "loading" || management.phase === "updating";
+  const allIncorporated = management.referenceCount > 0 && management.incorporatedCount === management.referenceCount;
+  return html`
+    <wa-dialog
+      class="drive-folder-management-dialog"
+      label="研报文件夹批量管理"
+      with-footer
+      .open=${true}
+      @wa-hide=${(event: Event) => { if (busy) event.preventDefault(); }}
+      @wa-after-hide=${() => { if (!busy) closeFolderManagement(); }}
+    >
+      <div class="drive-folder-management-body">
+        <div class="drive-date-target"><span>文件夹</span><strong>${management.name}</strong><small>${management.path}</small></div>
+        <div class="drive-folder-management-stats" role="status" aria-live="polite">
+          <span><strong>${management.scannedCount}</strong><small>已扫描</small></span>
+          <span><strong>${management.referenceCount}</strong><small>研报总数</small></span>
+          <span><strong>${management.incorporatedCount}</strong><small>已纳入</small></span>
+        </div>
+        ${busy ? html`
+          <div class="drive-folder-management-progress">
+            <span class="drive-spin">${renderIcon("spinner-gap")}</span>
+            <span><strong>${management.phase === "loading" ? "正在统计文件夹" : "正在更新研报"}</strong><small>已分批处理 ${management.phase === "loading" ? management.scannedCount : management.changedCount + management.skippedCount + management.failedCount} 份</small></span>
+          </div>
+        ` : nothing}
+        ${management.error ? html`<div class="drive-delete-dialog-error" role="alert">${management.error}</div>` : nothing}
+      </div>
+      <div class="drive-delete-dialog-actions" slot="footer">
+        <button class="drive-control" type="button" data-action="close-folder-management" ?disabled=${busy}>${renderIcon("x-circle")}关闭</button>
+        ${management.phase === "error" ? html`
+          <button class="drive-control drive-control-primary" type="button" data-action="retry-folder-summary">${renderIcon("arrow-clockwise")}重新统计</button>
+        ` : management.phase === "ready" ? html`
+          <button class="drive-control" type="button" data-action="apply-folder-incorporation" data-incorporated="false" ?disabled=${management.incorporatedCount === 0}>${renderIcon("x-circle")}全部取消</button>
+          <button class="drive-control drive-control-primary" type="button" data-action="apply-folder-incorporation" data-incorporated="true" ?disabled=${allIncorporated || management.referenceCount === 0}>${renderIcon("check", "bold")}全部纳入</button>
+        ` : nothing}
+      </div>
+    </wa-dialog>
+  `;
 }
 
 function renderOverview(): TemplateResult {
@@ -1672,31 +1861,21 @@ function renderFileList(
 }
 
 function renderFolderRow(folder: KnowledgeFolder, role: KnowledgeRole): TemplateResult {
-  const hasReferences = folder.referenceCount > 0;
-  const fullyIncorporated = hasReferences && folder.incorporatedCount === folder.referenceCount;
-  const partiallyIncorporated = folder.incorporatedCount > 0 && !fullyIncorporated;
-  const pending = state.pendingFolderIncorporationPath === folder.path;
-  const folderStatus = !hasReferences
-    ? "暂无研报"
-    : `${folder.incorporatedCount}/${folder.referenceCount} 已纳入`;
   return html`
     <div class="drive-file-row" role="row">
       <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
       <span role="cell" data-label="资料日期">—</span>
       <span role="cell" data-label="处理状态">
-        <span class=${`drive-file-state-chip${partiallyIncorporated ? " is-partial" : fullyIncorporated ? " is-incorporated" : ""}`}>
-          ${role === "reference" ? folderStatus : "目录"}
-        </span>
+        <span class="drive-file-state-chip">目录</span>
       </span>
       <span role="cell" data-label="最近更新">—</span>
       <span class="drive-row-actions" role="cell" data-label="操作">
-        ${state.role === "admin" && role === "reference" && hasReferences ? html`
-          <button class="drive-table-action" type="button" data-action="toggle-folder-incorporated" data-path=${folder.path} data-incorporated=${String(fullyIncorporated)} ?disabled=${pending}>
-            <span class=${pending ? "drive-spin" : ""}>${renderIcon(pending ? "arrows-clockwise" : fullyIncorporated ? "x-circle" : "check")}</span>
-            ${pending ? "处理中" : fullyIncorporated ? "全部取消" : "全部纳入"}
+        ${state.role === "admin" && role === "reference" ? html`
+          <button class="drive-table-action" type="button" data-action="manage-folder-incorporation" data-path=${folder.path} data-name=${folder.name}>
+            ${renderIcon("list")}批量管理
           </button>
         ` : nothing}
-        <button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path} ?disabled=${pending}>${renderIcon("folder-open")}打开</button>
+        <button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path}>${renderIcon("folder-open")}打开</button>
       </span>
     </div>
   `;
@@ -1930,6 +2109,7 @@ function parseFileListError(data: Record<string, unknown>): FileListErrorEvent |
   return {
     stage: data.stage,
     code: "FILE_LIST_FAILED",
+    requestId: typeof data.requestId === "string" ? data.requestId : "unknown",
     retryable: true,
     message: data.message,
   };

@@ -124,8 +124,13 @@ export interface KnowledgeFile {
 export interface KnowledgeFolder {
   name: string;
   path: string;
+}
+
+export interface FolderSummaryPage {
+  scannedCount: number;
   referenceCount: number;
   incorporatedCount: number;
+  nextCursor: string | null;
 }
 
 export interface FolderIncorporationResult {
@@ -133,7 +138,14 @@ export interface FolderIncorporationResult {
   changedCount: number;
   skippedCount: number;
   failedCount: number;
-  failures: Array<{ path: string; message: string }>;
+  failures: Array<{
+    path: string;
+    code: "FOLDER_ITEM_UPDATE_FAILED";
+    requestId: string;
+    retryable: true;
+    message: string;
+  }>;
+  nextCursor: string | null;
 }
 
 export interface FileListResponse {
@@ -155,6 +167,7 @@ export interface FileListPhaseEvent {
 export interface FileListErrorEvent {
   stage: FileListProgressStage;
   code: "FILE_LIST_FAILED";
+  requestId: string;
   retryable: true;
   message: string;
 }

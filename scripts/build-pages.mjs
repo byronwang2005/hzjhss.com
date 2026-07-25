@@ -1,4 +1,5 @@
 import { access, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -26,6 +27,7 @@ await build({
 });
 
 await import("./build-drive.mjs");
+await versionDriveEntrypoints(output);
 
 const redirects = path.join(root, "_redirects");
 try {
@@ -49,4 +51,17 @@ async function renderPages(sourceDirectory, outputDirectory, relativeDirectory =
     const source = await readFile(sourcePath, "utf8");
     await writeFile(outputPath, renderSitePage(source, relativePath));
   }));
+}
+
+async function versionDriveEntrypoints(outputDirectory) {
+  const indexPath = path.join(outputDirectory, "index.html");
+  let markup = await readFile(indexPath, "utf8");
+  for (const asset of ["drive.css", "drive.js"]) {
+    const contents = await readFile(path.join(outputDirectory, "assets", asset));
+    const version = createHash("sha256").update(contents).digest("hex").slice(0, 12);
+    const assetPath = `./assets/${asset}`;
+    const versionedAssetPattern = new RegExp(`${assetPath.replaceAll(".", "\\.")}(?:\\?v=[^\"']*)?`);
+    markup = markup.replace(versionedAssetPattern, `${assetPath}?v=${version}`);
+  }
+  await writeFile(indexPath, markup);
 }

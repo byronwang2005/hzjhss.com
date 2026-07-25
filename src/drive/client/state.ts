@@ -45,6 +45,19 @@ export interface EditReportDateState {
   error: string;
 }
 
+export interface FolderManagementState {
+  path: string;
+  name: string;
+  phase: "loading" | "ready" | "updating" | "error";
+  scannedCount: number;
+  referenceCount: number;
+  incorporatedCount: number;
+  changedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  error: string;
+}
+
 declare global {
   interface Window {
     jhssTheme: {
@@ -85,7 +98,7 @@ export interface DriveClientState {
   fileLoad: FileListLoadState | null;
   uploadBatch: UploadBatchState | null;
   expandedFilePath: string | null;
-  pendingFolderIncorporationPath: string | null;
+  folderManagement: FolderManagementState | null;
 }
 
 export const state: DriveClientState = {
@@ -116,5 +129,5 @@ export const state: DriveClientState = {
   fileLoad: null,
   uploadBatch: null,
   expandedFilePath: null,
-  pendingFolderIncorporationPath: null,
+  folderManagement: null,
 };

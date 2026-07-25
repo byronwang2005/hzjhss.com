@@ -9,12 +9,16 @@ import {
   deleteKnowledgeFile,
   deleteKnowledgeTopic,
   filePolicy,
+  fileMetaPath,
   listKnowledgeFiles,
   listKnowledgeTopics,
+  KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE,
+  KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE,
   METHODOLOGY_PATH,
   patchKnowledgeFile,
   patchKnowledgeFolderIncorporation,
   processingStatusPath,
+  readKnowledgeFolderSummaryPage,
   readKnowledgeTopic,
   sourcePath,
   tempUploadPath,
@@ -25,7 +29,7 @@ import { jsonResponse } from "../src/drive/server/http";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 import { onRequestPost as uploadComplete } from "../functions/api/drive/upload-complete";
 import { onRequestGet as listFiles } from "../functions/api/drive/list";
-import { onRequestPatch as patchFolder } from "../functions/api/drive/folder";
+import { onRequestGet as getFolder, onRequestPatch as patchFolder } from "../functions/api/drive/folder";
 
 const env: DriveEnv = {
   COS_SECRET_ID: "id",
@@ -322,7 +326,8 @@ describe("knowledge topic and upload flow", () => {
     expect(patched.metadata).toMatchObject({ incorporatedBy: "汪旭" });
   });
 
-  it("recursively summarizes and batch-updates reference incorporation", async () => {
+  it("summarizes reference folders on demand and batch-updates one bounded page", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "批量纳入");
     const upload = async (relativePath: string, knowledgeRole: "reference" | "evidence") => {
@@ -351,11 +356,13 @@ describe("knowledge topic and upload flow", () => {
     await upload("研报/子目录/时效资料.pdf", "evidence");
 
     const before = await listKnowledgeFiles(config, topic.id, "reference", "");
-    expect(before.folders).toContainEqual(expect.objectContaining({
-      path: "研报/",
+    expect(before.folders).toContainEqual({ name: "研报", path: "研报/" });
+    await expect(readKnowledgeFolderSummaryPage(config, { topicId: topic.id, prefix: "研报/" })).resolves.toMatchObject({
+      scannedCount: 2,
       referenceCount: 2,
       incorporatedCount: 0,
-    }));
+      nextCursor: null,
+    });
     const versionBefore = (await readKnowledgeTopic(config, topic.id)).indexVersion;
 
     await expect(patchKnowledgeFolderIncorporation(config, {
@@ -365,8 +372,7 @@ describe("knowledge topic and upload flow", () => {
       updatedBy: "汪旭",
     })).resolves.toMatchObject({ matchedCount: 2, changedCount: 2, skippedCount: 0, failedCount: 0 });
 
-    const after = await listKnowledgeFiles(config, topic.id, "reference", "");
-    expect(after.folders).toContainEqual(expect.objectContaining({ path: "研报/", referenceCount: 2, incorporatedCount: 2 }));
+    await expect(readKnowledgeFolderSummaryPage(config, { topicId: topic.id, prefix: "研报/" })).resolves.toMatchObject({ referenceCount: 2, incorporatedCount: 2 });
     const nested = await listKnowledgeFiles(config, topic.id, "reference", "研报/子目录/");
     expect(nested.folders).toHaveLength(0);
     expect(nested.files).toContainEqual(expect.objectContaining({ path: "研报/子目录/嵌套.pdf", incorporatedAt: expect.any(String) }));
@@ -402,8 +408,153 @@ describe("knowledge topic and upload flow", () => {
       updatedBy: "汪旭",
     })).resolves.toMatchObject({ matchedCount: 2, changedCount: 1, skippedCount: 0, failedCount: 1 });
     globalThis.fetch = mockFetch;
-    const partial = await listKnowledgeFiles(config, topic.id, "reference", "");
-    expect(partial.folders).toContainEqual(expect.objectContaining({ path: "研报/", referenceCount: 2, incorporatedCount: 1 }));
+    await expect(readKnowledgeFolderSummaryPage(config, { topicId: topic.id, prefix: "研报/" })).resolves.toMatchObject({ referenceCount: 2, incorporatedCount: 1 });
+  });
+
+  it.each([420, 1000])("lists a %i-file reference folder in pages without recursive root metadata reads", async (count) => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, `大目录${count}`);
+    seedReferenceTree(storage, topic.id, "大目录/", count);
+    const workingFetch = globalThis.fetch;
+    let metadataReads = 0;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      if (request.method === "GET" && decodeURIComponent(new URL(request.url).pathname).includes("/file-meta/reference/")) metadataReads += 1;
+      return workingFetch(input, init);
+    };
+
+    const root = await listKnowledgeFiles(config, topic.id, "reference", "");
+    expect(root.folders).toEqual([{ name: "大目录", path: "大目录/" }]);
+    expect(metadataReads).toBe(0);
+
+    let cursor: string | null = null;
+    let total = 0;
+    let pages = 0;
+    do {
+      const page = await listKnowledgeFiles(config, topic.id, "reference", "大目录/", cursor);
+      expect(page.files.length).toBeLessThanOrEqual(50);
+      total += page.files.length;
+      pages += 1;
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(total).toBe(count);
+    expect(pages).toBe(Math.ceil(count / 50));
+  });
+
+  it("keeps listing a page when one COS metadata read fails", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "元数据隔离");
+    seedReferenceTree(storage, topic.id, "研报/", 2);
+    const workingFetch = globalThis.fetch;
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const path = decodeURIComponent(new URL(request.url).pathname);
+      if (request.method === "GET" && path.includes("/file-meta/reference/研报/0001.pdf.json")) {
+        return new Response("", { status: 503 });
+      }
+      return workingFetch(input, init);
+    };
+
+    const page = await listKnowledgeFiles(config, topic.id, "reference", "研报/", null, { requestId: "request-list-test" });
+    expect(page.files).toHaveLength(2);
+    expect(page.files).toContainEqual(expect.objectContaining({ path: "研报/0001.pdf", knowledgeRole: "reference" }));
+    expect(errorLog).toHaveBeenCalledWith("Knowledge file metadata read failed", expect.objectContaining({
+      requestId: "request-list-test",
+      path: "研报/0001.pdf",
+      error: expect.objectContaining({ message: "COS 读取请求失败: 503" }),
+    }));
+  });
+
+  it("summarizes and updates 420 references through bounded idempotent pages", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "分页批量纳入");
+    seedReferenceTree(storage, topic.id, "研报/", 420);
+
+    let summaryCursor: string | null = null;
+    let references = 0;
+    let summaryPages = 0;
+    do {
+      const page = await readKnowledgeFolderSummaryPage(config, { topicId: topic.id, prefix: "研报/", cursor: summaryCursor });
+      expect(page.scannedCount).toBeLessThanOrEqual(KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE);
+      references += page.referenceCount;
+      summaryPages += 1;
+      summaryCursor = page.nextCursor;
+    } while (summaryCursor);
+    expect(references).toBe(420);
+    expect(summaryPages).toBe(Math.ceil(420 / KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE));
+
+    let updateCursor: string | null = null;
+    let changed = 0;
+    let updatePages = 0;
+    do {
+      const page = await patchKnowledgeFolderIncorporation(config, {
+        topicId: topic.id,
+        prefix: "研报/",
+        cursor: updateCursor,
+        incorporated: true,
+        updatedBy: "汪旭",
+        requestId: "request-pagination-test",
+      });
+      expect(page.matchedCount).toBeLessThanOrEqual(KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE);
+      changed += page.changedCount;
+      updatePages += 1;
+      updateCursor = page.nextCursor;
+    } while (updateCursor);
+    expect(changed).toBe(420);
+    expect(updatePages).toBe(Math.ceil(420 / KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE));
+
+    await expect(patchKnowledgeFolderIncorporation(config, {
+      topicId: topic.id,
+      prefix: "研报/",
+      incorporated: true,
+      updatedBy: "汪旭",
+      requestId: "request-response-loss-test",
+    })).resolves.toMatchObject({
+      matchedCount: KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE,
+      changedCount: 0,
+      skippedCount: KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE,
+    });
+  });
+
+  it("continues later folder-update pages after one item fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "分页部分失败");
+    seedReferenceTree(storage, topic.id, "研报/", 70);
+    const workingFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const key = decodeURIComponent(new URL(request.url).pathname);
+      if (request.method === "PUT" && key.endsWith("/file-meta/reference/研报/0010.pdf.json")) {
+        return new Response("", { status: 500 });
+      }
+      return workingFetch(input, init);
+    };
+
+    let cursor: string | null = null;
+    let changed = 0;
+    let failed = 0;
+    let pages = 0;
+    do {
+      const page = await patchKnowledgeFolderIncorporation(config, {
+        topicId: topic.id,
+        prefix: "研报/",
+        cursor,
+        incorporated: true,
+        updatedBy: "汪旭",
+        requestId: "request-partial-failure",
+      });
+      changed += page.changedCount;
+      failed += page.failedCount;
+      pages += 1;
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect({ changed, failed, pages }).toEqual({
+      changed: 69,
+      failed: 1,
+      pages: Math.ceil(70 / KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE),
+    });
   });
 
   it("treats the configured methodology path as hidden even when its metadata is missing", async () => {
@@ -570,6 +721,25 @@ describe("administrator API enforcement", () => {
     expect(response.status).toBe(401);
   });
 
+  it("returns non-sensitive folder errors with a request ID", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    installCosMock();
+    const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
+    const response = await getFolder({
+      request: new Request("https://example.com/api/drive/folder?topicId=invalid&prefix=研报/", { headers: { cookie } }),
+      env,
+    } as never);
+    const body = await response.json() as Record<string, unknown>;
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({
+      code: "FOLDER_OPERATION_FAILED",
+      requestId: expect.any(String),
+      retryable: true,
+    });
+    expect(JSON.stringify(body)).not.toContain("专题 ID");
+    expect(log).toHaveBeenCalledWith("Folder operation failed", expect.objectContaining({ requestId: body.requestId }));
+  });
+
   it("preserves JSON list responses and streams real file-list phases in order", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "流式列表");
@@ -642,6 +812,7 @@ describe("administrator API enforcement", () => {
   });
 
   it("reports the real failing stage when COS directory listing fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     installCosMock();
     const topic = await createKnowledgeTopic(config, "异常目录");
     const workingFetch = globalThis.fetch;
@@ -663,6 +834,7 @@ describe("administrator API enforcement", () => {
     const body = await response.text();
     expect(body).toContain('event: phase\ndata: {"stage":"objects","state":"active"');
     expect(body).toContain('event: error\ndata: {"stage":"objects","code":"FILE_LIST_FAILED"');
+    expect(body).toMatch(/"requestId":"[^"]+"/);
     expect(body).not.toContain("event: result");
     expect(body).not.toContain("event: done");
   });
@@ -748,13 +920,42 @@ describe("administrator API enforcement", () => {
 
 type Stored = { body: string; contentType: string; etag: string };
 
+function seedReferenceTree(storage: Map<string, Stored>, topicId: string, prefix: string, count: number): void {
+  for (let index = 0; index < count; index += 1) {
+    const relativePath = `${prefix}${String(index).padStart(4, "0")}.pdf`;
+    const etag = `etag-seeded-${index}`;
+    storage.set(sourcePath(topicId, "reference", relativePath), {
+      body: "pdf",
+      contentType: "application/pdf",
+      etag,
+    });
+    storage.set(fileMetaPath(topicId, "reference", relativePath), {
+      body: JSON.stringify({
+        version: 1,
+        topicId,
+        path: relativePath,
+        name: relativePath.split("/").at(-1),
+        size: 3,
+        contentType: "application/pdf",
+        etag,
+        uploadedBy: "汪旭",
+        uploadedAt: "2026-07-25T00:00:00.000Z",
+        processingKind: "document-parse",
+        knowledgeRole: "reference",
+      }),
+      contentType: "application/json",
+      etag: `etag-meta-${index}`,
+    });
+  }
+}
+
 function installCosMock(): Map<string, Stored> {
   const storage = new Map<string, Stored>();
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
     const key = decodeURIComponent(url.pathname.replace(/^\//, "")).replace(/^ai-knowledge-base\//, "");
-    if (url.searchParams.get("list-type") === "2") return listResponse(storage, url.searchParams.get("prefix") || "", url.searchParams.get("delimiter"));
+    if (url.searchParams.get("list-type") === "2") return listResponse(storage, url);
     if (request.method === "PUT") {
       const copySource = request.headers.get("x-cos-copy-source");
       if (copySource) {
@@ -798,19 +999,26 @@ function removeTopicStorageLayout(storage: Map<string, Stored>, topicId: string)
   storage.set(key, { ...stored, body: JSON.stringify(topic, null, 2) });
 }
 
-function listResponse(storage: Map<string, Stored>, rawPrefix: string, delimiter: string | null): Response {
-  const prefix = rawPrefix.replace(/^ai-knowledge-base\//, "");
-  const folders = new Set<string>();
-  const contents: string[] = [];
+function listResponse(storage: Map<string, Stored>, url: URL): Response {
+  const prefix = (url.searchParams.get("prefix") || "").replace(/^ai-knowledge-base\//, "");
+  const delimiter = url.searchParams.get("delimiter");
+  const entries = new Map<string, { kind: "folder" } | { kind: "file"; value: Stored }>();
   for (const [key, value] of storage) {
     if (!key.startsWith(prefix)) continue;
     const rest = key.slice(prefix.length);
     if (delimiter && rest.includes(delimiter)) {
-      folders.add(`${prefix}${rest.split(delimiter, 1)[0]}${delimiter}`);
+      entries.set(`${prefix}${rest.split(delimiter, 1)[0]}${delimiter}`, { kind: "folder" });
       continue;
     }
-    contents.push(`<Contents><Key>ai-knowledge-base/${key}</Key><LastModified>2026-07-21T00:00:00.000Z</LastModified><ETag>\"${value.etag}\"</ETag><Size>${new TextEncoder().encode(value.body).length}</Size></Contents>`);
+    entries.set(key, { kind: "file", value });
   }
-  const common = [...folders].map((folder) => `<CommonPrefixes><Prefix>ai-knowledge-base/${folder}</Prefix></CommonPrefixes>`).join("");
-  return new Response(`<?xml version="1.0"?><ListBucketResult>${common}${contents.join("")}</ListBucketResult>`, { headers: { "content-type": "application/xml" } });
+  const offset = Number(url.searchParams.get("continuation-token") || 0);
+  const maxKeys = Number(url.searchParams.get("max-keys") || 1000);
+  const ordered = [...entries].sort(([left], [right]) => left.localeCompare(right));
+  const page = ordered.slice(offset, offset + maxKeys);
+  const body = page.map(([key, entry]) => entry.kind === "folder"
+    ? `<CommonPrefixes><Prefix>ai-knowledge-base/${key}</Prefix></CommonPrefixes>`
+    : `<Contents><Key>ai-knowledge-base/${key}</Key><LastModified>2026-07-21T00:00:00.000Z</LastModified><ETag>\"${entry.value.etag}\"</ETag><Size>${new TextEncoder().encode(entry.value.body).length}</Size></Contents>`).join("");
+  const next = offset + page.length < ordered.length ? `<NextContinuationToken>${offset + page.length}</NextContinuationToken>` : "";
+  return new Response(`<?xml version="1.0"?><ListBucketResult>${body}${next}</ListBucketResult>`, { headers: { "content-type": "application/xml" } });
 }

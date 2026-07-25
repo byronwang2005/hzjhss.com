@@ -4046,6 +4046,68 @@ drive-pdf-preview {
   --spacing: 22px;
 }
 
+.drive-folder-management-dialog {
+  --width: min(560px, calc(100vw - 32px));
+  --spacing: 22px;
+}
+
+.drive-folder-management-dialog::part(dialog) {
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: var(--drive-radius);
+  box-shadow: var(--jh-shadow-floating);
+}
+
+.drive-folder-management-dialog::part(header),
+.drive-folder-management-dialog::part(footer) {
+  border-color: var(--jh-color-border-soft);
+}
+
+.drive-folder-management-body {
+  display: grid;
+  gap: 16px;
+}
+
+.drive-folder-management-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-folder-management-stats > span {
+  display: grid;
+  gap: 3px;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+.drive-folder-management-stats > span + span {
+  border-left: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-folder-management-stats strong {
+  font-size: 20px;
+}
+
+.drive-folder-management-stats small,
+.drive-folder-management-progress small {
+  color: var(--jh-color-text-muted);
+  font-size: 11px;
+}
+
+.drive-folder-management-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.drive-folder-management-progress > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
 .drive-delete-dialog::part(dialog) {
   color: var(--jh-color-text);
   background: var(--jh-color-surface);
