@@ -28,6 +28,7 @@ import { CLIENT_TIMING } from "../shared/runtime";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "./utils";
 import { api, apiStream, ApiError, consumeSse } from "./api";
 import { state, type TopicView } from "./state";
+import { createTransientStatusController } from "./transient-status";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 import { runWorkspaceTransition } from "./workspace-transition";
 import {
@@ -61,6 +62,16 @@ interface UploadSignature {
 const rootElement = document.querySelector<HTMLElement>("[data-drive-root]");
 if (!rootElement) throw new Error("Missing [data-drive-root] mount element");
 const root = rootElement;
+
+const statusController = createTransientStatusController<"neutral" | "success" | "danger">(
+  CLIENT_TIMING.statusVisibleMs,
+  "neutral",
+  ({ message, tone }) => {
+    state.status = message;
+    state.statusTone = tone;
+    renderApp();
+  },
+);
 
 let fileRefreshTimer: number | undefined;
 let fileProgressClockTimer: number | undefined;
@@ -1730,7 +1741,7 @@ function renderThemeToggle(className = ""): TemplateResult {
 
 function renderLoading(): TemplateResult { return html`<div class="drive-inline-skeleton"><span></span><span></span><span></span></div>`; }
 function renderStatus(): TemplateResult | typeof nothing { return state.status ? html`<wa-callout variant=${state.statusTone === "danger" ? "danger" : state.statusTone === "success" ? "success" : "neutral"}>${state.status}</wa-callout>` : nothing; }
-function setStatus(message: string, tone: "neutral" | "success" | "danger" = "neutral"): void { state.status = message; state.statusTone = tone; renderApp(); }
+function setStatus(message: string, tone: "neutral" | "success" | "danger" = "neutral"): void { statusController.show(message, tone); }
 function showError(error: unknown): void { state.loading = false; setStatus(error instanceof Error ? error.message : "请求失败", "danger"); }
 
 function parseFileListPhase(data: Record<string, unknown>): FileListPhaseEvent | null {
