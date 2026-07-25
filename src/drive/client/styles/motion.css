@@ -34,6 +34,10 @@
   z-index: 1;
 }
 
+:root {
+  view-transition-name: none;
+}
+
 .drive-scope-item > *,
 .drive-tabs button > *,
 .drive-file-role-tab > * {
@@ -155,11 +159,6 @@ drive-ai-qa {
 ::view-transition-group(drive-file-role-panel) {
   animation-duration: var(--jh-duration-medium);
   animation-timing-function: var(--jh-motion-ios);
-}
-
-::view-transition-old(root),
-::view-transition-new(root) {
-  display: none;
 }
 
 ::view-transition-old(drive-ai-surface),

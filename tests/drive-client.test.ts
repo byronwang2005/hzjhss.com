@@ -258,7 +258,9 @@ describe("knowledge client surface", () => {
     expect(motionStyles).toContain(".drive-scope-list > :not(.drive-scope-track-indicator)");
     expect(motionStyles).toContain("transform var(--jh-duration-medium) var(--jh-motion-ios)");
     expect(motionStyles).not.toContain("view-transition-name: drive-scope-active");
-    expect(motionStyles).toContain("::view-transition-old(root)");
+    expect(motionStyles).toContain(":root {\n  view-transition-name: none;");
+    expect(motionStyles).not.toContain("::view-transition-old(root)");
+    expect(motionStyles).not.toContain("::view-transition-new(root)");
     expect(source).toContain('class="drive-tab-active-indicator"');
     expect(source).toContain('class="drive-file-role-active-indicator"');
   });
