@@ -1,40 +1,29 @@
-import type { FileListResponse } from "../shared/contracts";
-
-export function mergeFileListPages(current: FileListResponse, page: FileListResponse): FileListResponse {
-  if (page.role !== current.role || page.prefix !== current.prefix) {
-    throw new Error("COS 目录分页范围不一致，请重新加载。");
-  }
-  const folders = new Map(current.folders.map((folder) => [folder.path, folder]));
-  const files = new Map(current.files.map((file) => [file.path, file]));
-  page.folders.forEach((folder) => folders.set(folder.path, folder));
-  page.files.forEach((file) => files.set(file.path, file));
-  return {
-    role: current.role,
-    prefix: current.prefix,
-    folders: [...folders.values()],
-    files: [...files.values()],
-    nextCursor: page.nextCursor,
-  };
+export interface FilePaginationState {
+  page: number;
+  cursors: Array<string | null>;
+  nextCursor: string | null;
 }
 
-export async function loadRemainingFilePages(
-  firstPage: FileListResponse,
-  options: {
-    fetchPage: (cursor: string) => Promise<FileListResponse>;
-    isCurrent: () => boolean;
-    onPage: (listing: FileListResponse) => void;
-  },
-): Promise<FileListResponse | null> {
-  let listing = firstPage;
-  const seenCursors = new Set<string>();
-  while (listing.nextCursor) {
-    const cursor = listing.nextCursor;
-    if (seenCursors.has(cursor)) throw new Error("COS 目录分页游标重复，请重新加载。");
-    seenCursors.add(cursor);
-    const page = await options.fetchPage(cursor);
-    if (!options.isCurrent()) return null;
-    listing = mergeFileListPages(listing, page);
-    options.onPage(listing);
-  }
-  return listing;
+export function createFilePagination(): FilePaginationState {
+  return { page: 1, cursors: [null], nextCursor: null };
+}
+
+export function currentFilePageCursor(pagination: FilePaginationState): string | null {
+  return pagination.cursors[pagination.page - 1] ?? null;
+}
+
+export function recordFilePageResult(pagination: FilePaginationState, nextCursor: string | null): FilePaginationState {
+  return { ...pagination, nextCursor };
+}
+
+export function moveToNextFilePage(pagination: FilePaginationState): FilePaginationState | null {
+  if (!pagination.nextCursor) return null;
+  const cursors = [...pagination.cursors];
+  cursors[pagination.page] = pagination.nextCursor;
+  return { page: pagination.page + 1, cursors, nextCursor: null };
+}
+
+export function moveToPreviousFilePage(pagination: FilePaginationState): FilePaginationState | null {
+  if (pagination.page <= 1) return null;
+  return { ...pagination, page: pagination.page - 1, nextCursor: null };
 }

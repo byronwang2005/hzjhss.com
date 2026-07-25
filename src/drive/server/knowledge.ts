@@ -40,9 +40,9 @@ import {
 export const IMAGE_MAX_BYTES = FILE_LIMITS.compactBytes;
 export const DOCUMENT_MAX_BYTES = FILE_LIMITS.documentBytes;
 export const MAX_PDF_PAGES = FILE_LIMITS.pdfPages;
-export const KNOWLEDGE_LIST_PAGE_SIZE = 50;
-export const KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE = 40;
-export const KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE = 20;
+export const KNOWLEDGE_LIST_PAGE_SIZE = 10;
+export const KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE = 10;
+export const KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE = 10;
 
 const TOPIC_ID_PATTERN = /^t_[A-Za-z0-9_-]{12,32}$/;
 export const METHODOLOGY_PATH = LEGACY_METHODOLOGY_PATH;

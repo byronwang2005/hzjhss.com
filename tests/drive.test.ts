@@ -12,6 +12,7 @@ import {
   fileMetaPath,
   listKnowledgeFiles,
   listKnowledgeTopics,
+  KNOWLEDGE_LIST_PAGE_SIZE,
   KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE,
   KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE,
   METHODOLOGY_PATH,
@@ -411,7 +412,7 @@ describe("knowledge topic and upload flow", () => {
     await expect(readKnowledgeFolderSummaryPage(config, { topicId: topic.id, prefix: "研报/" })).resolves.toMatchObject({ referenceCount: 2, incorporatedCount: 1 });
   });
 
-  it.each([420, 1000])("lists a %i-file reference folder in pages without recursive root metadata reads", async (count) => {
+  it.each([0, 1, 10, 11, 420, 1000])("lists a %i-file reference folder in ten-item pages", async (count) => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, `大目录${count}`);
     seedReferenceTree(storage, topic.id, "大目录/", count);
@@ -424,7 +425,7 @@ describe("knowledge topic and upload flow", () => {
     };
 
     const root = await listKnowledgeFiles(config, topic.id, "reference", "");
-    expect(root.folders).toEqual([{ name: "大目录", path: "大目录/" }]);
+    expect(root.folders).toEqual(count ? [{ name: "大目录", path: "大目录/" }] : []);
     expect(metadataReads).toBe(0);
 
     let cursor: string | null = null;
@@ -432,13 +433,13 @@ describe("knowledge topic and upload flow", () => {
     let pages = 0;
     do {
       const page = await listKnowledgeFiles(config, topic.id, "reference", "大目录/", cursor);
-      expect(page.files.length).toBeLessThanOrEqual(50);
+      expect(page.folders.length + page.files.length).toBeLessThanOrEqual(KNOWLEDGE_LIST_PAGE_SIZE);
       total += page.files.length;
       pages += 1;
       cursor = page.nextCursor;
     } while (cursor);
     expect(total).toBe(count);
-    expect(pages).toBe(Math.ceil(count / 50));
+    expect(pages).toBe(Math.max(1, Math.ceil(count / KNOWLEDGE_LIST_PAGE_SIZE)));
   });
 
   it("keeps listing a page when one COS metadata read fails", async () => {
@@ -466,10 +467,10 @@ describe("knowledge topic and upload flow", () => {
     }));
   });
 
-  it("summarizes and updates 420 references through bounded idempotent pages", async () => {
+  it.each([420, 1000])("summarizes and updates %i references through automatic ten-item pages", async (count) => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "分页批量纳入");
-    seedReferenceTree(storage, topic.id, "研报/", 420);
+    seedReferenceTree(storage, topic.id, "研报/", count);
 
     let summaryCursor: string | null = null;
     let references = 0;
@@ -481,8 +482,8 @@ describe("knowledge topic and upload flow", () => {
       summaryPages += 1;
       summaryCursor = page.nextCursor;
     } while (summaryCursor);
-    expect(references).toBe(420);
-    expect(summaryPages).toBe(Math.ceil(420 / KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE));
+    expect(references).toBe(count);
+    expect(summaryPages).toBe(Math.ceil(count / KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE));
 
     let updateCursor: string | null = null;
     let changed = 0;
@@ -501,8 +502,8 @@ describe("knowledge topic and upload flow", () => {
       updatePages += 1;
       updateCursor = page.nextCursor;
     } while (updateCursor);
-    expect(changed).toBe(420);
-    expect(updatePages).toBe(Math.ceil(420 / KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE));
+    expect(changed).toBe(count);
+    expect(updatePages).toBe(Math.ceil(count / KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE));
 
     await expect(patchKnowledgeFolderIncorporation(config, {
       topicId: topic.id,

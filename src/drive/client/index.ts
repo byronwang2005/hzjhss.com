@@ -35,7 +35,13 @@ import { state, type TopicView } from "./state";
 import { createTransientStatusController } from "./transient-status";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 import { runWorkspaceTransition } from "./workspace-transition";
-import { loadRemainingFilePages } from "./file-pagination";
+import {
+  createFilePagination,
+  currentFilePageCursor,
+  moveToNextFilePage,
+  moveToPreviousFilePage,
+  recordFilePageResult,
+} from "./file-pagination";
 import {
   createUploadRegistrationScheduler,
   readPendingUploads,
@@ -225,6 +231,7 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
     state.fileRoleView = "evidence";
     state.fileRolePrefixes = { reference: "", methodology: "", evidence: "" };
     state.fileRoleListings = { reference: null, methodology: null, evidence: null };
+    state.filePagination = createFilePagination();
     state.prefix = "";
     state.listing = null;
     state.fileLoad = null;
@@ -235,7 +242,7 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
   if (state.topicView === "files") await loadFiles();
 }
 
-async function loadFiles(background = false): Promise<void> {
+async function loadFiles(options: { background?: boolean; preservePage?: boolean; navigation?: boolean } = {}): Promise<void> {
   if (!state.topic) return;
   if (fileRefreshTimer !== undefined) {
     window.clearTimeout(fileRefreshTimer);
@@ -248,10 +255,17 @@ async function loadFiles(background = false): Promise<void> {
   const topicId = state.topic.id;
   const prefix = state.prefix;
   const role = state.fileRoleView;
+  if (!options.preservePage) state.filePagination = createFilePagination();
+  const navigationMode = Boolean(options.navigation || (options.preservePage && !state.listing && state.filePagination.page > 1));
+  if (!options.preservePage || navigationMode) {
+    state.listing = null;
+    state.fileRoleListings[role] = null;
+  }
+  const cursor = currentFilePageCursor(state.filePagination);
   state.fileLoad = {
     requestId,
     active: true,
-    mode: background ? "background" : state.listing ? "refresh" : "initial",
+    mode: options.background ? "background" : navigationMode ? "navigation" : state.listing ? "refresh" : "initial",
     stage: "topic",
     completedStages: [],
     completed: 0,
@@ -266,7 +280,9 @@ async function loadFiles(background = false): Promise<void> {
   let listing: FileListResponse | null = null;
   let streamError: FileListErrorEvent | null = null;
   try {
-    const path = `/list?topicId=${encodeURIComponent(topicId)}&role=${encodeURIComponent(role)}&prefix=${encodeURIComponent(prefix)}`;
+    const query = new URLSearchParams({ topicId, role, prefix });
+    if (cursor) query.set("cursor", cursor);
+    const path = `/list?${query}`;
     const stream = await apiStream(path, { signal: controller.signal });
     await consumeSse(stream, (event, data) => {
       if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
@@ -281,21 +297,16 @@ async function loadFiles(background = false): Promise<void> {
     });
     if (streamError) throw new Error((streamError as FileListErrorEvent).message);
     if (!listing) throw new Error("COS 文件列表未返回结果，请重新加载。");
-    let resolvedListing = listing as FileListResponse;
+    const resolvedListing = listing as FileListResponse;
     publishFileListing(resolvedListing, requestId, topicId, role, prefix);
-    const loadedListing = await loadRemainingFilePages(resolvedListing, {
-      fetchPage: (cursor) => api<FileListResponse>(
-        `/list?topicId=${encodeURIComponent(topicId)}&role=${encodeURIComponent(role)}&prefix=${encodeURIComponent(prefix)}&cursor=${encodeURIComponent(cursor)}`,
-        { signal: controller.signal },
-      ),
-      isCurrent: () => fileLoadIsCurrent(requestId, topicId, role, prefix),
-      onPage: (page) => publishFileListing(page, requestId, topicId, role, prefix),
-    });
-    if (!loadedListing) return;
-    resolvedListing = loadedListing;
     const batchSnapshot = state.uploadBatch?.topicId === topicId ? state.uploadBatch : null;
     const batchListing = batchSnapshot?.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage))
-      ? await loadBatchStatusListing(topicId, batchSnapshot, batchSnapshot.prefix === prefix ? resolvedListing : null, controller.signal)
+      ? await loadBatchStatusListing(
+          topicId,
+          batchSnapshot,
+          batchSnapshot.prefix === prefix && state.filePagination.page === 1 ? resolvedListing : null,
+          controller.signal,
+        )
       : resolvedListing;
     if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
     if (state.uploadBatch === batchSnapshot) reconcileUploadBatch(batchSnapshot, topicId, batchListing);
@@ -311,7 +322,7 @@ async function loadFiles(background = false): Promise<void> {
     if (resolvedListing.files.some((file) => processingDisplay(file).poll) || batchHasServerWork) {
       fileRefreshTimer = window.setTimeout(() => {
         fileRefreshTimer = undefined;
-        if (state.mode === "topic" && state.topicView === "files") void loadFiles(true);
+        if (state.mode === "topic" && state.topicView === "files") void loadFiles({ background: true, preservePage: true });
       }, batchHasServerWork ? CLIENT_TIMING.activeFileRefreshMs : CLIENT_TIMING.fileRefreshMs);
     }
   } catch (error) {
@@ -337,6 +348,7 @@ function publishFileListing(
 ): void {
   if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
   state.listing = listing;
+  state.filePagination = recordFilePageResult(state.filePagination, listing.nextCursor);
   state.fileRolePrefixes[role] = prefix;
   state.fileRoleListings[role] = listing;
   if (state.fileLoad?.requestId === requestId) {
@@ -345,6 +357,16 @@ function publishFileListing(
     state.fileLoad.total = 0;
   }
   renderApp();
+}
+
+async function changeFilePage(direction: "previous" | "next"): Promise<void> {
+  const target = direction === "next"
+    ? moveToNextFilePage(state.filePagination)
+    : moveToPreviousFilePage(state.filePagination);
+  if (!target || state.fileLoad?.active) return;
+  state.filePagination = target;
+  state.expandedFilePath = null;
+  await loadFiles({ preservePage: true, navigation: true });
 }
 
 function fileLoadIsCurrent(requestId: number, topicId: string, role: KnowledgeRole, prefix: string): boolean {
@@ -577,7 +599,9 @@ async function handleClick(event: MouseEvent): Promise<void> {
       state.fileRoleListings[state.fileRoleView] = state.listing;
       state.fileRoleView = nextRole;
       state.prefix = state.fileRolePrefixes[nextRole];
-      state.listing = state.fileRoleListings[nextRole];
+      state.listing = null;
+      state.fileRoleListings[nextRole] = null;
+      state.filePagination = createFilePagination();
       state.fileLoad = null;
       state.expandedFilePath = null;
       renderApp();
@@ -607,7 +631,11 @@ async function handleClick(event: MouseEvent): Promise<void> {
     state.fileLoad = null;
     await loadFiles();
   } else if (action === "refresh-files" || action === "retry-file-list") {
-    await loadFiles();
+    await loadFiles({ preservePage: true });
+  } else if (action === "previous-file-page") {
+    await changeFilePage("previous");
+  } else if (action === "next-file-page") {
+    await changeFilePage("next");
   } else if (action === "retry-pending-registrations") {
     await resumePendingUploadRegistrations();
   } else if (action === "pick-reference") {
@@ -1016,7 +1044,7 @@ async function resumePendingUploadRegistrations(): Promise<void> {
       failures ? `${failures} 个文件仍未完成登记，可再次重试。` : `已恢复并归档 ${pending.length} 个待登记文件。`,
       failures ? "danger" : "success",
     );
-    if (state.topicView === "files") await loadFiles(true);
+    if (state.topicView === "files") await loadFiles();
   } finally {
     pendingRegistrationResumeActive = false;
   }
@@ -1726,7 +1754,11 @@ function renderFiles(): TemplateResult {
         <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
         ${uploadBatch ? renderFileProcessingCenter(uploadBatch) : nothing}
         ${renderFileLoadProgress(Boolean(listing))}
-        ${listing ? renderFileList(listing, roleFiles, presentation, role) : state.fileLoad ? nothing : renderLoading()}
+        ${listing
+          ? renderFileList(listing, roleFiles, presentation, role)
+          : state.fileLoad
+            ? state.fileLoad.mode === "navigation" ? renderFilePagination(null) : nothing
+            : renderLoading()}
       </div>
     </section>
   `;
@@ -1814,7 +1846,7 @@ function fileListProgressStepState(
 function renderFileRoleTab(role: KnowledgeRole, selectedRole: KnowledgeRole, listing: FileListResponse | null): TemplateResult {
   const presentation = FILE_ROLE_PRESENTATION[role];
   const selected = selectedRole === role;
-  const count = listing ? filesForKnowledgeRole(listing.files, role).length : 0;
+  const count = listing ? listing.folders.length + filesForKnowledgeRole(listing.files, role).length : 0;
   return html`
     <button
       id=${`file-role-tab-${role}`}
@@ -1829,7 +1861,7 @@ function renderFileRoleTab(role: KnowledgeRole, selectedRole: KnowledgeRole, lis
     >
       ${selected ? html`<span class="drive-file-role-active-indicator" aria-hidden="true"></span>` : nothing}
       <span class="drive-file-role-tab-icon">${renderIcon(presentation.icon, "duotone")}</span>
-      <span><strong>${presentation.label}</strong><small>${count} 项</small></span>
+      <span><strong>${presentation.label}</strong><small>${selected ? listing ? `本页 ${count} 项` : "正在读取" : "点击查看"}</small></span>
     </button>
   `;
 }
@@ -1847,6 +1879,7 @@ function renderFileList(
         <h3>${presentation.emptyTitle}</h3>
         <p>${presentation.emptyDescription}</p>
       </div>
+      ${renderFilePagination(listing)}
     `;
   }
   return html`
@@ -1857,6 +1890,33 @@ function renderFileList(
       ${repeat(listing.folders, (folder) => folder.path, (folder) => renderFolderRow(folder, role))}
       ${repeat(files, (file) => file.path, renderFileRow)}
     </div>
+    ${renderFilePagination(listing)}
+  `;
+}
+
+function renderFilePagination(listing: FileListResponse | null): TemplateResult {
+  const pagination = state.filePagination;
+  const itemCount = listing ? listing.folders.length + listing.files.length : null;
+  const busy = Boolean(state.fileLoad?.active);
+  return html`
+    <nav class="drive-file-pagination" aria-label="资料分页">
+      <button
+        class="drive-control"
+        type="button"
+        data-action="previous-file-page"
+        ?disabled=${busy || pagination.page <= 1}
+      >${renderIcon("arrow-left")}上一页</button>
+      <span class="drive-file-pagination-status" aria-live="polite">
+        <strong>第 ${pagination.page} 页</strong>
+        <small>${itemCount === null ? "本页读取中" : `本页 ${itemCount} 项`}</small>
+      </span>
+      <button
+        class="drive-control"
+        type="button"
+        data-action="next-file-page"
+        ?disabled=${busy || !listing?.nextCursor}
+      >下一页${renderIcon("arrow-right")}</button>
+    </nav>
   `;
 }
 

@@ -1,5 +1,6 @@
 import type { FileListProgressStage, FileListResponse, KnowledgeRole, TopicSummary, UserRole } from "../shared/contracts";
 import type { UploadBatchState } from "./file-progress";
+import { createFilePagination, type FilePaginationState } from "./file-pagination";
 
 export type Mode = "login" | "overview" | "topic";
 export type TopicView = "qa" | "files";
@@ -83,6 +84,7 @@ export interface DriveClientState {
   fileRoleView: KnowledgeRole;
   fileRolePrefixes: Record<KnowledgeRole, string>;
   fileRoleListings: Record<KnowledgeRole, FileListResponse | null>;
+  filePagination: FilePaginationState;
   prefix: string;
   listing: FileListResponse | null;
   loading: boolean;
@@ -114,6 +116,7 @@ export const state: DriveClientState = {
   fileRoleView: "evidence",
   fileRolePrefixes: { reference: "", methodology: "", evidence: "" },
   fileRoleListings: { reference: null, methodology: null, evidence: null },
+  filePagination: createFilePagination(),
   prefix: "",
   listing: null,
   loading: true,

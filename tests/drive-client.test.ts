@@ -2,10 +2,16 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
-import type { FileListResponse, KnowledgeFile } from "../src/drive/shared/contracts";
+import type { KnowledgeFile } from "../src/drive/shared/contracts";
 import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
 import { createUploadRegistrationScheduler, persistPendingUpload, readPendingUploads, type UploadRegistrationReceipt } from "../src/drive/client/upload-registrations";
-import { loadRemainingFilePages } from "../src/drive/client/file-pagination";
+import {
+  createFilePagination,
+  currentFilePageCursor,
+  moveToNextFilePage,
+  moveToPreviousFilePage,
+  recordFilePageResult,
+} from "../src/drive/client/file-pagination";
 
 describe("knowledge entry flow", () => {
   it("keeps session checking, successful sign-in and authentication failure distinct", () => {
@@ -157,55 +163,37 @@ describe("upload registration queue", () => {
 });
 
 describe("file list pagination", () => {
-  it.each([420, 1000])("merges all %i files from bounded pages", async (count) => {
-    const pages = Array.from({ length: Math.ceil(count / 50) }, (_, pageIndex): FileListResponse => {
-      const start = pageIndex * 50;
-      return {
-        role: "reference",
-        prefix: "研报/",
-        folders: [],
-        files: Array.from({ length: Math.min(50, count - start) }, (_, offset) => ({
-          name: `${start + offset}.pdf`,
-          path: `研报/${start + offset}.pdf`,
-          relativePath: `研报/${start + offset}.pdf`,
-          size: 3,
-          lastModified: "2026-07-25T00:00:00.000Z",
-          etag: `etag-${start + offset}`,
-          knowledgeRole: "reference",
-        })),
-        nextCursor: pageIndex + 1 < Math.ceil(count / 50) ? String(pageIndex + 1) : null,
-      };
-    });
-    const published: number[] = [];
-    const result = await loadRemainingFilePages(pages[0], {
-      fetchPage: async (cursor) => pages[Number(cursor)],
-      isCurrent: () => true,
-      onPage: (listing) => published.push(listing.files.length),
-    });
-    expect(result?.files).toHaveLength(count);
-    expect(new Set(result?.files.map((file) => file.path)).size).toBe(count);
-    expect(published.at(-1)).toBe(count);
+  it("starts on page one without a COS cursor", () => {
+    const pagination = createFilePagination();
+    expect(pagination).toEqual({ page: 1, cursors: [null], nextCursor: null });
+    expect(currentFilePageCursor(pagination)).toBeNull();
+    expect(moveToPreviousFilePage(pagination)).toBeNull();
+    expect(moveToNextFilePage(pagination)).toBeNull();
   });
 
-  it("surfaces a failed later page without discarding the first page", async () => {
-    const first: FileListResponse = { role: "reference", prefix: "", folders: [], files: [], nextCursor: "next" };
-    await expect(loadRemainingFilePages(first, {
-      fetchPage: async () => { throw new Error("分页读取失败"); },
-      isCurrent: () => true,
-      onPage() {},
-    })).rejects.toThrow("分页读取失败");
-    expect(first.nextCursor).toBe("next");
+  it("records COS cursors while moving forward and backward", () => {
+    let pagination = recordFilePageResult(createFilePagination(), "cursor-page-2");
+    pagination = moveToNextFilePage(pagination)!;
+    expect(pagination.page).toBe(2);
+    expect(currentFilePageCursor(pagination)).toBe("cursor-page-2");
+
+    pagination = recordFilePageResult(pagination, "cursor-page-3");
+    pagination = moveToNextFilePage(pagination)!;
+    expect(pagination.page).toBe(3);
+    expect(currentFilePageCursor(pagination)).toBe("cursor-page-3");
+
+    pagination = recordFilePageResult(pagination, null);
+    expect(moveToNextFilePage(pagination)).toBeNull();
+    pagination = moveToPreviousFilePage(pagination)!;
+    expect(pagination.page).toBe(2);
+    expect(currentFilePageCursor(pagination)).toBe("cursor-page-2");
   });
 
-  it("stops publishing when the role or directory request becomes stale", async () => {
-    const first: FileListResponse = { role: "reference", prefix: "", folders: [], files: [], nextCursor: "next" };
-    const published: FileListResponse[] = [];
-    await expect(loadRemainingFilePages(first, {
-      fetchPage: async () => ({ ...first, files: [], nextCursor: null }),
-      isCurrent: () => false,
-      onPage: (listing) => published.push(listing),
-    })).resolves.toBeNull();
-    expect(published).toEqual([]);
+  it("keeps the current page cursor available for a failed-page retry", () => {
+    const first = recordFilePageResult(createFilePagination(), "cursor-page-2");
+    const second = moveToNextFilePage(first)!;
+    expect(second).toEqual({ page: 2, cursors: [null, "cursor-page-2"], nextCursor: null });
+    expect(currentFilePageCursor(second)).toBe("cursor-page-2");
   });
 });
 
@@ -362,7 +350,7 @@ describe("knowledge client surface", () => {
     expect(entryMarkup).toContain("knowledge-network-light.png");
     expect(entryMarkup).not.toContain("<p>正在加载知识库...</p>");
     expect(source).toContain("window.clearTimeout(fileRefreshTimer)");
-    expect(source).toContain("void loadFiles(true)");
+    expect(source).toContain("void loadFiles({ background: true, preservePage: true })");
     expect(source).not.toContain("!file.processing ||");
   });
 
@@ -370,7 +358,14 @@ describe("knowledge client surface", () => {
     expect(source).toContain("fileLoadAbortController?.abort()");
     expect(source).toContain("++fileLoadRequestId");
     expect(source).toContain("fileLoadIsCurrent(requestId, topicId, role, prefix)");
-    expect(source).toContain('mode: background ? "background" : state.listing ? "refresh" : "initial"');
+    expect(source).toContain('options.background ? "background" : navigationMode ? "navigation"');
+    expect(source).toContain("await loadFiles({ preservePage: true })");
+    expect(source).toContain('changeFilePage("previous")');
+    expect(source).toContain('changeFilePage("next")');
+    expect(source).toContain("state.filePagination = createFilePagination()");
+    expect(source).toContain('state.fileLoad.mode === "navigation" ? renderFilePagination(null)');
+    expect(source).toContain("?disabled=${busy || pagination.page <= 1}");
+    expect(source).toContain("?disabled=${busy || !listing?.nextCursor}");
     expect(source).toContain('aria-current=${stepState === "active" ? "step" : nothing}');
     expect(source).toContain('aria-live=${load.mode === "background" ? "off" : "polite"}');
     expect(source).toContain("COS 响应较慢，仍在继续读取");

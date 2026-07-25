@@ -2384,6 +2384,46 @@ body.drive-body {
   border-radius: 0 0 var(--drive-radius) var(--drive-radius);
 }
 
+.drive-file-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px;
+}
+
+.drive-file-pagination .drive-control {
+  min-width: 92px;
+}
+
+.drive-file-pagination-status {
+  display: grid;
+  gap: 2px;
+  min-width: 88px;
+  color: var(--jh-color-text-muted);
+  text-align: center;
+}
+
+.drive-file-pagination-status strong {
+  color: var(--jh-color-text);
+  font-size: 12px;
+}
+
+.drive-file-pagination-status small {
+  font-size: 10px;
+}
+
+@media (max-width: 560px) {
+  .drive-file-pagination {
+    justify-content: space-between;
+  }
+
+  .drive-file-pagination .drive-control {
+    min-width: 0;
+  }
+}
+
 .drive-file-row {
   min-height: 58px;
   border-bottom-color: var(--jh-color-border-soft);
