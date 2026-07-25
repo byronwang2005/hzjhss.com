@@ -65,25 +65,25 @@ export async function listAll(prefix) {
 export function parseSourceKey(key) {
   if (!key.startsWith(ROOT_PREFIX)) return null;
   const relative = key.slice(ROOT_PREFIX.length);
-  const match = /^topics\/(t_[A-Za-z0-9_-]{12,32})\/files\/(.+)$/.exec(relative);
+  const match = /^topics\/(t_[A-Za-z0-9_-]{12,32})\/files\/(reference|methodology|evidence)\/(.+)$/.exec(relative);
   if (!match) return null;
-  return { topicId: match[1], path: match[2], sourceKey: key };
+  return { topicId: match[1], knowledgeRole: match[2], path: match[3], sourceKey: key };
 }
 
 export function extension(path) {
   return path.split(".").at(-1)?.toLowerCase() || "";
 }
 
-export function processedBase(topicId, path) {
-  return `${ROOT_PREFIX}topics/${topicId}/processed/${path}.__file__/`;
+export function processedBase(topicId, knowledgeRole, path) {
+  return `${ROOT_PREFIX}topics/${topicId}/processed/${knowledgeRole}/${path}.__file__/`;
 }
 
-export function fileMetaKey(topicId, path) {
-  return `${ROOT_PREFIX}topics/${topicId}/file-meta/${path}.json`;
+export function fileMetaKey(topicId, knowledgeRole, path) {
+  return `${ROOT_PREFIX}topics/${topicId}/file-meta/${knowledgeRole}/${path}.json`;
 }
 
-export function sourceKey(topicId, path) {
-  return `${ROOT_PREFIX}topics/${topicId}/files/${path}`;
+export function sourceKey(topicId, knowledgeRole, path) {
+  return `${ROOT_PREFIX}topics/${topicId}/files/${knowledgeRole}/${path}`;
 }
 
 export function safeError(error) {

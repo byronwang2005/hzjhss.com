@@ -41,18 +41,19 @@ export async function main(event) {
 async function processRecord(record) {
   const source = parseSourceKey(record.key);
   if (!source) return;
+  if (source.knowledgeRole === "reference") return;
   const metadata = await pRetry(async () => {
-    const value = await getJson(fileMetaKey(source.topicId, source.path));
+    const value = await getJson(fileMetaKey(source.topicId, source.knowledgeRole, source.path));
     if (!value) throw new Error("文件元数据尚未登记");
     return value;
   }, { retries: 5, minTimeout: 1000, maxTimeout: 3000 });
   const knowledgeRole = knowledgeRoleForPath(metadata.knowledgeRole, source.path);
-  if (knowledgeRole === "reference") return;
-  const previous = await getJson(`${processedBase(source.topicId, source.path)}status.json`);
+  if (knowledgeRole !== source.knowledgeRole) throw new Error("文件资料类型与存储路径不匹配");
+  const previous = await getJson(`${processedBase(source.topicId, knowledgeRole, source.path)}status.json`);
   if (previous?.sourceEtag === metadata.etag && ["processing", "indexing", "ready"].includes(previous.state)) return;
   const current = await head(source.sourceKey);
   if (!current || current.etag !== metadata.etag) return;
-  const base = processedBase(source.topicId, source.path);
+  const base = processedBase(source.topicId, knowledgeRole, source.path);
   if (!(await writeStatus(base, metadata, "processing"))) return;
   try {
     const ext = extension(source.path);
@@ -81,10 +82,10 @@ async function processRecord(record) {
       ...(report.reportDate ? { reportDate: report.reportDate } : {}),
     }));
     await Promise.all([
-      putJson(fileMetaKey(source.topicId, source.path), nextMetadata),
+      putJson(fileMetaKey(source.topicId, knowledgeRole, source.path), nextMetadata),
       putText(`${base}result.md`, output.markdown),
       putJson(`${base}result.json`, output.raw),
-      putJson(`${base}chunks.json`, { version: 1, topicId: source.topicId, path: source.path, sourceEtag: metadata.etag, chunks }),
+      putJson(`${base}chunks.json`, { version: 1, topicId: source.topicId, path: source.path, knowledgeRole, sourceEtag: metadata.etag, chunks }),
       writeStatus(base, metadata, "indexing", output.requestId),
     ]);
     await invokeIndexer(source.topicId);
@@ -243,7 +244,7 @@ function datesInText(input) {
 }
 
 async function writeStatus(base, metadata, state, requestId, error) {
-  const current = await head(sourceKey(metadata.topicId, metadata.path));
+  const current = await head(sourceKey(metadata.topicId, metadata.knowledgeRole, metadata.path));
   if (!current || current.etag !== metadata.etag) return false;
   await putJson(`${base}status.json`, { version: 1, topicId: metadata.topicId, path: metadata.path, sourceEtag: metadata.etag, state, processingKind: metadata.processingKind, updatedAt: new Date().toISOString(), ...(requestId ? { requestId } : {}), ...(error ? { error } : {}) });
   return true;
@@ -257,7 +258,7 @@ export function extractRecords(event) {
   if (typeof event?.body === "string") {
     try { return extractRecords(JSON.parse(event.body)); } catch { return []; }
   }
-  if (event?.topicId && event?.path) return [{ key: sourceKey(event.topicId, event.path) }];
+  if (event?.topicId && event?.path && event?.knowledgeRole) return [{ key: sourceKey(event.topicId, event.knowledgeRole, event.path) }];
   const records = event?.Records || event?.records || [];
   return records
     .map((record) => ({ key: normalizeEventKey(record.cos?.cosObject?.key || record.cosObject?.key || record.key || "") }))

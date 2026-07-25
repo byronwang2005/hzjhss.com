@@ -1,6 +1,6 @@
 import type { DriveEnv } from "./config";
 
-export async function notifyProcessor(env: DriveEnv, payload: { topicId: string; path: string }): Promise<void> {
+export async function notifyProcessor(env: DriveEnv, payload: { topicId: string; path: string; knowledgeRole: "methodology" | "evidence" }): Promise<void> {
   await notify(env.PROCESSOR_WEBHOOK_URL, env.PROCESSOR_WEBHOOK_SECRET, payload);
 }
 

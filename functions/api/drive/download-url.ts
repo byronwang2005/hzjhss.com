@@ -8,7 +8,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
     const session = await readDriveSession({ request, env });
     if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    return jsonResponse(await createDownloadUrl(getDriveConfig(env), body.topicId, body.path, {
+    return jsonResponse(await createDownloadUrl(getDriveConfig(env), body.topicId, body.knowledgeRole, body.path, {
       includeMethodology: isDriveAdmin(session.displayName),
     }));
   } catch (error) { return errorResponse(error); }

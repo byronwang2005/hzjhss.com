@@ -18,11 +18,18 @@ beforeAll(async () => {
 describe("SCF event routing and chunking", () => {
   it("accepts only source objects in the new COS namespace", () => {
     const records = processor.extractRecords({ Records: [
-      { cos: { cosObject: { key: "/1250000000/bucket-1250000000/ai-knowledge-base%2Ftopics%2Ft_abcdefghijkl%2Ffiles%2Freport.pdf" } } },
-      { cos: { cosObject: { key: "ai-knowledge-base/topics/t_abcdefghijkl/processed/report.pdf/result.md" } } },
+      { cos: { cosObject: { key: "/1250000000/bucket-1250000000/ai-knowledge-base%2Ftopics%2Ft_abcdefghijkl%2Ffiles%2Fevidence%2Freport.pdf" } } },
+      { cos: { cosObject: { key: "ai-knowledge-base/topics/t_abcdefghijkl/processed/evidence/report.pdf/result.md" } } },
     ] });
     expect(records).toHaveLength(1);
-    expect(records[0].key).toContain("/files/report.pdf");
+    expect(records[0].key).toContain("/files/evidence/report.pdf");
+  });
+
+  it("skips reference objects before attempting to read metadata", async () => {
+    const handler = (processor as unknown as { handler: (event: unknown) => Promise<unknown> }).handler;
+    await expect(handler({ Records: [
+      { cos: { cosObject: { key: "ai-knowledge-base/topics/t_abcdefghijkl/files/reference/report.pdf" } } },
+    ] })).resolves.toEqual({ ok: true, processed: 1 });
   });
 
   it("uses the Tencent Cloud SDK client configuration object shape", () => {

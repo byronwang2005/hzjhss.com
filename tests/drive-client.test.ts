@@ -4,7 +4,7 @@ import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
 import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
-import { processUploadBatches, splitUploadBatches, UPLOAD_REGISTRATION_BATCH_SIZE } from "../src/drive/client/upload-batches";
+import { createUploadRegistrationScheduler, persistPendingUpload, readPendingUploads, type UploadRegistrationReceipt } from "../src/drive/client/upload-registrations";
 
 describe("knowledge entry flow", () => {
   it("keeps session checking, successful sign-in and authentication failure distinct", () => {
@@ -75,40 +75,83 @@ describe("knowledge client helpers", () => {
   });
 });
 
-describe("upload registration batches", () => {
-  it.each([
-    [0, []],
-    [1, [[0]]],
-    [5, [[0, 1, 2, 3, 4]]],
-    [6, [[0, 1, 2, 3, 4], [5]]],
-    [12, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11]]],
-  ])("splits %i files into batches of five", (count, expected) => {
-    expect(splitUploadBatches(Array.from({ length: count }, (_, index) => index))).toEqual(expected);
+describe("upload registration queue", () => {
+  const receipt = (index: number): UploadRegistrationReceipt => ({
+    version: 1,
+    uploadId: `u_${String(index).padStart(22, "0")}`,
+    topicId: "t_abcdefghijkl",
+    relativePath: `报告/${index}.pdf`,
+    size: 3,
+    contentType: "application/pdf",
+    knowledgeRole: "reference",
+    createdAt: "2026-07-25T00:00:00.000Z",
   });
 
-  it("rejects an invalid batch size", () => {
-    expect(() => splitUploadBatches([1], 0)).toThrow("批次大小必须为正整数");
-    expect(UPLOAD_REGISTRATION_BATCH_SIZE).toBe(5);
-  });
-
-  it("continues with later batches when one registration fails", async () => {
-    const attempted: number[][] = [];
-    const succeeded: number[][] = [];
-    const failed: number[][] = [];
-    const result = await processUploadBatches(
-      [1, 2, 3, 4, 5, 6],
-      async (batch) => {
-        attempted.push(batch);
-        if (batch[0] === 1) throw new Error("登记超时");
-        return batch.join(",");
+  it.each([1, 6, 400, 1000])("persists and clears all %i receipts with concurrency three", async (count) => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    let active = 0;
+    let maxActive = 0;
+    let completed = 0;
+    const scheduler = createUploadRegistrationScheduler({
+      concurrency: 3,
+      storage,
+      async register(item) {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await Promise.resolve();
+        active -= 1;
+        return { ok: true, failures: [], files: [{ name: `${item.uploadId}.pdf`, path: item.relativePath, relativePath: item.relativePath, size: 3, lastModified: item.createdAt, etag: item.uploadId, knowledgeRole: "reference" }] };
       },
-      (_value, batch) => { succeeded.push(batch); },
-      (_error, batch) => { failed.push(batch); },
-    );
-    expect(attempted).toEqual([[1, 2, 3, 4, 5], [6]]);
-    expect(failed).toEqual([[1, 2, 3, 4, 5]]);
-    expect(succeeded).toEqual([[6]]);
-    expect(result).toEqual({ successfulBatches: 1, failedBatches: 1 });
+      onSuccess() { completed += 1; },
+      onFailure() {},
+    });
+    for (let index = 0; index < count; index += 1) void scheduler.enqueue(receipt(index));
+    await scheduler.waitForIdle();
+    expect(completed).toBe(count);
+    expect(maxActive).toBe(Math.min(3, count));
+    expect(readPendingUploads(storage)).toEqual([]);
+  });
+
+  it("retains failed receipts so a refreshed page can resume them", async () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    persistPendingUpload(receipt(1), storage);
+    expect(readPendingUploads(storage)).toEqual([receipt(1)]);
+    const scheduler = createUploadRegistrationScheduler({
+      concurrency: 1,
+      retries: 0,
+      storage,
+      async register() { throw new Error("登记失败"); },
+      onSuccess() {},
+      onFailure() {},
+    });
+    void scheduler.enqueue(readPendingUploads(storage)[0]);
+    await scheduler.waitForIdle();
+    expect(readPendingUploads(storage)).toEqual([receipt(1)]);
+  });
+
+  it("continues after one permanent registration failure", async () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const completed: string[] = [];
+    const scheduler = createUploadRegistrationScheduler({
+      concurrency: 1,
+      retries: 0,
+      storage,
+      async register(item) {
+        if (item.uploadId === receipt(1).uploadId) throw new Error("登记失败");
+        return { ok: true, failures: [], files: [{ name: "2.pdf", path: item.relativePath, relativePath: item.relativePath, size: 3, lastModified: item.createdAt, etag: item.uploadId, knowledgeRole: "reference" }] };
+      },
+      onSuccess(_response, item) { completed.push(item.uploadId); },
+      onFailure() {},
+    });
+    void scheduler.enqueue(receipt(1));
+    void scheduler.enqueue(receipt(2));
+    await scheduler.waitForIdle();
+
+    expect(completed).toEqual([receipt(2).uploadId]);
+    expect(readPendingUploads(storage)).toEqual([receipt(1)]);
   });
 });
 
@@ -134,6 +177,7 @@ describe("file processing progress", () => {
     ], 1_000);
     advanceFileTask(batch, "weekly.pdf", "registering", { sourceEtag: "etag-new" }, 2_000);
     reconcileUploadBatch(batch, "t_abcdefghijkl", {
+      role: "evidence",
       prefix: "",
       folders: [],
       nextCursor: null,
@@ -150,6 +194,7 @@ describe("file processing progress", () => {
     }, Date.parse("2026-07-25T00:00:10.000Z"));
     expect(batch.items[0].stage).toBe("registering");
     reconcileUploadBatch(batch, "t_abcdefghijkl", {
+      role: "evidence",
       prefix: "",
       folders: [],
       nextCursor: null,
@@ -227,9 +272,12 @@ describe("knowledge client surface", () => {
     expect(source).toContain('uppy.on("upload-progress"');
     expect(source).toContain("createUploadBatch");
     expect(source).toContain("renderFileProcessingCenter");
+    expect(source).toContain("`已归档 ${archived}`");
+    expect(source).toContain("`剩余 ${remaining}`");
     expect(source).toContain('aria-label="批次处理阶段"');
     expect(source).toContain('api<UploadCompleteResponse>("/upload-complete"');
-    expect(source).toContain("registration.failures");
+    expect(source).toContain("createUploadRegistrationScheduler");
+    expect(source).toContain("readPendingUploads");
   });
 
   it("renders role tabs, contextual uploads and accessible table cells", () => {
@@ -266,7 +314,7 @@ describe("knowledge client surface", () => {
   it("cancels stale file listings, keeps refreshes in place and exposes real progress accessibly", () => {
     expect(source).toContain("fileLoadAbortController?.abort()");
     expect(source).toContain("++fileLoadRequestId");
-    expect(source).toContain("fileLoadIsCurrent(requestId, topicId, prefix)");
+    expect(source).toContain("fileLoadIsCurrent(requestId, topicId, role, prefix)");
     expect(source).toContain('mode: background ? "background" : state.listing ? "refresh" : "initial"');
     expect(source).toContain('aria-current=${stepState === "active" ? "step" : nothing}');
     expect(source).toContain('aria-live=${load.mode === "background" ? "off" : "polite"}');

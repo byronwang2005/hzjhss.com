@@ -85,6 +85,7 @@ export interface TopicSummary {
   updatedAt: string;
   indexVersion: number;
   methodologyPath?: string;
+  storageLayout?: "role-trees-v1";
   ready: boolean;
 }
 
@@ -136,6 +137,7 @@ export interface FolderIncorporationResult {
 }
 
 export interface FileListResponse {
+  role: KnowledgeRole;
   prefix: string;
   folders: KnowledgeFolder[];
   files: KnowledgeFile[];
@@ -166,6 +168,7 @@ export type FileListSseEvent =
 export interface UploadRegistrationFailure {
   relativePath: string;
   code: "FILE_REGISTRATION_FAILED";
+  requestId: string;
   retryable: true;
   message: string;
 }

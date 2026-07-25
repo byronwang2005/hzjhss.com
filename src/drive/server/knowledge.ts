@@ -30,7 +30,6 @@ import type {
   ReportDateSource,
 } from "../shared/contracts";
 import {
-  isReservedMethodologyPath,
   knowledgeRoleForPath,
   LEGACY_METHODOLOGY_PATH,
   METHODOLOGY_FILE_PREFIX,
@@ -54,6 +53,7 @@ export interface TopicMetadata {
   updatedAt: string;
   indexVersion: number;
   methodologyPath?: string;
+  storageLayout?: "role-trees-v1";
 }
 
 export interface TopicSummary extends TopicMetadata {
@@ -77,6 +77,7 @@ export interface FileMetadata {
   incorporatedAt?: string;
   incorporatedBy?: string;
   pdfPages?: number;
+  uploadId?: string;
 }
 
 export interface ProcessingStatus {
@@ -168,24 +169,28 @@ export function topicPrefix(topicId: string): string {
   return `topics/${normalizeTopicId(topicId)}/`;
 }
 
-export function sourcePath(topicId: string, relativePath: string): string {
-  return `${topicPrefix(topicId)}files/${normalizeRelativeFilePath(relativePath)}`;
+export function roleFilesPrefix(topicId: string, knowledgeRole: KnowledgeRole): string {
+  return `${topicPrefix(topicId)}files/${normalizeKnowledgeRole(knowledgeRole)}/`;
 }
 
-export function fileMetaPath(topicId: string, relativePath: string): string {
-  return `${topicPrefix(topicId)}file-meta/${normalizeRelativeFilePath(relativePath)}.json`;
+export function sourcePath(topicId: string, knowledgeRole: KnowledgeRole, relativePath: string): string {
+  return `${roleFilesPrefix(topicId, knowledgeRole)}${normalizeRelativeFilePath(relativePath)}`;
 }
 
-export function processedPrefix(topicId: string, relativePath: string): string {
-  return `${topicPrefix(topicId)}processed/${normalizeRelativeFilePath(relativePath)}.__file__/`;
+export function fileMetaPath(topicId: string, knowledgeRole: KnowledgeRole, relativePath: string): string {
+  return `${topicPrefix(topicId)}file-meta/${normalizeKnowledgeRole(knowledgeRole)}/${normalizeRelativeFilePath(relativePath)}.json`;
+}
+
+export function processedPrefix(topicId: string, knowledgeRole: KnowledgeRole, relativePath: string): string {
+  return `${topicPrefix(topicId)}processed/${normalizeKnowledgeRole(knowledgeRole)}/${normalizeRelativeFilePath(relativePath)}.__file__/`;
 }
 
 export function tempUploadPath(uploadIdInput: unknown): string {
   return `system/temp/${normalizeUploadId(uploadIdInput)}/source`;
 }
 
-export function processingStatusPath(topicId: string, relativePath: string): string {
-  return `${processedPrefix(topicId, relativePath)}status.json`;
+export function processingStatusPath(topicId: string, knowledgeRole: KnowledgeRole, relativePath: string): string {
+  return `${processedPrefix(topicId, knowledgeRole, relativePath)}status.json`;
 }
 
 export function topicIndexPath(topicId: string): string {
@@ -207,6 +212,7 @@ export async function createKnowledgeTopic(config: DriveConfig, nameInput: unkno
     updatedAt: now,
     indexVersion: 1,
     methodologyPath: brandedMethodologyPath(name),
+    storageLayout: "role-trees-v1",
   };
   await putObjectText(config, `${topicPrefix(topic.id)}topic.json`, JSON.stringify(topic, null, 2), "application/json; charset=utf-8");
   return topic;
@@ -247,6 +253,7 @@ export async function listKnowledgeTopics(config: DriveConfig): Promise<TopicSum
     if (!TOPIC_ID_PATTERN.test(id)) return null;
     try {
       const topic = await readKnowledgeTopic(config, id);
+      if (topic.storageLayout !== "role-trees-v1") return null;
       const manifest = await readJson<{ chunkCount?: number; indexVersion?: number }>(config, topicIndexManifestPath(id));
       return { ...topic, ready: Boolean(manifest?.chunkCount && manifest.indexVersion === topic.indexVersion) };
     } catch {
@@ -265,6 +272,7 @@ export async function deleteKnowledgeTopic(config: DriveConfig, topicIdInput: un
 export async function listKnowledgeFiles(
   config: DriveConfig,
   topicIdInput: unknown,
+  knowledgeRoleInput: unknown,
   relativePrefixInput: unknown,
   cursor?: string | null,
   options: {
@@ -272,14 +280,15 @@ export async function listKnowledgeFiles(
     onProgress?: (update: FileListProgressUpdate) => void;
     metadataConcurrency?: number;
   } = {},
-): Promise<{ prefix: string; folders: Array<DriveFolder & { referenceCount: number; incorporatedCount: number }>; files: KnowledgeFile[]; nextCursor: string | null }> {
+): Promise<{ role: KnowledgeRole; prefix: string; folders: Array<DriveFolder & { referenceCount: number; incorporatedCount: number }>; files: KnowledgeFile[]; nextCursor: string | null }> {
   const topicId = normalizeTopicId(topicIdInput);
+  const knowledgeRole = normalizeRequiredKnowledgeRole(knowledgeRoleInput);
   options.onProgress?.({ stage: "topic", state: "active" });
   const topic = await readKnowledgeTopic(config, topicId);
   options.onProgress?.({ stage: "topic", state: "complete" });
-  const methodologyPath = methodologyPathForTopic(topic);
   const relativePrefix = relativePrefixInput ? normalizeDirectoryPrefix(relativePrefixInput) : "";
-  const storagePrefix = `${topicPrefix(topicId)}files/${relativePrefix}`;
+  const filesPrefix = roleFilesPrefix(topicId, knowledgeRole);
+  const storagePrefix = `${filesPrefix}${relativePrefix}`;
   options.onProgress?.({ stage: "objects", state: "active" });
   const listed = await listObjects(config, storagePrefix, cursor);
   options.onProgress?.({ stage: "objects", state: "complete", total: listed.files.length });
@@ -289,12 +298,13 @@ export async function listKnowledgeFiles(
   const limit = pLimit(Math.max(1, options.metadataConcurrency || 8));
   const enriched = await Promise.all(listed.files.map((file) => limit(async (): Promise<KnowledgeFile | null> => {
     try {
-      const relativePath = file.path.slice(`${topicPrefix(topicId)}files/`.length);
+      const relativePath = file.path.slice(filesPrefix.length);
       const [meta, processing] = await Promise.all([
-        readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
-        readJson<ProcessingStatus>(config, processingStatusPath(topicId, relativePath)),
+        readJson<FileMetadata>(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
+        knowledgeRole === "reference"
+          ? Promise.resolve(null)
+          : readJson<ProcessingStatus>(config, processingStatusPath(topicId, knowledgeRole, relativePath)),
       ]);
-      const knowledgeRole = knowledgeRoleOf(meta, relativePath, methodologyPath);
       if (knowledgeRole === "methodology" && !options.includeMethodology) return null;
       let publicProcessing: ProcessingStatus | undefined;
       if (processing?.sourceEtag === file.etag) {
@@ -329,12 +339,13 @@ export async function listKnowledgeFiles(
   options.onProgress?.({ stage: "metadata", state: "complete", completed, total });
   options.onProgress?.({ stage: "assembling", state: "active" });
   const folderIncorporation = listed.folders.length
-    ? await summarizeFolderIncorporation(config, topicId, relativePrefix, listed.folders, methodologyPath)
+    ? await summarizeFolderIncorporation(config, topicId, knowledgeRole, relativePrefix, listed.folders)
     : new Map<string, { referenceCount: number; incorporatedCount: number }>();
   const response = {
+    role: knowledgeRole,
     prefix: relativePrefix,
     folders: listed.folders.map((folder) => {
-      const path = folder.path.slice(`${topicPrefix(topicId)}files/`.length);
+      const path = folder.path.slice(filesPrefix.length);
       const counts = folderIncorporation.get(path) || { referenceCount: 0, incorporatedCount: 0 };
       return { name: folder.name, path, ...counts };
     }),
@@ -353,8 +364,8 @@ export async function patchKnowledgeFolderIncorporation(
   const prefix = normalizeDirectoryPrefix(input.prefix);
   if (!prefix) throw new Error("文件夹路径无效");
   if (typeof input.incorporated !== "boolean") throw new Error("纳入状态无效");
-  const topic = await readKnowledgeTopic(config, topicId);
-  const entries = await listReferenceMetadata(config, topicId, prefix, methodologyPathForTopic(topic));
+  await readKnowledgeTopic(config, topicId);
+  const entries = await listReferenceMetadata(config, topicId, prefix);
   const changed = entries.filter(({ metadata }) => Boolean(metadata.incorporatedAt) !== input.incorporated);
   const failures: FolderIncorporationResult["failures"] = [];
   let changedCount = 0;
@@ -363,6 +374,7 @@ export async function patchKnowledgeFolderIncorporation(
     try {
       await patchKnowledgeFile(config, {
         topicId,
+        knowledgeRole: "reference",
         relativePath: entry.relativePath,
         incorporated: input.incorporated,
         updatedBy: input.updatedBy,
@@ -387,13 +399,13 @@ export async function patchKnowledgeFolderIncorporation(
 async function summarizeFolderIncorporation(
   config: DriveConfig,
   topicId: string,
+  knowledgeRole: KnowledgeRole,
   relativePrefix: string,
   folders: DriveFolder[],
-  methodologyPath: string,
 ): Promise<Map<string, { referenceCount: number; incorporatedCount: number }>> {
-  const entries = await listReferenceMetadata(config, topicId, relativePrefix, methodologyPath);
+  const entries = knowledgeRole === "reference" ? await listReferenceMetadata(config, topicId, relativePrefix) : [];
   const counts = new Map<string, { referenceCount: number; incorporatedCount: number }>();
-  const filesPrefix = `${topicPrefix(topicId)}files/`;
+  const filesPrefix = roleFilesPrefix(topicId, knowledgeRole);
   for (const folder of folders) {
     counts.set(folder.path.slice(filesPrefix.length), { referenceCount: 0, incorporatedCount: 0 });
   }
@@ -414,10 +426,9 @@ async function listReferenceMetadata(
   config: DriveConfig,
   topicId: string,
   relativePrefix: string,
-  methodologyPath: string,
 ): Promise<ReferenceMetadataEntry[]> {
-  const storagePrefix = `${topicPrefix(topicId)}files/${relativePrefix}`;
-  const filesPrefix = `${topicPrefix(topicId)}files/`;
+  const filesPrefix = roleFilesPrefix(topicId, "reference");
+  const storagePrefix = `${filesPrefix}${relativePrefix}`;
   const paths: string[] = [];
   let cursor: string | null = null;
   do {
@@ -428,8 +439,8 @@ async function listReferenceMetadata(
   const limit = pLimit(8);
   const entries = await Promise.all(paths.map((path) => limit(async (): Promise<ReferenceMetadataEntry | null> => {
     const relativePath = path.slice(filesPrefix.length);
-    const metadata = await readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath));
-    if (!metadata || knowledgeRoleOf(metadata, relativePath, methodologyPath) !== "reference") return null;
+    const metadata = await readJson<FileMetadata>(config, fileMetaPath(topicId, "reference", relativePath));
+    if (!metadata) return null;
     return { relativePath, metadata };
   })));
   return entries.filter((entry): entry is ReferenceMetadataEntry => Boolean(entry));
@@ -441,7 +452,6 @@ export async function createUpload(config: DriveConfig, input: { topicId: unknow
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
   const methodologyPath = methodologyPathForTopic(topic);
   const relativePath = knowledgeRole === "methodology" ? methodologyPath : normalizeRelativeFilePath(input.relativePath);
-  if (knowledgeRole !== "methodology" && isReservedMethodologyPath(relativePath, methodologyPath)) throw new Error("该文件路径由专题方法论保留");
   const policy = filePolicy(relativePath);
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const size = normalizePositiveSize(input.size);
@@ -470,7 +480,6 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
   const methodologyPath = methodologyPathForTopic(topic);
   const relativePath = knowledgeRole === "methodology" ? methodologyPath : normalizeRelativeFilePath(input.relativePath);
-  if (knowledgeRole !== "methodology" && isReservedMethodologyPath(relativePath, methodologyPath)) throw new Error("该文件路径由专题方法论保留");
   const policy = filePolicy(relativePath);
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const declaredSize = normalizePositiveSize(input.size);
@@ -478,7 +487,24 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   const pdfPages = knowledgeRole === "reference" ? undefined : normalizePdfPages(policy.extension, input.pdfPages);
   const temporaryPath = tempUploadPath(input.uploadId);
   const actual = await headObject(config, temporaryPath);
-  if (!actual) throw new Error("COS 中未找到已上传文件");
+  if (!actual) {
+    const [existingMetadata, existingSource] = await Promise.all([
+      readJson<FileMetadata>(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
+      headObject(config, sourcePath(topicId, knowledgeRole, relativePath)),
+    ]);
+    if (
+      existingMetadata
+      && existingMetadata.uploadId === input.uploadId
+      && existingMetadata.size === declaredSize
+      && baseContentType(existingMetadata.contentType) === baseContentType(declaredContentType)
+      && existingMetadata.knowledgeRole === knowledgeRole
+      && existingSource?.etag === existingMetadata.etag
+      && existingSource.size === existingMetadata.size
+    ) {
+      return existingMetadata;
+    }
+    throw new Error("COS 中未找到已上传文件");
+  }
   if (actual.size !== declaredSize) {
     await deleteObject(config, temporaryPath);
     throw new Error("COS 文件实际大小与上传登记不一致");
@@ -492,16 +518,12 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     throw new Error("COS 文件实际 Content-Type 与上传登记不一致");
   }
   const [previousMetadata, existingSource] = await Promise.all([
-    readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
-    headObject(config, sourcePath(topicId, relativePath)),
+    readJson<FileMetadata>(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
+    headObject(config, sourcePath(topicId, knowledgeRole, relativePath)),
   ]);
   if (existingSource && !previousMetadata) {
     await deleteObject(config, temporaryPath);
     throw new Error("同名文件的元数据缺失，请先删除后再上传");
-  }
-  if (previousMetadata && knowledgeRoleOf(previousMetadata, relativePath, methodologyPath) !== knowledgeRole) {
-    await deleteObject(config, temporaryPath);
-    throw new Error("同名文件不能直接变更资料类型，请先删除后再上传");
   }
   const uploadedAt = new Date().toISOString();
   const metadata: FileMetadata = {
@@ -516,6 +538,7 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     uploadedAt,
     processingKind: policy.processingKind,
     knowledgeRole,
+    uploadId: String(input.uploadId),
     ...(knowledgeRole === "evidence" ? { reportDate: uploadedAt.slice(0, 10), reportDateSource: "upload" as const } : {}),
     ...(pdfPages ? { pdfPages } : {}),
   };
@@ -531,29 +554,29 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   const affectsIndex = knowledgeRole !== "reference";
   const nextTopic = { ...topic, updatedAt: uploadedAt, indexVersion: topic.indexVersion + (affectsIndex ? 1 : 0) };
   const registrations: Promise<unknown>[] = [
-    putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8"),
-    putObjectText(config, fileMetaPath(topicId, relativePath), JSON.stringify(metadata, null, 2), "application/json; charset=utf-8"),
+    putObjectText(config, fileMetaPath(topicId, knowledgeRole, relativePath), JSON.stringify(metadata, null, 2), "application/json; charset=utf-8"),
   ];
   if (affectsIndex) {
     registrations.push(
-      putObjectText(config, processingStatusPath(topicId, relativePath), JSON.stringify(status, null, 2), "application/json; charset=utf-8"),
+      putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8"),
+      putObjectText(config, processingStatusPath(topicId, knowledgeRole, relativePath), JSON.stringify(status, null, 2), "application/json; charset=utf-8"),
       deleteObject(config, topicIndexPath(topicId)),
       deleteObject(config, topicIndexManifestPath(topicId)),
     );
   } else {
-    registrations.push(deletePrefix(config, processedPrefix(topicId, relativePath)));
+    registrations.push(deletePrefix(config, processedPrefix(topicId, knowledgeRole, relativePath)));
   }
   await Promise.all(registrations);
   try {
     // The COS ObjectCreated event must not become visible before its processing metadata.
-    await copyObject(config, temporaryPath, sourcePath(topicId, relativePath), actual.etag);
-    const copied = await headObject(config, sourcePath(topicId, relativePath));
+    await copyObject(config, temporaryPath, sourcePath(topicId, knowledgeRole, relativePath), actual.etag);
+    const copied = await headObject(config, sourcePath(topicId, knowledgeRole, relativePath));
     if (!copied || copied.size !== actual.size || copied.etag !== actual.etag) throw new Error("COS 文件转存校验失败");
   } catch (error) {
     await Promise.all([
-      deleteObject(config, sourcePath(topicId, relativePath)),
-      deleteObject(config, fileMetaPath(topicId, relativePath)),
-      deleteObject(config, processingStatusPath(topicId, relativePath)),
+      deleteObject(config, sourcePath(topicId, knowledgeRole, relativePath)),
+      deleteObject(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
+      deleteObject(config, processingStatusPath(topicId, knowledgeRole, relativePath)),
     ]);
     throw error;
   }
@@ -561,22 +584,26 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   return metadata;
 }
 
-export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unknown, relativePathInput: unknown, confirmName: unknown): Promise<{ indexChanged: boolean }> {
+export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unknown, knowledgeRoleInput: unknown, relativePathInput: unknown, confirmName: unknown): Promise<{ indexChanged: boolean }> {
   const topicId = normalizeTopicId(topicIdInput);
+  const knowledgeRole = normalizeRequiredKnowledgeRole(knowledgeRoleInput);
   const relativePath = normalizeRelativeFilePath(relativePathInput);
   const expectedName = relativePath.split("/").at(-1) || relativePath;
   if (confirmName !== expectedName) throw new Error("文件名称确认不匹配");
   const [topic, metadata] = await Promise.all([
     readKnowledgeTopic(config, topicId),
-    readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
+    readJson<FileMetadata>(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
   ]);
-  const affectsIndex = knowledgeRoleOf(metadata, relativePath, methodologyPathForTopic(topic)) !== "reference";
+  if (!metadata || metadata.knowledgeRole !== knowledgeRole) throw new Error("文件元数据不存在");
+  const affectsIndex = knowledgeRole !== "reference";
   const updatedAt = new Date().toISOString();
-  await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify({ ...topic, updatedAt, indexVersion: topic.indexVersion + (affectsIndex ? 1 : 0) }, null, 2), "application/json; charset=utf-8");
+  if (affectsIndex) {
+    await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify({ ...topic, updatedAt, indexVersion: topic.indexVersion + 1 }, null, 2), "application/json; charset=utf-8");
+  }
   const deletions: Promise<unknown>[] = [
-    deleteObject(config, sourcePath(topicId, relativePath)),
-    deleteObject(config, fileMetaPath(topicId, relativePath)),
-    deletePrefix(config, processedPrefix(topicId, relativePath)),
+    deleteObject(config, sourcePath(topicId, knowledgeRole, relativePath)),
+    deleteObject(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
+    deletePrefix(config, processedPrefix(topicId, knowledgeRole, relativePath)),
   ];
   if (affectsIndex) {
     deletions.push(deleteObject(config, topicIndexPath(topicId)), deleteObject(config, topicIndexManifestPath(topicId)));
@@ -585,31 +612,34 @@ export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unk
   return { indexChanged: affectsIndex };
 }
 
-export async function createDownloadUrl(config: DriveConfig, topicIdInput: unknown, relativePathInput: unknown, options: { includeMethodology?: boolean } = {}): Promise<{ url: string; name: string; expiresIn: number }> {
+export async function createDownloadUrl(config: DriveConfig, topicIdInput: unknown, knowledgeRoleInput: unknown, relativePathInput: unknown, options: { includeMethodology?: boolean } = {}): Promise<{ url: string; name: string; expiresIn: number }> {
   const topicId = normalizeTopicId(topicIdInput);
+  const knowledgeRole = normalizeRequiredKnowledgeRole(knowledgeRoleInput);
   const relativePath = normalizeRelativeFilePath(relativePathInput);
-  const [topic, metadata] = await Promise.all([
-    readKnowledgeTopic(config, topicId),
-    readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
-  ]);
-  if (knowledgeRoleOf(metadata, relativePath, methodologyPathForTopic(topic)) === "methodology" && !options.includeMethodology) {
+  if (knowledgeRole === "methodology" && !options.includeMethodology) {
     const error = new Error("无权下载专题方法论");
     error.name = "DriveForbiddenError";
     throw error;
   }
-  if (!(await headObject(config, sourcePath(topicId, relativePath)))) throw new Error("文件不存在");
-  return { url: await presignObjectUrl(config, "GET", sourcePath(topicId, relativePath)), name: relativePath.split("/").at(-1) || relativePath, expiresIn: config.signExpiresSeconds };
+  const [topic, metadata] = await Promise.all([
+    readKnowledgeTopic(config, topicId),
+    readJson<FileMetadata>(config, fileMetaPath(topicId, knowledgeRole, relativePath)),
+  ]);
+  if (!metadata || metadata.knowledgeRole !== knowledgeRole) throw new Error("文件元数据不存在");
+  if (!(await headObject(config, sourcePath(topicId, knowledgeRole, relativePath)))) throw new Error("文件不存在");
+  return { url: await presignObjectUrl(config, "GET", sourcePath(topicId, knowledgeRole, relativePath)), name: relativePath.split("/").at(-1) || relativePath, expiresIn: config.signExpiresSeconds };
 }
 
 export async function patchKnowledgeFile(
   config: DriveConfig,
-  input: { topicId: unknown; relativePath: unknown; incorporated?: unknown; reportDate?: unknown; updatedBy: string },
+  input: { topicId: unknown; knowledgeRole: unknown; relativePath: unknown; incorporated?: unknown; reportDate?: unknown; updatedBy: string },
 ): Promise<{ metadata: FileMetadata; indexChanged: boolean }> {
   const topicId = normalizeTopicId(input.topicId);
+  const role = normalizeRequiredKnowledgeRole(input.knowledgeRole);
   const relativePath = normalizeRelativeFilePath(input.relativePath);
-  const metadata = await readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath));
+  const metadata = await readJson<FileMetadata>(config, fileMetaPath(topicId, role, relativePath));
   if (!metadata) throw new Error("文件元数据不存在");
-  const role = knowledgeRoleOf(metadata, relativePath);
+  if (metadata.knowledgeRole !== role) throw new Error("资料类型不匹配");
   const now = new Date().toISOString();
   let next = { ...metadata, knowledgeRole: role };
   let indexChanged = false;
@@ -634,13 +664,13 @@ export async function patchKnowledgeFile(
     // Advance the version first. If a later write fails, readers will reject
     // the old manifest instead of serving an index with a stale report date.
     await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify({ ...topic, updatedAt: now, indexVersion: topic.indexVersion + 1 }, null, 2), "application/json; charset=utf-8");
-    await putObjectText(config, fileMetaPath(topicId, relativePath), JSON.stringify(next, null, 2), "application/json; charset=utf-8");
+    await putObjectText(config, fileMetaPath(topicId, role, relativePath), JSON.stringify(next, null, 2), "application/json; charset=utf-8");
     await Promise.all([
       deleteObject(config, topicIndexPath(topicId)),
       deleteObject(config, topicIndexManifestPath(topicId)),
     ]);
   } else {
-    await putObjectText(config, fileMetaPath(topicId, relativePath), JSON.stringify(next, null, 2), "application/json; charset=utf-8");
+    await putObjectText(config, fileMetaPath(topicId, role, relativePath), JSON.stringify(next, null, 2), "application/json; charset=utf-8");
   }
   return { metadata: next, indexChanged };
 }
@@ -680,10 +710,15 @@ function normalizeUploadId(input: unknown): string {
   return input;
 }
 
-function normalizeKnowledgeRole(input: unknown): KnowledgeRole {
+export function normalizeKnowledgeRole(input: unknown): KnowledgeRole {
   if (input === "reference" || input === "methodology" || input === "evidence") return input;
   if (input === undefined || input === null || input === "") return "evidence";
   throw new Error("资料类型无效");
+}
+
+function normalizeRequiredKnowledgeRole(input: unknown): KnowledgeRole {
+  if (input === undefined || input === null || input === "") throw new Error("请指定资料类型");
+  return normalizeKnowledgeRole(input);
 }
 
 function normalizeReportDate(input: unknown): string {

@@ -73,9 +73,9 @@ ai-knowledge-base/
 │   └── temp/{jobId}/...
 └── topics/{topicId}/
     ├── topic.json
-    ├── files/{relativePath}/{filename}
-    ├── file-meta/{relativePath}/{filename}.json
-    ├── processed/{relativePath}/{filename}.__file__/
+    ├── files/{role}/{relativePath}/{filename}
+    ├── file-meta/{role}/{relativePath}/{filename}.json
+    ├── processed/{role}/{relativePath}/{filename}.__file__/
     │   ├── status.json
     │   ├── result.md
     │   ├── result.json
@@ -119,9 +119,9 @@ CORS：
 - 云函数 SCF
 - COS 事件通知
 
-COS `ObjectCreated` 事件触发文件处理函数，前缀设置为 `ai-knowledge-base/topics/`。函数内部只接受 `topics/{topicId}/files/` 对象，其他对象会被忽略，避免处理结果递归触发。
+COS `ObjectCreated` 事件触发文件处理函数，前缀设置为 `ai-knowledge-base/topics/`。函数内部只接受 `topics/{topicId}/files/{role}/` 对象；`reference` 对象会在读取元数据前直接跳过，其他对象会按角色读取独立的元数据和处理目录。
 
-浏览器预签上传只写入 `ai-knowledge-base/system/temp/{jobId}/source`。`upload-complete` 完成 COS HEAD 校验后，使用 COS 服务端复制把对象转存到正式 `files/` 路径并删除临时对象；没有完成登记的临时对象不会自动清理，需要时由管理员手动处理。
+浏览器预签上传只写入 `ai-knowledge-base/system/temp/{jobId}/source`。浏览器先把登记凭据写入 `localStorage`，再逐文件调用 `upload-complete`；服务端完成 COS HEAD 校验后，使用 COS 服务端复制把对象转存到正式 `files/{role}/` 路径并删除临时对象。登记响应丢失时可凭 `uploadId` 幂等重试；没有完成登记的临时对象不会自动清理，需要时由管理员手动处理。
 
 ### 文件处理函数
 

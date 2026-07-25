@@ -1,7 +1,7 @@
 import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
 import { getObjectText, headObject, putObjectText } from "../../../src/drive/server/cos";
 import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/server/http";
-import { fileMetaPath, knowledgeRoleOf, processingStatusPath, sourcePath, type FileMetadata, type ProcessingStatus } from "../../../src/drive/server/knowledge";
+import { fileMetaPath, normalizeKnowledgeRole, processingStatusPath, sourcePath, type FileMetadata, type ProcessingStatus } from "../../../src/drive/server/knowledge";
 import { notifyProcessor } from "../../../src/drive/server/webhooks";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
@@ -13,15 +13,17 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, wai
     if (!env.PROCESSOR_WEBHOOK_URL || !env.PROCESSOR_WEBHOOK_SECRET) throw new Error("文件处理 webhook 未配置");
     const topicId = String(body.topicId || "");
     const path = String(body.path || "");
-    const metaText = await getObjectText(config, fileMetaPath(topicId, path));
+    if (!body.knowledgeRole) throw new Error("请指定资料类型");
+    const knowledgeRole = normalizeKnowledgeRole(body.knowledgeRole);
+    const metaText = await getObjectText(config, fileMetaPath(topicId, knowledgeRole, path));
     if (!metaText) throw new Error("文件元数据不存在");
     const metadata = JSON.parse(metaText) as FileMetadata;
-    if (knowledgeRoleOf(metadata, path) === "reference") throw new Error("研报原件不参与 AI 处理");
-    const current = await headObject(config, sourcePath(topicId, path));
+    if (knowledgeRole === "reference" || metadata.knowledgeRole !== knowledgeRole) throw new Error("研报原件不参与 AI 处理");
+    const current = await headObject(config, sourcePath(topicId, knowledgeRole, path));
     if (!current || current.etag !== metadata.etag) throw new Error("源文件已变化，请刷新后重试");
     const status: ProcessingStatus = { version: 1, topicId, path, sourceEtag: metadata.etag, state: "queued", processingKind: metadata.processingKind, updatedAt: new Date().toISOString() };
-    await putObjectText(config, processingStatusPath(topicId, path), JSON.stringify(status, null, 2), "application/json; charset=utf-8");
-    waitUntil(notifyProcessor(env, { topicId, path }));
+    await putObjectText(config, processingStatusPath(topicId, knowledgeRole, path), JSON.stringify(status, null, 2), "application/json; charset=utf-8");
+    waitUntil(notifyProcessor(env, { topicId, path, knowledgeRole }));
     return jsonResponse({ ok: true });
   } catch (error) { return errorResponse(error); }
 };

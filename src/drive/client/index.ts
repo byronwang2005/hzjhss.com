@@ -33,7 +33,11 @@ import { state, type TopicView } from "./state";
 import { createTransientStatusController } from "./transient-status";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 import { runWorkspaceTransition } from "./workspace-transition";
-import { processUploadBatches } from "./upload-batches";
+import {
+  createUploadRegistrationScheduler,
+  readPendingUploads,
+  type UploadRegistrationReceipt,
+} from "./upload-registrations";
 import {
   advanceFileTask,
   batchCounts,
@@ -82,6 +86,7 @@ let fileLoadClockTimer: number | undefined;
 let fileLoadAbortController: AbortController | null = null;
 let fileLoadRequestId = 0;
 let uploadOperationActive = false;
+let pendingRegistrationResumeActive = false;
 let observedScopeList: HTMLElement | null = null;
 const scopeListResizeObserver = typeof ResizeObserver === "function"
   ? new ResizeObserver(() => syncScopeIndicator(false))
@@ -93,6 +98,11 @@ root.addEventListener("input", handleInput);
 root.addEventListener("change", (event) => void handleChange(event));
 root.addEventListener("keydown", handleTabKeydown);
 window.addEventListener("resize", () => syncScopeIndicator(false), { passive: true });
+window.addEventListener("beforeunload", (event) => {
+  if (!readPendingUploads().length) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 window.jhssTheme.subscribe((theme) => {
   if (state.theme !== theme) {
     state.theme = theme;
@@ -153,6 +163,7 @@ function applyOverview(overview: OverviewResponse): void {
   state.topics = overview.topics;
   state.mode = "overview";
   state.loading = false;
+  if (overview.role === "admin") void resumePendingUploadRegistrations();
 }
 
 async function requestEntryOverview(): Promise<OverviewResponse> {
@@ -208,6 +219,8 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
     state.topic = topic;
     state.topicView = view;
     state.fileRoleView = "evidence";
+    state.fileRolePrefixes = { reference: "", methodology: "", evidence: "" };
+    state.fileRoleListings = { reference: null, methodology: null, evidence: null };
     state.prefix = "";
     state.listing = null;
     state.fileLoad = null;
@@ -230,6 +243,7 @@ async function loadFiles(background = false): Promise<void> {
   const requestId = ++fileLoadRequestId;
   const topicId = state.topic.id;
   const prefix = state.prefix;
+  const role = state.fileRoleView;
   state.fileLoad = {
     requestId,
     active: true,
@@ -248,10 +262,10 @@ async function loadFiles(background = false): Promise<void> {
   let listing: FileListResponse | null = null;
   let streamError: FileListErrorEvent | null = null;
   try {
-    const path = `/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(prefix)}`;
+    const path = `/list?topicId=${encodeURIComponent(topicId)}&role=${encodeURIComponent(role)}&prefix=${encodeURIComponent(prefix)}`;
     const stream = await apiStream(path, { signal: controller.signal });
     await consumeSse(stream, (event, data) => {
-      if (!fileLoadIsCurrent(requestId, topicId, prefix)) return;
+      if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
       if (event === "phase") {
         const phase = parseFileListPhase(data);
         if (phase) applyFileListPhase(phase);
@@ -268,8 +282,10 @@ async function loadFiles(background = false): Promise<void> {
     const batchListing = batchSnapshot?.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage))
       ? await loadBatchStatusListing(topicId, batchSnapshot, batchSnapshot.prefix === prefix ? resolvedListing : null, controller.signal)
       : resolvedListing;
-    if (!fileLoadIsCurrent(requestId, topicId, prefix)) return;
+    if (!fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
     state.listing = resolvedListing;
+    state.fileRolePrefixes[role] = prefix;
+    state.fileRoleListings[role] = resolvedListing;
     if (state.uploadBatch === batchSnapshot) reconcileUploadBatch(batchSnapshot, topicId, batchListing);
     if (state.fileLoad?.requestId === requestId) {
       state.fileLoad.active = false;
@@ -287,7 +303,7 @@ async function loadFiles(background = false): Promise<void> {
       }, batchHasServerWork ? CLIENT_TIMING.activeFileRefreshMs : CLIENT_TIMING.fileRefreshMs);
     }
   } catch (error) {
-    if (controller.signal.aborted || !fileLoadIsCurrent(requestId, topicId, prefix)) return;
+    if (controller.signal.aborted || !fileLoadIsCurrent(requestId, topicId, role, prefix)) return;
     if (state.fileLoad?.requestId === requestId) {
       state.fileLoad.active = false;
       state.fileLoad.elapsedMs = Date.now() - state.fileLoad.startedAt;
@@ -300,9 +316,10 @@ async function loadFiles(background = false): Promise<void> {
   }
 }
 
-function fileLoadIsCurrent(requestId: number, topicId: string, prefix: string): boolean {
+function fileLoadIsCurrent(requestId: number, topicId: string, role: KnowledgeRole, prefix: string): boolean {
   return state.fileLoad?.requestId === requestId
     && state.topic?.id === topicId
+    && state.fileRoleView === role
     && state.prefix === prefix
     && state.topicView === "files";
 }
@@ -347,7 +364,7 @@ async function loadBatchStatusListing(
   const files = [...(firstPage?.files || [])];
   let cursor = firstPage?.nextCursor;
   if (!firstPage) {
-    const page = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}`, { signal });
+    const page = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&role=${encodeURIComponent(batch.knowledgeRole)}&prefix=${encodeURIComponent(batch.prefix)}`, { signal });
     files.push(...page.files);
     cursor = page.nextCursor;
   }
@@ -355,7 +372,7 @@ async function loadBatchStatusListing(
   const foundPaths = new Set(files.map((file) => file.path));
   while (cursor && [...wantedPaths].some((path) => !foundPaths.has(path))) {
     const page = await api<FileListResponse>(
-      `/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}&cursor=${encodeURIComponent(cursor)}`,
+      `/list?topicId=${encodeURIComponent(topicId)}&role=${encodeURIComponent(batch.knowledgeRole)}&prefix=${encodeURIComponent(batch.prefix)}&cursor=${encodeURIComponent(cursor)}`,
       { signal },
     );
     files.push(...page.files);
@@ -363,6 +380,7 @@ async function loadBatchStatusListing(
     cursor = page.nextCursor;
   }
   return {
+    role: batch.knowledgeRole,
     prefix: batch.prefix,
     folders: [],
     files,
@@ -524,10 +542,16 @@ async function handleClick(event: MouseEvent): Promise<void> {
     const nextRole = normalizeKnowledgeRole(button.dataset.role);
     if (state.fileRoleView === nextRole) return;
     await runWorkspaceTransition("file-role", () => {
+      state.fileRolePrefixes[state.fileRoleView] = state.prefix;
+      state.fileRoleListings[state.fileRoleView] = state.listing;
       state.fileRoleView = nextRole;
+      state.prefix = state.fileRolePrefixes[nextRole];
+      state.listing = state.fileRoleListings[nextRole];
+      state.fileLoad = null;
       state.expandedFilePath = null;
       renderApp();
     });
+    await loadFiles();
   } else if (action === "toggle-file-batch") {
     if (state.uploadBatch) {
       state.uploadBatch.expanded = !state.uploadBatch.expanded;
@@ -540,15 +564,21 @@ async function handleClick(event: MouseEvent): Promise<void> {
   } else if (action === "open-folder") {
     state.prefix = String(button.dataset.path || "");
     state.listing = null;
+    state.fileRolePrefixes[state.fileRoleView] = state.prefix;
+    state.fileRoleListings[state.fileRoleView] = null;
     state.fileLoad = null;
     await loadFiles();
   } else if (action === "up-folder") {
     state.prefix = directoryPrefix(state.prefix.replace(/\/$/, ""));
     state.listing = null;
+    state.fileRolePrefixes[state.fileRoleView] = state.prefix;
+    state.fileRoleListings[state.fileRoleView] = null;
     state.fileLoad = null;
     await loadFiles();
   } else if (action === "refresh-files" || action === "retry-file-list") {
     await loadFiles();
+  } else if (action === "retry-pending-registrations") {
+    await resumePendingUploadRegistrations();
   } else if (action === "pick-reference") {
     root.querySelector<HTMLInputElement>("[data-reference-input]")?.click();
   } else if (action === "pick-reference-folder") {
@@ -558,7 +588,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
   } else if (action === "pick-methodology") {
     root.querySelector<HTMLInputElement>("[data-methodology-input]")?.click();
   } else if (action === "download-file") {
-    const result = await api<{ url: string }>("/download-url", { method: "POST", body: { topicId: state.topic?.id, path: button.dataset.path } });
+    const result = await api<{ url: string }>("/download-url", { method: "POST", body: { topicId: state.topic?.id, knowledgeRole: state.fileRoleView, path: button.dataset.path } });
     window.open(result.url, "_blank", "noopener,noreferrer");
   } else if (action === "delete-file") {
     const path = String(button.dataset.path || "");
@@ -567,6 +597,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
       kind: "file",
       topicId: state.topic.id,
       path,
+      knowledgeRole: state.fileRoleView,
       targetName: fileNameFromPath(path),
       input: "",
       pending: false,
@@ -577,7 +608,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
     closeDeleteConfirmation();
   } else if (action === "retry-file") {
     const path = String(button.dataset.path || "");
-    await api("/process-retry", { method: "POST", body: { topicId: state.topic?.id, path } });
+    await api("/process-retry", { method: "POST", body: { topicId: state.topic?.id, knowledgeRole: state.fileRoleView, path } });
     if (state.uploadBatch && state.topic?.id === state.uploadBatch.topicId) {
       advanceFileTask(state.uploadBatch, path, "queued");
     }
@@ -588,6 +619,7 @@ async function handleClick(event: MouseEvent): Promise<void> {
       method: "PATCH",
       body: {
         topicId: state.topic?.id,
+        knowledgeRole: "reference",
         path: button.dataset.path,
         incorporated: button.dataset.incorporated !== "true",
       },
@@ -672,6 +704,7 @@ async function submitDeleteConfirmation(): Promise<void> {
         method: "DELETE",
         body: {
           topicId: confirmation.topicId,
+          knowledgeRole: confirmation.knowledgeRole,
           path: confirmation.path,
           confirmName: confirmation.input,
         },
@@ -701,7 +734,7 @@ async function submitReportDate(): Promise<void> {
   try {
     await api("/object", {
       method: "PATCH",
-      body: { topicId: state.topic?.id, path: edit.path, reportDate: edit.value.trim() },
+      body: { topicId: state.topic?.id, knowledgeRole: "evidence", path: edit.path, reportDate: edit.value.trim() },
     });
     if (state.editReportDate !== edit) return;
     state.editReportDate = null;
@@ -792,6 +825,57 @@ async function handleChange(event: Event): Promise<void> {
   );
 }
 
+async function registerUploadedFile(receipt: UploadRegistrationReceipt): Promise<UploadCompleteResponse> {
+  return api<UploadCompleteResponse>("/upload-complete", {
+    method: "POST",
+    body: {
+      topicId: receipt.topicId,
+      files: [{
+        uploadId: receipt.uploadId,
+        relativePath: receipt.relativePath,
+        size: receipt.size,
+        contentType: receipt.contentType,
+        knowledgeRole: receipt.knowledgeRole,
+        pdfPages: receipt.pdfPages,
+      }],
+    },
+  });
+}
+
+async function resumePendingUploadRegistrations(): Promise<void> {
+  if (pendingRegistrationResumeActive || state.role !== "admin") return;
+  const topicIds = new Set(state.topics.map((topic) => topic.id));
+  const pending = readPendingUploads().filter((receipt) => topicIds.has(receipt.topicId));
+  if (!pending.length) return;
+  pendingRegistrationResumeActive = true;
+  let failures = 0;
+  const referenceScheduler = createUploadRegistrationScheduler({
+    concurrency: 3,
+    register: registerUploadedFile,
+    onSuccess() {},
+    onFailure() { failures += 1; },
+  });
+  const indexedScheduler = createUploadRegistrationScheduler({
+    concurrency: 1,
+    register: registerUploadedFile,
+    onSuccess() {},
+    onFailure() { failures += 1; },
+  });
+  try {
+    for (const receipt of pending) {
+      void (receipt.knowledgeRole === "reference" ? referenceScheduler : indexedScheduler).enqueue(receipt);
+    }
+    await Promise.all([referenceScheduler.waitForIdle(), indexedScheduler.waitForIdle()]);
+    setStatus(
+      failures ? `${failures} 个文件仍未完成登记，可再次重试。` : `已恢复并归档 ${pending.length} 个待登记文件。`,
+      failures ? "danger" : "success",
+    );
+    if (state.topicView === "files") await loadFiles(true);
+  } finally {
+    pendingRegistrationResumeActive = false;
+  }
+}
+
 async function uploadFiles(files: File[], pathForFile: (file: File) => string, knowledgeRole: KnowledgeRole): Promise<void> {
   if (!state.topic || state.role !== "admin") return;
   if (uploadOperationActive) {
@@ -849,7 +933,29 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
     }
 
     const signatures = new Map<string, UploadSignature>();
-    const completed: Array<{ uploadId: string; relativePath: string; size: number; contentType: string; knowledgeRole: KnowledgeRole; pdfPages?: number }> = [];
+    let uploadedCount = 0;
+    const registrationScheduler = createUploadRegistrationScheduler({
+      concurrency: knowledgeRole === "reference" ? 3 : 1,
+      register: registerUploadedFile,
+      onSuccess(response, receipt) {
+        const file = response.files[0];
+        if (!file) return;
+        advanceFileTask(
+          batch!,
+          receipt.relativePath,
+          file.knowledgeRole === "reference" ? "archived" : "queued",
+          { sourceEtag: file.etag },
+        );
+        renderUploadBatch(batch!);
+      },
+      onFailure(error, receipt) {
+        advanceFileTask(batch!, receipt.relativePath, "failed", {
+          error: error instanceof Error ? error.message : "文件登记失败，请重新登记。",
+          retryable: true,
+        });
+        renderUploadBatch(batch!);
+      },
+    });
     uppy = new Uppy<UppyMeta, UppyBody>({ autoProceed: false });
     uppy.use(XHRUpload, {
       endpoint: async (fileOrBundle: unknown) => {
@@ -891,19 +997,24 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       const data = file.data as Blob;
       const signature = signatures.get(file.id);
       if (!signature) return;
-      completed.push({
+      const receipt: UploadRegistrationReceipt = {
+        version: 1,
         uploadId: signature.uploadId,
+        topicId,
         relativePath: signature.path,
         size: data.size,
         contentType: file.type || "application/octet-stream",
         knowledgeRole: signature.knowledgeRole,
         ...(file.meta.pdfPages ? { pdfPages: file.meta.pdfPages } : {}),
-      });
+        createdAt: new Date().toISOString(),
+      };
+      uploadedCount += 1;
       advanceFileTask(batch!, signature.path, "registering", {
         bytesUploaded: data.size,
         bytesTotal: data.size,
       });
       renderUploadBatch(batch!);
+      void registrationScheduler.enqueue(receipt);
     });
     for (const entry of prepared) uppy.addFile({
       name: entry.file.name,
@@ -918,66 +1029,20 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
         retryable: true,
       });
     }
-    if (!completed.length) {
+    if (!uploadedCount) {
       setUploadBatchStatus(batch, "文件上传未完成，请检查网络后重试。", "danger");
       return;
     }
 
-    const registration: UploadCompleteResponse = { ok: true, files: [], failures: [] };
-    await processUploadBatches(
-      completed,
-      async (registrationBatch) => api<UploadCompleteResponse>("/upload-complete", {
-        method: "POST",
-        body: { topicId, files: registrationBatch },
-      }),
-      (result) => {
-        registration.ok &&= result.ok;
-        registration.files.push(...result.files);
-        registration.failures.push(...result.failures);
-        for (const file of result.files) {
-          advanceFileTask(
-            batch!,
-            file.path,
-            file.knowledgeRole === "reference" ? "archived" : "queued",
-            { sourceEtag: file.etag },
-          );
-        }
-        for (const failure of result.failures) {
-          advanceFileTask(batch!, failure.relativePath, "failed", {
-            error: failure.message,
-            retryable: failure.retryable,
-          });
-        }
-        renderUploadBatch(batch!);
-      },
-      (error, registrationBatch) => {
-        const message = error instanceof Error && error.message.includes("超时")
-          ? "文件登记超时，请重新上传该文件。"
-          : "文件登记失败，请重新上传该文件。";
-        registration.ok = false;
-        for (const file of registrationBatch) {
-          registration.failures.push({
-            relativePath: file.relativePath,
-            code: "FILE_REGISTRATION_FAILED",
-            retryable: true,
-            message,
-          });
-          advanceFileTask(batch!, file.relativePath, "failed", {
-            error: message,
-            retryable: true,
-          });
-        }
-        renderUploadBatch(batch!);
-      },
-    );
+    await registrationScheduler.waitForIdle();
     const counts = batchCounts(batch);
     setUploadBatchStatus(
       batch,
       counts.failed
         ? `${counts.failed} 个文件未完成，其他文件将继续处理。`
         : knowledgeRole === "reference"
-          ? `已归档 ${registration.files.length} 份研报原件。`
-          : `已登记 ${registration.files.length} 份资料，后台正在继续处理。`,
+          ? `已归档 ${counts.complete} 份研报原件。`
+          : `已登记 ${counts.complete} 份资料，后台正在继续处理。`,
       counts.failed ? "danger" : "success",
     );
     if (state.topic?.id === topicId && state.topicView === "files") await loadFiles();
@@ -1420,10 +1485,11 @@ function renderFiles(): TemplateResult {
   const methodologyExists = Boolean(listing?.files.some((file) => file.knowledgeRole === "methodology"));
   const uploadLabel = role === "methodology" && methodologyExists ? "替换专题方法论" : presentation.uploadLabel;
   const uploadBatch = state.uploadBatch?.topicId === state.topic?.id ? state.uploadBatch : null;
+  const pendingRegistrations = readPendingUploads().filter((receipt) => receipt.topicId === state.topic?.id && receipt.knowledgeRole === role).length;
   return html`
     <section class=${`drive-tab-panel drive-files-panel is-${role}`}>
       <div class=${`drive-file-role-tabs${state.role === "admin" ? "" : " is-two-column"}`} role="tablist" aria-label="资料类型">
-        ${repeat(roles, (entry) => entry, (entry) => renderFileRoleTab(entry, role, listing))}
+        ${repeat(roles, (entry) => entry, (entry) => renderFileRoleTab(entry, role, state.fileRoleListings[entry]))}
       </div>
       <div
         id="file-role-panel"
@@ -1448,6 +1514,9 @@ function renderFiles(): TemplateResult {
             </button>
             ${state.role === "admin"
               ? html`
+                  ${pendingRegistrations
+                    ? html`<button class="drive-control" type="button" data-action="retry-pending-registrations" ?disabled=${pendingRegistrationResumeActive}>${renderIcon("arrow-clockwise")}重新登记 ${pendingRegistrations}</button>`
+                    : nothing}
                   <button class="drive-control drive-control-primary" type="button" data-action=${presentation.uploadAction}>
                     ${renderIcon(role === "methodology" ? "database" : "upload-simple", "bold")}${uploadLabel}
                   </button>
@@ -1695,6 +1764,9 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
 function renderFileProcessingCenter(batch: UploadBatchState): TemplateResult {
   const counts = batchCounts(batch);
   const elapsed = elapsedLabel(batch.startedAt, batch.completedAt);
+  const uploaded = batch.items.filter((item) => item.bytesTotal > 0 && item.bytesUploaded >= item.bytesTotal).length;
+  const archived = batch.items.filter((item) => Boolean(item.sourceEtag)).length;
+  const remaining = Math.max(0, batch.items.length - archived - counts.failed);
   const allComplete = counts.complete === batch.items.length;
   const title = allComplete
     ? `本批次 ${batch.items.length} 份资料已处理完成`
@@ -1702,8 +1774,10 @@ function renderFileProcessingCenter(batch: UploadBatchState): TemplateResult {
       ? `正在处理 ${batch.items.length} 份资料 · ${counts.complete} 份已完成`
       : `${counts.failed} 份资料未完成`;
   const summary = [
-    counts.active ? `${counts.active} 项进行中` : "",
-    counts.failed ? `${counts.failed} 项需处理` : "",
+    `已上传 ${uploaded}`,
+    `已归档 ${archived}`,
+    `失败 ${counts.failed}`,
+    `剩余 ${remaining}`,
     elapsed ? `用时 ${elapsed}` : "",
   ].filter(Boolean).join(" · ");
   return html`
@@ -1868,7 +1942,8 @@ function isFileListProgressStage(value: unknown): value is FileListProgressStage
 function isFileListResponse(value: unknown): value is FileListResponse {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<FileListResponse>;
-  return typeof candidate.prefix === "string"
+  return ["reference", "methodology", "evidence"].includes(String(candidate.role))
+    && typeof candidate.prefix === "string"
     && Array.isArray(candidate.folders)
     && Array.isArray(candidate.files)
     && (typeof candidate.nextCursor === "string" || candidate.nextCursor === null);

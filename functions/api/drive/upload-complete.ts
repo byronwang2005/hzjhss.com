@@ -55,6 +55,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
         failures.push({
           relativePath,
           code: "FILE_REGISTRATION_FAILED",
+          requestId,
           retryable: true,
           message: "文件登记失败，请重新上传该文件。",
         });

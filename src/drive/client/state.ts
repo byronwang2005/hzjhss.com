@@ -16,6 +16,7 @@ export interface DeleteConfirmation {
   kind: "topic" | "file";
   topicId: string;
   path?: string;
+  knowledgeRole?: KnowledgeRole;
   targetName: string;
   input: string;
   pending: boolean;
@@ -67,6 +68,8 @@ export interface DriveClientState {
   topic: TopicSummary | null;
   topicView: TopicView;
   fileRoleView: KnowledgeRole;
+  fileRolePrefixes: Record<KnowledgeRole, string>;
+  fileRoleListings: Record<KnowledgeRole, FileListResponse | null>;
   prefix: string;
   listing: FileListResponse | null;
   loading: boolean;
@@ -96,6 +99,8 @@ export const state: DriveClientState = {
   topic: null,
   topicView: "qa",
   fileRoleView: "evidence",
+  fileRolePrefixes: { reference: "", methodology: "", evidence: "" },
+  fileRoleListings: { reference: null, methodology: null, evidence: null },
   prefix: "",
   listing: null,
   loading: true,

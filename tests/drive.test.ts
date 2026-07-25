@@ -131,7 +131,16 @@ describe("knowledge topic and upload flow", () => {
     storage.set(tempUploadPath(signature.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-source" });
     const metadata = await completeUpload(config, { topicId: topic.id, uploadId: signature.uploadId, relativePath, size: 3, contentType: "application/pdf", pdfPages: 12, uploadedBy: "汪旭" });
     expect(metadata).toMatchObject({ etag: "etag-source", processingKind: "document-parse", pdfPages: 12 });
-    expect(JSON.parse(storage.get(processingStatusPath(topic.id, relativePath))!.body)).toMatchObject({ state: "queued", sourceEtag: "etag-source" });
+    await expect(completeUpload(config, {
+      topicId: topic.id,
+      uploadId: signature.uploadId,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 12,
+      uploadedBy: "汪旭",
+    })).resolves.toEqual(metadata);
+    expect(JSON.parse(storage.get(processingStatusPath(topic.id, "evidence", relativePath))!.body)).toMatchObject({ state: "queued", sourceEtag: "etag-source" });
 
     const topics = await listKnowledgeTopics(config);
     expect(topics).toHaveLength(1);
@@ -141,9 +150,9 @@ describe("knowledge topic and upload flow", () => {
       methodologyPath: "嘉合杉升新能源方法论.md",
       ready: false,
     });
-    const files = await listKnowledgeFiles(config, topic.id, "");
+    const files = await listKnowledgeFiles(config, topic.id, "evidence", "");
     expect(files.folders[0].name).toBe("报告");
-    storage.set(processingStatusPath(topic.id, relativePath), {
+    storage.set(processingStatusPath(topic.id, "evidence", relativePath), {
       body: JSON.stringify({
         version: 1,
         topicId: topic.id,
@@ -157,13 +166,25 @@ describe("knowledge topic and upload flow", () => {
       contentType: "application/json",
       etag: "status-etag",
     });
-    const nested = await listKnowledgeFiles(config, topic.id, "报告/");
+    const nested = await listKnowledgeFiles(config, topic.id, "evidence", "报告/");
     expect(nested.files[0].processing).toMatchObject({
       state: "failed",
       failureCode: "PROCESSING_FAILED",
       retryable: true,
     });
     expect(nested.files[0].processing).not.toHaveProperty("error");
+  });
+
+  it("hides topics that predate the role-tree storage layout", async () => {
+    const storage = installCosMock();
+    const visible = await createKnowledgeTopic(config, "新版专题");
+    const hidden = await createKnowledgeTopic(config, "旧测试专题");
+    removeTopicStorageLayout(storage, hidden.id);
+
+    await expect(listKnowledgeTopics(config)).resolves.toEqual([
+      expect.objectContaining({ id: visible.id, storageLayout: "role-trees-v1" }),
+    ]);
+    expect(storage.has(`topics/${hidden.id}/topic.json`)).toBe(true);
   });
 
   it("deletes a mismatched upload and refuses registration", async () => {
@@ -196,14 +217,14 @@ describe("knowledge topic and upload flow", () => {
     });
 
     const versionBeforeDelete = (await readKnowledgeTopic(config, topic.id)).indexVersion;
-    await expect(deleteKnowledgeFile(config, topic.id, relativePath, undefined)).rejects.toThrow("文件名称确认不匹配");
-    await expect(deleteKnowledgeFile(config, topic.id, relativePath, " 年度总结.txt")).rejects.toThrow("文件名称确认不匹配");
-    await expect(deleteKnowledgeFile(config, topic.id, relativePath, "报告/年度总结.txt")).rejects.toThrow("文件名称确认不匹配");
-    expect(storage.has(sourcePath(topic.id, relativePath))).toBe(true);
+    await expect(deleteKnowledgeFile(config, topic.id, "evidence", relativePath, undefined)).rejects.toThrow("文件名称确认不匹配");
+    await expect(deleteKnowledgeFile(config, topic.id, "evidence", relativePath, " 年度总结.txt")).rejects.toThrow("文件名称确认不匹配");
+    await expect(deleteKnowledgeFile(config, topic.id, "evidence", relativePath, "报告/年度总结.txt")).rejects.toThrow("文件名称确认不匹配");
+    expect(storage.has(sourcePath(topic.id, "evidence", relativePath))).toBe(true);
     expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(versionBeforeDelete);
 
-    await expect(deleteKnowledgeFile(config, topic.id, relativePath, "年度总结.txt")).resolves.toMatchObject({ indexChanged: true });
-    expect(storage.has(sourcePath(topic.id, relativePath))).toBe(false);
+    await expect(deleteKnowledgeFile(config, topic.id, "evidence", relativePath, "年度总结.txt")).resolves.toMatchObject({ indexChanged: true });
+    expect(storage.has(sourcePath(topic.id, "evidence", relativePath))).toBe(false);
 
     await expect(deleteKnowledgeTopic(config, topic.id, "删除确认 ")).rejects.toThrow("专题名称确认不匹配");
     await expect(readKnowledgeTopic(config, topic.id)).resolves.toMatchObject({ name: "删除确认" });
@@ -232,7 +253,7 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "reference",
       uploadedBy: "汪旭",
     });
-    expect(storage.has(processingStatusPath(topic.id, reference.path))).toBe(false);
+    expect(storage.has(processingStatusPath(topic.id, "reference", reference.path))).toBe(false);
     expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(1);
 
     const methodology = await createUpload(config, {
@@ -278,8 +299,8 @@ describe("knowledge topic and upload flow", () => {
       uploadedBy: "汪旭",
     });
 
-    const memberFiles = await listKnowledgeFiles(config, topic.id, "");
-    const adminFiles = await listKnowledgeFiles(config, topic.id, "", null, { includeMethodology: true });
+    const memberFiles = await listKnowledgeFiles(config, topic.id, "methodology", "");
+    const adminFiles = await listKnowledgeFiles(config, topic.id, "methodology", "", null, { includeMethodology: true });
     expect(memberFiles.files.some((file) => file.knowledgeRole === "methodology")).toBe(false);
     expect(adminFiles.files.filter((file) => file.knowledgeRole === "methodology")).toHaveLength(1);
     expect(adminFiles.files.find((file) => file.knowledgeRole === "methodology")).toMatchObject({
@@ -287,11 +308,12 @@ describe("knowledge topic and upload flow", () => {
       name: methodology.path,
       etag: "etag-method-new",
     });
-    await expect(createDownloadUrl(config, topic.id, methodology.path)).rejects.toThrow("无权下载");
-    await expect(createDownloadUrl(config, topic.id, methodology.path, { includeMethodology: true })).resolves.toMatchObject({ name: methodology.path });
+    await expect(createDownloadUrl(config, topic.id, "methodology", methodology.path)).rejects.toThrow("无权下载");
+    await expect(createDownloadUrl(config, topic.id, "methodology", methodology.path, { includeMethodology: true })).resolves.toMatchObject({ name: methodology.path });
 
     const patched = await patchKnowledgeFile(config, {
       topicId: topic.id,
+      knowledgeRole: "reference",
       relativePath: reference.path,
       incorporated: true,
       updatedBy: "汪旭",
@@ -328,7 +350,7 @@ describe("knowledge topic and upload flow", () => {
     await upload("研报/子目录/嵌套.pdf", "reference");
     await upload("研报/子目录/时效资料.pdf", "evidence");
 
-    const before = await listKnowledgeFiles(config, topic.id, "");
+    const before = await listKnowledgeFiles(config, topic.id, "reference", "");
     expect(before.folders).toContainEqual(expect.objectContaining({
       path: "研报/",
       referenceCount: 2,
@@ -343,9 +365,9 @@ describe("knowledge topic and upload flow", () => {
       updatedBy: "汪旭",
     })).resolves.toMatchObject({ matchedCount: 2, changedCount: 2, skippedCount: 0, failedCount: 0 });
 
-    const after = await listKnowledgeFiles(config, topic.id, "");
+    const after = await listKnowledgeFiles(config, topic.id, "reference", "");
     expect(after.folders).toContainEqual(expect.objectContaining({ path: "研报/", referenceCount: 2, incorporatedCount: 2 }));
-    const nested = await listKnowledgeFiles(config, topic.id, "研报/子目录/");
+    const nested = await listKnowledgeFiles(config, topic.id, "reference", "研报/子目录/");
     expect(nested.folders).toHaveLength(0);
     expect(nested.files).toContainEqual(expect.objectContaining({ path: "研报/子目录/嵌套.pdf", incorporatedAt: expect.any(String) }));
     expect(nested.files).not.toContainEqual(expect.objectContaining({ path: "研报/子目录/时效资料.pdf", incorporatedAt: expect.any(String) }));
@@ -368,7 +390,7 @@ describe("knowledge topic and upload flow", () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const key = decodeURIComponent(new URL(request.url).pathname.replace(/^\//, "")).replace(/^ai-knowledge-base\//, "");
-      if (request.method === "PUT" && key === `topics/${topic.id}/file-meta/研报/子目录/嵌套.pdf.json`) {
+      if (request.method === "PUT" && key === `topics/${topic.id}/file-meta/reference/研报/子目录/嵌套.pdf.json`) {
         return new Response("", { status: 500 });
       }
       return mockFetch(input, init);
@@ -380,7 +402,7 @@ describe("knowledge topic and upload flow", () => {
       updatedBy: "汪旭",
     })).resolves.toMatchObject({ matchedCount: 2, changedCount: 1, skippedCount: 0, failedCount: 1 });
     globalThis.fetch = mockFetch;
-    const partial = await listKnowledgeFiles(config, topic.id, "");
+    const partial = await listKnowledgeFiles(config, topic.id, "reference", "");
     expect(partial.folders).toContainEqual(expect.objectContaining({ path: "研报/", referenceCount: 2, incorporatedCount: 1 }));
   });
 
@@ -388,17 +410,17 @@ describe("knowledge topic and upload flow", () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "异常状态");
     const methodologyPath = brandedMethodologyPath(topic.name);
-    storage.set(sourcePath(topic.id, methodologyPath), {
+    storage.set(sourcePath(topic.id, "methodology", methodologyPath), {
       body: "# 不应泄露",
       contentType: "text/markdown",
       etag: "etag-orphan-method",
     });
 
-    const memberFiles = await listKnowledgeFiles(config, topic.id, "");
-    const adminFiles = await listKnowledgeFiles(config, topic.id, "", null, { includeMethodology: true });
+    const memberFiles = await listKnowledgeFiles(config, topic.id, "methodology", "");
+    const adminFiles = await listKnowledgeFiles(config, topic.id, "methodology", "", null, { includeMethodology: true });
     expect(memberFiles.files).toHaveLength(0);
     expect(adminFiles.files[0]).toMatchObject({ path: methodologyPath, knowledgeRole: "methodology" });
-    await expect(createDownloadUrl(config, topic.id, methodologyPath)).rejects.toThrow("无权下载");
+    await expect(createDownloadUrl(config, topic.id, "methodology", methodologyPath)).rejects.toThrow("无权下载");
   });
 
   it("keeps historical topics on the legacy methodology path without migration", async () => {
@@ -425,30 +447,37 @@ describe("knowledge topic and upload flow", () => {
       uploadedBy: "汪旭",
     });
 
-    expect(storage.has(sourcePath(topic.id, METHODOLOGY_PATH))).toBe(true);
-    expect(storage.has(sourcePath(topic.id, brandedMethodologyPath(topic.name)))).toBe(false);
-    const memberFiles = await listKnowledgeFiles(config, topic.id, "");
+    expect(storage.has(sourcePath(topic.id, "methodology", METHODOLOGY_PATH))).toBe(true);
+    expect(storage.has(sourcePath(topic.id, "methodology", brandedMethodologyPath(topic.name)))).toBe(false);
+    const memberFiles = await listKnowledgeFiles(config, topic.id, "methodology", "");
     expect(memberFiles.files).toHaveLength(0);
-    await expect(createDownloadUrl(config, topic.id, METHODOLOGY_PATH)).rejects.toThrow("无权下载");
+    await expect(createDownloadUrl(config, topic.id, "methodology", METHODOLOGY_PATH)).rejects.toThrow("无权下载");
   });
 
-  it("reserves both the active and legacy methodology paths from ordinary uploads", async () => {
-    installCosMock();
+  it("keeps methodology names independent across physical role trees", async () => {
+    const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "路径保护");
-    await expect(createUpload(config, {
+    const evidence = await createUpload(config, {
       topicId: topic.id,
       relativePath: topic.methodologyPath,
       size: 1,
       contentType: "text/markdown",
       knowledgeRole: "evidence",
-    })).rejects.toThrow("由专题方法论保留");
-    await expect(createUpload(config, {
+    });
+    storage.set(tempUploadPath(evidence.uploadId), { body: "x", contentType: "text/markdown", etag: "etag-evidence-method-name" });
+    await completeUpload(config, {
       topicId: topic.id,
-      relativePath: METHODOLOGY_PATH,
+      uploadId: evidence.uploadId,
+      relativePath: evidence.path,
       size: 1,
       contentType: "text/markdown",
       knowledgeRole: "evidence",
-    })).rejects.toThrow("由专题方法论保留");
+      uploadedBy: "汪旭",
+    });
+
+    expect(sourcePath(topic.id, "evidence", evidence.path)).not.toBe(sourcePath(topic.id, "methodology", evidence.path));
+    expect(storage.has(sourcePath(topic.id, "evidence", evidence.path))).toBe(true);
+    expect(storage.has(sourcePath(topic.id, "methodology", evidence.path))).toBe(false);
   });
 
   it("rejects path separators in topic names and keeps the stored methodology path on rename", async () => {
@@ -465,7 +494,7 @@ describe("knowledge topic and upload flow", () => {
     await expect(updateKnowledgeTopic(config, topic.id, "具身/智能")).rejects.toThrow("不能包含");
   });
 
-  it("rejects unknown roles and cross-role overwrites instead of stranding the index", async () => {
+  it("rejects unknown roles and allows the same logical path in isolated role trees", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "角色校验");
     await expect(createUpload(config, {
@@ -505,7 +534,7 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "reference",
     });
     storage.set(tempUploadPath(reference.uploadId), { body: "new", contentType: "application/pdf", etag: "etag-reference" });
-    await expect(completeUpload(config, {
+    await completeUpload(config, {
       topicId: topic.id,
       uploadId: reference.uploadId,
       relativePath: reference.path,
@@ -513,8 +542,18 @@ describe("knowledge topic and upload flow", () => {
       contentType: "application/pdf",
       knowledgeRole: "reference",
       uploadedBy: "汪旭",
-    })).rejects.toThrow("不能直接变更资料类型");
+    });
     expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(versionBefore);
+    expect(storage.has(sourcePath(topic.id, "evidence", "报告.pdf"))).toBe(true);
+    expect(storage.has(sourcePath(topic.id, "reference", "报告.pdf"))).toBe(true);
+    await expect(listKnowledgeFiles(config, topic.id, "evidence", "")).resolves.toMatchObject({
+      role: "evidence",
+      files: [expect.objectContaining({ path: "报告.pdf", knowledgeRole: "evidence" })],
+    });
+    await expect(listKnowledgeFiles(config, topic.id, "reference", "")).resolves.toMatchObject({
+      role: "reference",
+      files: [expect.objectContaining({ path: "报告.pdf", knowledgeRole: "reference" })],
+    });
   });
 });
 
@@ -550,7 +589,7 @@ describe("administrator API enforcement", () => {
       uploadedBy: "汪旭",
     });
     const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
-    const url = `https://example.com/api/drive/list?topicId=${topic.id}&prefix=`;
+    const url = `https://example.com/api/drive/list?topicId=${topic.id}&role=evidence&prefix=`;
 
     const json = await listFiles({
       request: new Request(url, { headers: { cookie } }),
@@ -594,7 +633,7 @@ describe("administrator API enforcement", () => {
     installCosMock();
     const topic = await createKnowledgeTopic(config, "空目录");
     const updates: Array<{ stage: string; state: string; completed?: number; total?: number }> = [];
-    const result = await listKnowledgeFiles(config, topic.id, "", null, {
+    const result = await listKnowledgeFiles(config, topic.id, "evidence", "", null, {
       onProgress: (update) => updates.push(update),
     });
     expect(result.files).toEqual([]);
@@ -616,7 +655,7 @@ describe("administrator API enforcement", () => {
     };
     const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
     const response = await listFiles({
-      request: new Request(`https://example.com/api/drive/list?topicId=${topic.id}&prefix=`, {
+      request: new Request(`https://example.com/api/drive/list?topicId=${topic.id}&role=evidence&prefix=`, {
         headers: { cookie, accept: "text/event-stream" },
       }),
       env,
@@ -681,25 +720,28 @@ describe("administrator API enforcement", () => {
     const body = await response.json() as {
       ok: boolean;
       files: Array<{ path: string }>;
-      failures: Array<{ relativePath: string; code: string; message: string }>;
+      failures: Array<{ relativePath: string; code: string; requestId: string; message: string }>;
     };
     expect(response.status).toBe(200);
     expect(body.ok).toBe(false);
     expect(body.files).toEqual([expect.objectContaining({ path: "valid.txt" })]);
     expect(body.failures).toEqual([
-      {
+      expect.objectContaining({
         relativePath: "missing.txt",
         code: "FILE_REGISTRATION_FAILED",
         retryable: true,
         message: "文件登记失败，请重新上传该文件。",
-      },
-      {
+        requestId: expect.any(String),
+      }),
+      expect.objectContaining({
         relativePath: "",
         code: "FILE_REGISTRATION_FAILED",
         retryable: true,
         message: "文件登记失败，请重新上传该文件。",
-      },
+        requestId: expect.any(String),
+      }),
     ]);
+    expect(body.failures[0].requestId).toBe(body.failures[1].requestId);
     expect(JSON.stringify(body)).not.toContain("COS");
   });
 });
@@ -744,6 +786,15 @@ function makeTopicLegacy(storage: Map<string, Stored>, topicId: string): void {
   if (!stored) throw new Error("topic fixture missing");
   const topic = JSON.parse(stored.body) as Record<string, unknown>;
   delete topic.methodologyPath;
+  storage.set(key, { ...stored, body: JSON.stringify(topic, null, 2) });
+}
+
+function removeTopicStorageLayout(storage: Map<string, Stored>, topicId: string): void {
+  const key = `topics/${topicId}/topic.json`;
+  const stored = storage.get(key);
+  if (!stored) throw new Error("topic fixture missing");
+  const topic = JSON.parse(stored.body) as Record<string, unknown>;
+  delete topic.storageLayout;
   storage.set(key, { ...stored, body: JSON.stringify(topic, null, 2) });
 }
 

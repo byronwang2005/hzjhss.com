@@ -15,16 +15,19 @@ export const onRequestGet: PagesFunction<DriveEnv> = async ({ request, env }) =>
   if (session instanceof Response) return session;
   const url = new URL(request.url);
   const topicId = url.searchParams.get("topicId");
+  const role = url.searchParams.get("role");
   const prefix = url.searchParams.get("prefix") || "";
   const cursor = url.searchParams.get("cursor");
   const includeMethodology = isDriveAdmin(session.displayName);
+  if (!role) return errorResponse(new Error("请指定资料类型"));
   if (request.headers.get("accept")?.includes("text/event-stream")) {
-    return streamFileList(request, env, { topicId, prefix, cursor, includeMethodology });
+    return streamFileList(request, env, { topicId, role, prefix, cursor, includeMethodology });
   }
   try {
     const response = await listKnowledgeFiles(
       getDriveConfig(env),
       topicId,
+      role,
       prefix,
       cursor,
       { includeMethodology },
@@ -38,6 +41,7 @@ function streamFileList(
   env: DriveEnv,
   input: {
     topicId: string | null;
+    role: string | null;
     prefix: string;
     cursor: string | null;
     includeMethodology: boolean;
@@ -54,6 +58,7 @@ function streamFileList(
         const result = await listKnowledgeFiles(
           getDriveConfig(env),
           input.topicId,
+          input.role,
           input.prefix,
           input.cursor,
           {

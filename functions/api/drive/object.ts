@@ -8,7 +8,7 @@ export const onRequestDelete: PagesFunction<DriveEnv> = async ({ request, env, w
     const session = await readDriveAdminSession({ request, env });
     if (session instanceof Response) return session;
     const body = await readJsonBody(request);
-    const result = await deleteKnowledgeFile(getDriveConfig(env), body.topicId, body.path, body.confirmName);
+    const result = await deleteKnowledgeFile(getDriveConfig(env), body.topicId, body.knowledgeRole, body.path, body.confirmName);
     if (result.indexChanged) waitUntil(notifyIndexer(env, { topicId: String(body.topicId) }));
     return jsonResponse({ ok: true });
   } catch (error) { return errorResponse(error); }
@@ -21,6 +21,7 @@ export const onRequestPatch: PagesFunction<DriveEnv> = async ({ request, env, wa
     const body = await readJsonBody(request);
     const result = await patchKnowledgeFile(getDriveConfig(env), {
       topicId: body.topicId,
+      knowledgeRole: body.knowledgeRole,
       relativePath: body.path,
       incorporated: body.incorporated,
       reportDate: body.reportDate,

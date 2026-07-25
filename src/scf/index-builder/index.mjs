@@ -14,13 +14,13 @@ export async function main(event, context) {
   const validSets = [];
   for (const key of chunkKeys) {
     const set = await getJson(key);
-    if (!set?.path || !set?.sourceEtag || !Array.isArray(set.chunks)) continue;
+    if (!set?.path || !set?.sourceEtag || !["methodology", "evidence"].includes(set.knowledgeRole) || !Array.isArray(set.chunks)) continue;
     const [current, metadata] = await Promise.all([
-      head(sourceKey(topicId, set.path)),
-      getJson(fileMetaKey(topicId, set.path)),
+      head(sourceKey(topicId, set.knowledgeRole, set.path)),
+      getJson(fileMetaKey(topicId, set.knowledgeRole, set.path)),
     ]);
     const knowledgeRole = knowledgeRoleForPath(metadata?.knowledgeRole, set.path, topic.methodologyPath);
-    if (current?.etag === set.sourceEtag && knowledgeRole !== "reference") {
+    if (current?.etag === set.sourceEtag && knowledgeRole === set.knowledgeRole) {
       validSets.push({ ...set, knowledgeRole, reportDate: metadata?.reportDate });
     }
   }
@@ -52,7 +52,7 @@ export async function main(event, context) {
   }
   await putJson(`${ROOT_PREFIX}topics/${topicId}/index/manifest.json`, { version: 1, topicId, generatedAt: now, indexVersion, fileCount: validSets.length, chunkCount: chunks.length, sourceEtags: validSets.map((set) => ({ path: set.path, etag: set.sourceEtag })) });
   await Promise.all(validSets.map(async (set) => {
-      const statusKey = `${ROOT_PREFIX}topics/${topicId}/processed/${set.path}.__file__/status.json`;
+      const statusKey = `${ROOT_PREFIX}topics/${topicId}/processed/${set.knowledgeRole}/${set.path}.__file__/status.json`;
       const status = await getJson(statusKey);
       if (status?.sourceEtag === set.sourceEtag) await putJson(statusKey, { ...status, state: "ready", updatedAt: now });
   }));
@@ -60,7 +60,7 @@ export async function main(event, context) {
 }
 
 async function snapshotIsCurrent(topicId, sets) {
-  const checks = await Promise.all(sets.map(async (set) => (await head(sourceKey(topicId, set.path)))?.etag === set.sourceEtag));
+  const checks = await Promise.all(sets.map(async (set) => (await head(sourceKey(topicId, set.knowledgeRole, set.path)))?.etag === set.sourceEtag));
   return checks.every(Boolean);
 }
 
