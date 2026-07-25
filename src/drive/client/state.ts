@@ -1,8 +1,8 @@
 import type { FileListResponse, KnowledgeRole, TopicSummary, UserRole } from "../shared/contracts";
+import type { UploadBatchState } from "./file-progress";
 
 export type Mode = "login" | "overview" | "topic" | "create";
 export type TopicView = "qa" | "files";
-export type UploadPhase = "preparing" | "uploading" | "registering";
 export type ThemeName = "light" | "dark";
 export type EntryState =
   | "checking-session"
@@ -55,14 +55,8 @@ export interface DriveClientState {
   topicName: string;
   theme: ThemeName;
   deleteConfirmation: DeleteConfirmation | null;
-  upload: {
-    active: boolean;
-    phase: UploadPhase;
-    name: string;
-    percent: number;
-    overallPercent: number;
-    total: number;
-  };
+  uploadBatch: UploadBatchState | null;
+  expandedFilePath: string | null;
 }
 
 export const state: DriveClientState = {
@@ -86,5 +80,6 @@ export const state: DriveClientState = {
   topicName: "",
   theme: window.jhssTheme.getResolvedTheme(),
   deleteConfirmation: null,
-  upload: { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 },
+  uploadBatch: null,
+  expandedFilePath: null,
 };

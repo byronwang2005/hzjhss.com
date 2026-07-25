@@ -7,7 +7,7 @@ export const CLIENT_TIMING = {
   entrySlowMs: 8_000,
   entryTimeoutMs: 20_000,
   fileRefreshMs: 10_000,
-  uploadRegistrationTimeoutMs: 60_000,
+  activeFileRefreshMs: 3_000,
 } as const;
 
 export const PROCESSING_STALE_AFTER_MS: Partial<Record<ProcessingState, number>> = {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getAiConfig, getDriveConfig, KNOWLEDGE_ROOT_PREFIX, type DriveEnv } from "../src/drive/server/config";
 import {
   brandedMethodologyPath,
@@ -22,6 +22,7 @@ import {
 import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/server/session";
 import { jsonResponse } from "../src/drive/server/http";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
+import { onRequestPost as uploadComplete } from "../functions/api/drive/upload-complete";
 
 const env: DriveEnv = {
   COS_SECRET_ID: "id",
@@ -35,7 +36,10 @@ const env: DriveEnv = {
 const config = getDriveConfig(env);
 const originalFetch = globalThis.fetch;
 
-afterEach(() => { globalThis.fetch = originalFetch; });
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  vi.restoreAllMocks();
+});
 
 describe("new COS namespace and policies", () => {
   it("round-trips the signed session cookie and preserves Set-Cookie headers", async () => {
@@ -136,6 +140,27 @@ describe("knowledge topic and upload flow", () => {
     });
     const files = await listKnowledgeFiles(config, topic.id, "");
     expect(files.folders[0].name).toBe("报告");
+    storage.set(processingStatusPath(topic.id, relativePath), {
+      body: JSON.stringify({
+        version: 1,
+        topicId: topic.id,
+        path: relativePath,
+        sourceEtag: "etag-source",
+        state: "failed",
+        processingKind: "document-parse",
+        updatedAt: "2026-07-25T00:00:00.000Z",
+        error: "Secret upstream provider detail",
+      }),
+      contentType: "application/json",
+      etag: "status-etag",
+    });
+    const nested = await listKnowledgeFiles(config, topic.id, "报告/");
+    expect(nested.files[0].processing).toMatchObject({
+      state: "failed",
+      failureCode: "PROCESSING_FAILED",
+      retryable: true,
+    });
+    expect(nested.files[0].processing).not.toHaveProperty("error");
   });
 
   it("deletes a mismatched upload and refuses registration", async () => {
@@ -415,6 +440,71 @@ describe("administrator API enforcement", () => {
       env,
     } as never);
     expect(response.status).toBe(403);
+  });
+
+  it("returns per-file registration results without exposing internal failures", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "批量登记");
+    const valid = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "valid.txt",
+      size: 3,
+      contentType: "text/plain",
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(valid.uploadId), { body: "abc", contentType: "text/plain", etag: "etag-valid" });
+    const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
+    const response = await uploadComplete({
+      request: new Request("https://example.com/api/drive/upload-complete", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          topicId: topic.id,
+          files: [
+            {
+              uploadId: valid.uploadId,
+              relativePath: valid.path,
+              size: 3,
+              contentType: "text/plain",
+              knowledgeRole: "evidence",
+            },
+            {
+              uploadId: "u_abcdefghijklmnopqrstuvwx",
+              relativePath: "missing.txt",
+              size: 3,
+              contentType: "text/plain",
+              knowledgeRole: "evidence",
+            },
+            null,
+          ],
+        }),
+      }),
+      env,
+    } as never);
+    const body = await response.json() as {
+      ok: boolean;
+      files: Array<{ path: string }>;
+      failures: Array<{ relativePath: string; code: string; message: string }>;
+    };
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(false);
+    expect(body.files).toEqual([expect.objectContaining({ path: "valid.txt" })]);
+    expect(body.failures).toEqual([
+      {
+        relativePath: "missing.txt",
+        code: "FILE_REGISTRATION_FAILED",
+        retryable: true,
+        message: "文件登记失败，请重新上传该文件。",
+      },
+      {
+        relativePath: "",
+        code: "FILE_REGISTRATION_FAILED",
+        retryable: true,
+        message: "文件登记失败，请重新上传该文件。",
+      },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("COS");
   });
 });
 

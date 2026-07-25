@@ -12,12 +12,26 @@ import { repeat } from "lit/directives/repeat.js";
 import { renderIcon } from "./icons";
 import { transitionEntryState } from "./entry-flow";
 import "./qa-chat";
-import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse } from "../shared/contracts";
+import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse, UploadCompleteResponse } from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "./utils";
-import { api, ApiError, withTimeout } from "./api";
+import { api, ApiError } from "./api";
 import { state, type TopicView } from "./state";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
+import {
+  advanceFileTask,
+  batchCounts,
+  createUploadBatch,
+  elapsedLabel,
+  fileTaskPercent,
+  fileTaskStageLabel,
+  reconcileUploadBatch,
+  stepState,
+  taskSteps,
+  type FileTaskItem,
+  type FileTaskStage,
+  type UploadBatchState,
+} from "./file-progress";
 
 type UppyMeta = { relativePath?: string; pdfPages?: number; knowledgeRole?: KnowledgeRole };
 type UppyBody = Record<string, unknown>;
@@ -37,6 +51,8 @@ if (!rootElement) throw new Error("Missing [data-drive-root] mount element");
 const root = rootElement;
 
 let fileRefreshTimer: number | undefined;
+let fileProgressClockTimer: number | undefined;
+let uploadOperationActive = false;
 
 root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
@@ -159,6 +175,7 @@ async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void>
   state.listing = null;
   state.mode = "topic";
   renderApp();
+  syncFileProgressClock();
   if (state.topicView === "files") await loadFiles();
 }
 
@@ -175,16 +192,84 @@ async function loadFiles(background = false): Promise<void> {
     renderApp();
   }
   const listing = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(prefix)}`);
+  const batchSnapshot = state.uploadBatch?.topicId === topicId ? state.uploadBatch : null;
+  const batchListing = batchSnapshot?.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage))
+    ? await loadBatchStatusListing(topicId, batchSnapshot, batchSnapshot.prefix === prefix ? listing : null)
+    : listing;
   if (state.topic?.id !== topicId || state.prefix !== prefix || state.topicView !== "files") return;
   state.listing = listing;
+  if (state.uploadBatch === batchSnapshot) reconcileUploadBatch(batchSnapshot, topicId, batchListing);
   state.loading = false;
   renderApp();
-  if (listing.files.some((file) => processingDisplay(file).poll)) {
+  syncFileProgressClock();
+  const batchHasServerWork = state.uploadBatch?.topicId === topicId
+    && state.uploadBatch.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage));
+  if (listing.files.some((file) => processingDisplay(file).poll) || batchHasServerWork) {
     fileRefreshTimer = window.setTimeout(() => {
       fileRefreshTimer = undefined;
       if (state.mode === "topic" && state.topicView === "files") void loadFiles(true);
-    }, CLIENT_TIMING.fileRefreshMs);
+    }, batchHasServerWork ? CLIENT_TIMING.activeFileRefreshMs : CLIENT_TIMING.fileRefreshMs);
   }
+}
+
+async function loadBatchStatusListing(
+  topicId: string,
+  batch: UploadBatchState,
+  firstPage: FileListResponse | null,
+): Promise<FileListResponse> {
+  const files = [...(firstPage?.files || [])];
+  let cursor = firstPage?.nextCursor;
+  if (!firstPage) {
+    const page = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}`);
+    files.push(...page.files);
+    cursor = page.nextCursor;
+  }
+  const wantedPaths = new Set(batch.items.filter((item) => item.state === "active").map((item) => item.relativePath));
+  const foundPaths = new Set(files.map((file) => file.path));
+  while (cursor && [...wantedPaths].some((path) => !foundPaths.has(path))) {
+    const page = await api<FileListResponse>(
+      `/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}&cursor=${encodeURIComponent(cursor)}`,
+    );
+    files.push(...page.files);
+    page.files.forEach((file) => foundPaths.add(file.path));
+    cursor = page.nextCursor;
+  }
+  return {
+    prefix: batch.prefix,
+    folders: [],
+    files,
+    nextCursor: cursor || null,
+  };
+}
+
+function syncFileProgressClock(): void {
+  if (fileProgressClockTimer !== undefined) {
+    window.clearTimeout(fileProgressClockTimer);
+    fileProgressClockTimer = undefined;
+  }
+  const batch = state.uploadBatch;
+  if (!batch || batch.completedAt || !uploadBatchIsVisible(batch)) return;
+  fileProgressClockTimer = window.setTimeout(() => {
+    fileProgressClockTimer = undefined;
+    if (state.uploadBatch !== batch || batch.completedAt) return;
+    renderApp();
+    syncFileProgressClock();
+  }, 1_000);
+}
+
+function uploadBatchIsVisible(batch: UploadBatchState): boolean {
+  return state.mode === "topic"
+    && state.topicView === "files"
+    && state.topic?.id === batch.topicId
+    && state.uploadBatch === batch;
+}
+
+function renderUploadBatch(batch: UploadBatchState): void {
+  if (uploadBatchIsVisible(batch)) renderApp();
+}
+
+function setUploadBatchStatus(batch: UploadBatchState, message: string, tone: "neutral" | "success" | "danger"): void {
+  if (state.topic?.id === batch.topicId) setStatus(message, tone);
 }
 
 function handleInput(event: Event): void {
@@ -272,14 +357,26 @@ async function handleClick(event: MouseEvent): Promise<void> {
     state.mode = "overview";
     state.topic = null;
     renderApp();
+    syncFileProgressClock();
   } else if (action === "open-topic") {
     await openTopic(String(button.dataset.topicId));
   } else if (action === "topic-view") {
     state.topicView = button.dataset.view === "files" ? "files" : "qa";
     renderApp();
+    syncFileProgressClock();
     if (state.topicView === "files") await loadFiles();
   } else if (action === "file-role-view") {
     state.fileRoleView = normalizeKnowledgeRole(button.dataset.role);
+    state.expandedFilePath = null;
+    renderApp();
+  } else if (action === "toggle-file-batch") {
+    if (state.uploadBatch) {
+      state.uploadBatch.expanded = !state.uploadBatch.expanded;
+      renderApp();
+    }
+  } else if (action === "toggle-file-progress") {
+    const path = String(button.dataset.path || "");
+    state.expandedFilePath = state.expandedFilePath === path ? null : path;
     renderApp();
   } else if (action === "open-folder") {
     state.prefix = String(button.dataset.path || "");
@@ -312,7 +409,11 @@ async function handleClick(event: MouseEvent): Promise<void> {
   } else if (action === "cancel-delete") {
     closeDeleteConfirmation();
   } else if (action === "retry-file") {
-    await api("/process-retry", { method: "POST", body: { topicId: state.topic?.id, path: button.dataset.path } });
+    const path = String(button.dataset.path || "");
+    await api("/process-retry", { method: "POST", body: { topicId: state.topic?.id, path } });
+    if (state.uploadBatch && state.topic?.id === state.uploadBatch.topicId) {
+      advanceFileTask(state.uploadBatch, path, "queued");
+    }
     setStatus("已重新提交处理任务。", "success");
     await loadFiles();
   } else if (action === "toggle-incorporated") {
@@ -454,24 +555,60 @@ async function handleChange(event: Event): Promise<void> {
 
 async function uploadFiles(files: File[], pathForFile: (file: File) => string, knowledgeRole: KnowledgeRole): Promise<void> {
   if (!state.topic || state.role !== "admin") return;
+  if (uploadOperationActive) {
+    setStatus("已有文件正在上传，请等待当前上传完成。", "neutral");
+    return;
+  }
+  uploadOperationActive = true;
+  const topicId = state.topic.id;
+  const prefix = state.prefix;
   let uppy: Uppy<UppyMeta, UppyBody> | null = null;
+  let batch: UploadBatchState | null = null;
   try {
-    const prepared = [] as Array<{ file: File; relativePath: string; knowledgeRole: KnowledgeRole; pdfPages?: number }>;
-    for (const file of files) {
-      const relativePath = normalizeClientRelativePath(
-        knowledgeRole === "methodology" ? pathForFile(file) : `${state.prefix}${pathForFile(file)}`,
-      );
-      validateFileSizeAndType(file, relativePath);
-      if (knowledgeRole === "methodology" && !relativePath.toLowerCase().endsWith(".md")) throw new Error("专题方法论只支持 Markdown 文件");
-      prepared.push({
-        file,
-        relativePath,
-        knowledgeRole,
-        ...(knowledgeRole === "evidence" && relativePath.toLowerCase().endsWith(".pdf") ? { pdfPages: await pdfPageCount(file) } : {}),
-      });
+    const candidates = files.map((file) => ({
+      file,
+      relativePath: normalizeClientRelativePath(
+        knowledgeRole === "methodology" ? pathForFile(file) : `${prefix}${pathForFile(file)}`,
+      ),
+    }));
+    if (new Set(candidates.map((entry) => entry.relativePath)).size !== candidates.length) {
+      throw new Error("同一批次不能上传多个同名文件，请分开上传。");
     }
-    state.upload = { active: true, phase: "preparing", name: "准备上传...", percent: 0, overallPercent: 0, total: prepared.length };
-    renderApp();
+    batch = createUploadBatch(
+      topicId,
+      prefix,
+      knowledgeRole,
+      candidates.map(({ file, relativePath }) => ({ name: file.name, relativePath, size: file.size })),
+    );
+    state.uploadBatch = batch;
+    state.expandedFilePath = null;
+    renderUploadBatch(batch);
+    syncFileProgressClock();
+
+    const prepared = [] as Array<{ file: File; relativePath: string; knowledgeRole: KnowledgeRole; pdfPages?: number }>;
+    for (const { file, relativePath } of candidates) {
+      try {
+        validateFileSizeAndType(file, relativePath);
+        if (knowledgeRole === "methodology" && !relativePath.toLowerCase().endsWith(".md")) throw new Error("专题方法论只支持 Markdown 文件");
+        prepared.push({
+          file,
+          relativePath,
+          knowledgeRole,
+          ...(knowledgeRole === "evidence" && relativePath.toLowerCase().endsWith(".pdf") ? { pdfPages: await pdfPageCount(file) } : {}),
+        });
+      } catch (error) {
+        advanceFileTask(batch, relativePath, "failed", {
+          error: error instanceof Error ? error.message : "文件校验未通过。",
+          retryable: true,
+        });
+        renderUploadBatch(batch);
+      }
+    }
+    if (!prepared.length) {
+      setUploadBatchStatus(batch, "所选文件均未通过校验，请调整后重新上传。", "danger");
+      return;
+    }
+
     const signatures = new Map<string, UploadSignature>();
     const completed: Array<{ uploadId: string; relativePath: string; size: number; contentType: string; knowledgeRole: KnowledgeRole; pdfPages?: number }> = [];
     uppy = new Uppy<UppyMeta, UppyBody>({ autoProceed: false });
@@ -479,10 +616,13 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       endpoint: async (fileOrBundle: unknown) => {
         const file = (Array.isArray(fileOrBundle) ? fileOrBundle[0] : fileOrBundle) as DriveUppyFile;
         const data = file.data as Blob;
+        const relativePath = String(file.meta.relativePath || file.name);
+        advanceFileTask(batch!, relativePath, "authorizing");
+        renderUploadBatch(batch!);
         const signature = await api<UploadSignature>("/upload-url", {
           method: "POST",
           body: {
-            topicId: state.topic?.id,
+            topicId,
             relativePath: file.meta.relativePath,
             size: data.size,
             contentType: file.type || "application/octet-stream",
@@ -499,16 +639,13 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       headers: (file: DriveUppyFile) => signatures.get(file.id)?.requiredHeaders || { "content-type": file.type || "application/octet-stream" },
       getResponseData: () => ({}),
     });
-    state.upload = { ...state.upload, phase: "uploading", name: prepared[0]?.relativePath || "上传文件" };
-    renderApp();
     uppy.on("upload-progress", (file, progress) => {
       if (!file || !progress.bytesTotal) return;
-      state.upload = { ...state.upload, name: String(file.meta.relativePath || file.name), percent: Math.round(progress.bytesUploaded / progress.bytesTotal * 100) };
-      renderApp();
-    });
-    uppy.on("progress", (overallPercent) => {
-      state.upload = { ...state.upload, overallPercent };
-      renderApp();
+      advanceFileTask(batch!, String(file.meta.relativePath || file.name), "uploading", {
+        bytesUploaded: progress.bytesUploaded,
+        bytesTotal: progress.bytesTotal,
+      });
+      renderUploadBatch(batch!);
     });
     uppy.on("upload-success", (file) => {
       if (!file) return;
@@ -523,6 +660,11 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
         knowledgeRole: signature.knowledgeRole,
         ...(file.meta.pdfPages ? { pdfPages: file.meta.pdfPages } : {}),
       });
+      advanceFileTask(batch!, signature.path, "registering", {
+        bytesUploaded: data.size,
+        bytesTotal: data.size,
+      });
+      renderUploadBatch(batch!);
     });
     for (const entry of prepared) uppy.addFile({
       name: entry.file.name,
@@ -531,30 +673,64 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       meta: { relativePath: entry.relativePath, pdfPages: entry.pdfPages, knowledgeRole: entry.knowledgeRole },
     });
     const result = await uppy.upload();
-    if (result?.failed?.length) throw new Error(`${result.failed.length} 个文件上传失败`);
-    if (completed.length !== prepared.length) throw new Error(`仅完成 ${completed.length}/${prepared.length} 个文件上传`);
-    state.upload = { ...state.upload, phase: "registering", name: "正在登记文件...", percent: 100, overallPercent: 100 };
-    renderApp();
-    await withTimeout(
-      api("/upload-complete", { method: "POST", body: { topicId: state.topic.id, files: completed } }),
-      CLIENT_TIMING.uploadRegistrationTimeoutMs,
-      "文件登记超时，请稍后重试",
+    for (const failed of result?.failed || []) {
+      advanceFileTask(batch, String(failed.meta.relativePath || failed.name), "failed", {
+        error: "上传未完成，请检查网络后重新上传。",
+        retryable: true,
+      });
+    }
+    if (!completed.length) {
+      setUploadBatchStatus(batch, "文件上传未完成，请检查网络后重试。", "danger");
+      return;
+    }
+
+    const registration = await api<UploadCompleteResponse>("/upload-complete", {
+      method: "POST",
+      body: { topicId, files: completed },
+    });
+    for (const file of registration.files) {
+      advanceFileTask(
+        batch,
+        file.path,
+        file.knowledgeRole === "reference" ? "archived" : "queued",
+        { sourceEtag: file.etag },
+      );
+    }
+    for (const failure of registration.failures) {
+      advanceFileTask(batch, failure.relativePath, "failed", {
+        error: failure.message,
+        retryable: failure.retryable,
+      });
+    }
+    const counts = batchCounts(batch);
+    setUploadBatchStatus(
+      batch,
+      counts.failed
+        ? `${counts.failed} 个文件未完成，其他文件将继续处理。`
+        : knowledgeRole === "reference"
+          ? `已归档 ${registration.files.length} 份研报原件。`
+          : `已登记 ${registration.files.length} 份资料，后台正在继续处理。`,
+      counts.failed ? "danger" : "success",
     );
-    state.upload = { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 };
-    setStatus(
-      knowledgeRole === "reference"
-        ? `已上传 ${completed.length} 份研报原件。`
-        : knowledgeRole === "methodology"
-          ? "专题方法论已上传，正在建立索引。"
-          : `已上传 ${completed.length} 个时效资料，腾讯云正在异步处理。`,
-      "success",
-    );
-    await loadFiles();
+    if (state.topic?.id === topicId && state.topicView === "files") await loadFiles();
   } catch (error) {
-    state.upload = { active: false, phase: "preparing", name: "", percent: 0, overallPercent: 0, total: 0 };
-    showError(error);
+    if (batch) {
+      for (const item of batch.items.filter((entry) => entry.state === "active")) {
+        advanceFileTask(batch, item.relativePath, "failed", {
+          error: error instanceof Error && error.message.includes("超时")
+            ? "文件登记超时，请重新上传该文件。"
+            : "上传流程未完成，请重试。",
+          retryable: true,
+        });
+      }
+      setUploadBatchStatus(batch, "部分文件未完成，请在处理中心查看并重试。", "danger");
+    } else {
+      showError(error);
+    }
   } finally {
     uppy?.destroy();
+    uploadOperationActive = false;
+    syncFileProgressClock();
   }
 }
 
@@ -811,6 +987,7 @@ function renderFiles(): TemplateResult {
   const roleFiles = listing ? filesForKnowledgeRole(listing.files, role) : [];
   const methodologyExists = Boolean(listing?.files.some((file) => file.knowledgeRole === "methodology"));
   const uploadLabel = role === "methodology" && methodologyExists ? "替换专题方法论" : presentation.uploadLabel;
+  const uploadBatch = state.uploadBatch?.topicId === state.topic?.id ? state.uploadBatch : null;
   return html`
     <section class=${`drive-tab-panel drive-files-panel is-${role}`}>
       <div class=${`drive-file-role-tabs${state.role === "admin" ? "" : " is-two-column"}`} role="tablist" aria-label="资料类型">
@@ -846,7 +1023,7 @@ function renderFiles(): TemplateResult {
         <input data-reference-input type="file" multiple hidden>
         <input data-evidence-input type="file" multiple hidden>
         <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
-        ${state.upload.active ? renderUploadProgress() : nothing}
+        ${uploadBatch ? renderFileProcessingCenter(uploadBatch) : nothing}
         ${listing ? renderFileList(listing, roleFiles, presentation) : renderLoading()}
         ${state.role === "admin" && !state.prefix
           ? html`
@@ -913,34 +1090,160 @@ function renderFileList(listing: FileListResponse, files: KnowledgeFile[], prese
 }
 
 function renderFileRow(file: KnowledgeFile): TemplateResult {
-  const processing = processingDisplay(file);
-  const presentation = FILE_ROLE_PRESENTATION[file.knowledgeRole];
+  const processing = file.knowledgeRole === "reference" ? null : processingDisplay(file);
   const displayName = methodologyDisplayName(file);
-  const status = file.knowledgeRole === "reference"
-    ? file.incorporatedAt ? "已纳入方法论" : "待纳入方法论"
-    : file.knowledgeRole === "methodology"
-      ? processing.label
-      : `${processing.label}${file.reportDate ? ` · ${file.reportDate}` : ""}`;
-  return html`<div class=${`drive-file-row is-${file.knowledgeRole}`} role="row">
-    <span class="drive-file-name" role="cell" data-label="名称">
-      <span class="drive-file-type-icon">${renderIcon(fileIconName(displayName))}</span>
-      <span class="drive-file-name-copy"><strong>${displayName}</strong><small class=${`drive-file-role-badge is-${file.knowledgeRole}`}>${presentation.label}</small></span>
-    </span>
-    <span role="cell" data-label="大小">${formatBytes(file.size)}</span>
-    <span role="cell" data-label="状态" title=${file.processing?.error || ""}>${status}</span>
-    <span role="cell" data-label="更新">${formatDate(file.uploadedAt || file.lastModified)}</span>
-    <span class="drive-row-actions" role="cell" data-label="操作">
-    ${state.role === "admin" && file.knowledgeRole === "reference" ? html`<button class="drive-table-action" type="button" data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>${renderIcon(file.incorporatedAt ? "x-circle" : "check")} ${file.incorporatedAt ? "取消纳入" : "标记纳入"}</button>` : nothing}
-    ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`<button class="drive-table-action" type="button" data-action="edit-report-date" data-path=${file.path} data-report-date=${file.reportDate || ""}>${renderIcon("calendar-dots", "duotone")}日期</button>` : nothing}
-    ${state.role === "admin" && file.knowledgeRole !== "reference" && processing.retryable ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}
-    <button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button>
-    ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`<button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${displayName}>${renderIcon("trash")}删除</button>` : nothing}
-  </span></div>`;
+  const stage: FileTaskStage = processing?.stage || "archived";
+  const status = processing?.label || "已归档";
+  const detail = processing?.detail || (file.incorporatedAt ? "研报原件已归档，并已纳入专题方法论。" : "研报原件已归档，当前尚未纳入专题方法论。");
+  const tone = processing?.tone || "success";
+  const expanded = state.expandedFilePath === file.path;
+  return html`
+    <div class=${`drive-file-row is-${file.knowledgeRole}`} role="row">
+      <span class="drive-file-name" role="cell" data-label="名称">
+        <span class="drive-file-type-icon">${renderIcon(fileIconName(displayName))}</span>
+        <span class="drive-file-name-copy"><strong title=${displayName}>${displayName}</strong></span>
+      </span>
+      <span role="cell" data-label="大小">${formatBytes(file.size)}</span>
+      <span role="cell" data-label="状态">
+        <button
+          class=${`drive-file-status is-${tone}`}
+          type="button"
+          data-action="toggle-file-progress"
+          data-path=${file.path}
+          aria-expanded=${String(expanded)}
+        >
+          <span class="drive-file-status-copy"><strong>${status}</strong><small>${file.reportDate || (file.knowledgeRole === "reference" ? file.incorporatedAt ? "已纳入方法论" : "待纳入方法论" : "")}</small></span>
+          <span class="drive-file-status-nodes" aria-hidden="true">
+            ${taskSteps(file.knowledgeRole).map((step) => {
+              const stateName = stepState(stage, step.stage, stage === "failed" ? "processing" : undefined);
+              return html`<i class=${`is-${stateName}`}></i>`;
+            })}
+          </span>
+          ${renderIcon(expanded ? "caret-up" : "caret-down")}
+        </button>
+      </span>
+      <span role="cell" data-label="更新">${formatDate(file.processing?.updatedAt || file.uploadedAt || file.lastModified)}</span>
+      <span class="drive-row-actions" role="cell" data-label="操作">
+        ${state.role === "admin" && file.knowledgeRole === "reference" ? html`<button class="drive-table-action" type="button" data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>${renderIcon(file.incorporatedAt ? "x-circle" : "check")} ${file.incorporatedAt ? "取消纳入" : "标记纳入"}</button>` : nothing}
+        ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`<button class="drive-table-action" type="button" data-action="edit-report-date" data-path=${file.path} data-report-date=${file.reportDate || ""}>${renderIcon("calendar-dots", "duotone")}日期</button>` : nothing}
+        ${state.role === "admin" && processing?.retryable ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}
+        <button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button>
+        ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`<button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${displayName}>${renderIcon("trash")}删除</button>` : nothing}
+      </span>
+    </div>
+    ${expanded ? renderFileProgressDetail(file, stage, status, detail) : nothing}
+  `;
 }
 
-function renderUploadProgress(): TemplateResult {
-  const label = state.upload.phase === "preparing" ? "准备上传..." : state.upload.phase === "registering" ? "正在登记文件..." : state.upload.name;
-  return html`<div class="drive-upload-progress"><div class="drive-upload-progress-item"><div class="drive-upload-progress-label"><strong>${label}</strong><span>${state.upload.percent}%</span></div><wa-progress-bar aria-label="当前文件上传进度" .value=${state.upload.percent}></wa-progress-bar></div>${state.upload.total > 1 ? html`<div class="drive-upload-progress-item"><div class="drive-upload-progress-label"><strong>总体进度</strong><span>${state.upload.overallPercent}% · ${state.upload.total} 个文件</span></div><wa-progress-bar aria-label="总体上传进度" .value=${state.upload.overallPercent}></wa-progress-bar></div>` : nothing}</div>`;
+function renderFileProcessingCenter(batch: UploadBatchState): TemplateResult {
+  const counts = batchCounts(batch);
+  const elapsed = elapsedLabel(batch.startedAt, batch.completedAt);
+  const allComplete = counts.complete === batch.items.length;
+  const title = allComplete
+    ? `本批次 ${batch.items.length} 份资料已处理完成`
+    : counts.active
+      ? `正在处理 ${batch.items.length} 份资料 · ${counts.complete} 份已完成`
+      : `${counts.failed} 份资料未完成`;
+  const summary = [
+    counts.active ? `${counts.active} 项进行中` : "",
+    counts.failed ? `${counts.failed} 项需处理` : "",
+    elapsed ? `用时 ${elapsed}` : "",
+  ].filter(Boolean).join(" · ");
+  return html`
+    <section
+      class=${`drive-file-processing-center${counts.failed ? " has-failure" : ""}${allComplete ? " is-complete" : ""}`}
+      aria-label="资料处理中心"
+      aria-busy=${String(counts.active > 0)}
+    >
+      <button class="drive-file-processing-head" type="button" data-action="toggle-file-batch" aria-expanded=${String(batch.expanded)}>
+        <span class=${`drive-file-processing-icon${counts.active ? " is-active" : ""}`}>
+          ${renderIcon(counts.failed ? "warning" : allComplete ? "check-circle" : "arrows-clockwise", counts.active ? "duotone" : "regular")}
+        </span>
+        <span class="drive-file-processing-title">
+          <strong>${title}</strong>
+          <small>${summary || "正在建立真实处理轨迹"}</small>
+        </span>
+        ${renderIcon(batch.expanded ? "caret-up" : "caret-down")}
+      </button>
+      <span class="drive-visually-hidden" role="status" aria-live="polite">${title}</span>
+      ${batch.expanded ? html`
+        <div class="drive-file-processing-body">
+          <ol class="drive-file-pipeline" aria-label="批次处理阶段">
+            ${taskSteps(batch.knowledgeRole).map((step) => renderBatchStep(batch, step.stage, step.label))}
+          </ol>
+          <div class="drive-file-task-list">
+            ${batch.items.map(renderBatchItem)}
+          </div>
+          ${counts.failed ? html`
+            <div class="drive-file-processing-recovery">
+              <span>失败项目不会影响其他资料继续处理。</span>
+              <button class="drive-control" type="button" data-action=${uploadActionForRole(batch.knowledgeRole)}>
+                ${renderIcon("upload-simple")}重新选择文件
+              </button>
+            </div>
+          ` : nothing}
+        </div>
+      ` : nothing}
+    </section>
+  `;
+}
+
+function renderBatchStep(batch: UploadBatchState, stage: FileTaskStage, label: string): TemplateResult {
+  const states = batch.items.map((item) => stepState(item.stage, stage, item.failedStage));
+  const complete = states.filter((value) => value === "complete").length;
+  const active = states.some((value) => value === "active");
+  const failed = states.some((value) => value === "failed");
+  const stateName = failed ? "failed" : active ? "active" : complete === batch.items.length ? "complete" : "pending";
+  return html`
+    <li class=${`is-${stateName}`}>
+      <span class="drive-file-pipeline-node">${stateName === "complete" ? renderIcon("check", "bold") : renderIcon(failed ? "warning" : "circle")}</span>
+      <span><strong>${label}</strong><small>${complete}/${batch.items.length}</small></span>
+    </li>
+  `;
+}
+
+function renderBatchItem(item: FileTaskItem): TemplateResult {
+  const percent = fileTaskPercent(item);
+  const elapsed = elapsedLabel(item.startedAt, item.completedAt);
+  return html`
+    <div class=${`drive-file-task-item is-${item.state}`}>
+      <span class="drive-file-task-mark">${renderIcon(item.state === "complete" ? "check-circle" : item.state === "failed" ? "warning" : "file-arrow-up", "duotone")}</span>
+      <span class="drive-file-task-copy">
+        <strong title=${item.name}>${item.name}</strong>
+        <small>${item.error || fileTaskStageLabel(item.stage, item.knowledgeRole)}${elapsed ? ` · ${elapsed}` : ""}</small>
+        ${item.stage === "uploading" ? html`<wa-progress-bar aria-label=${`${item.name} 上传进度`} .value=${percent}></wa-progress-bar>` : nothing}
+      </span>
+      <span class="drive-file-task-value">${item.stage === "uploading" ? `${percent}%` : item.state === "complete" ? "完成" : item.state === "failed" ? "需处理" : "进行中"}</span>
+    </div>
+  `;
+}
+
+function renderFileProgressDetail(file: KnowledgeFile, stage: FileTaskStage, status: string, detail: string): TemplateResult {
+  return html`
+    <div class="drive-file-progress-detail" role="row">
+      <div role="cell">
+        <div class="drive-file-progress-detail-head">
+          <span><strong>${status}</strong><small>${detail}</small></span>
+          <time>${formatDate(file.processing?.updatedAt || file.uploadedAt || file.lastModified)}</time>
+        </div>
+        <ol class="drive-file-progress-track" aria-label=${`${methodologyDisplayName(file)}处理轨迹`}>
+          ${taskSteps(file.knowledgeRole).map((step) => {
+            const stateName = stepState(stage, step.stage, stage === "failed" ? "processing" : undefined);
+            return html`
+              <li class=${`is-${stateName}`}>
+                <span>${stateName === "complete" ? renderIcon("check", "bold") : renderIcon(stateName === "failed" ? "warning" : "circle")}</span>
+                <strong>${step.label}</strong>
+              </li>
+            `;
+          })}
+        </ol>
+      </div>
+    </div>
+  `;
+}
+
+function uploadActionForRole(role: KnowledgeRole): string {
+  return role === "reference" ? "pick-reference" : role === "methodology" ? "pick-methodology" : "pick-evidence";
 }
 
 function tabButton(view: TopicView, label: string, icon: string): TemplateResult {

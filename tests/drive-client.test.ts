@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
+import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
 
 describe("knowledge entry flow", () => {
   it("keeps session checking, successful sign-in and authentication failure distinct", () => {
@@ -47,8 +48,8 @@ describe("knowledge client helpers", () => {
 
   it("stops polling files whose processing never started", () => {
     const file = { name: "a.pdf", path: "a.pdf", relativePath: "a.pdf", size: 1, lastModified: "2026-07-21T06:00:00.000Z", etag: "etag", knowledgeRole: "evidence" as const };
-    expect(processingDisplay(file)).toEqual({ label: "未开始处理", retryable: true, poll: false });
-    expect(processingDisplay({ ...file, processing: { state: "queued", sourceEtag: "etag", updatedAt: "2026-07-21T06:00:00.000Z" } }, Date.parse("2026-07-21T06:03:00.000Z"))).toEqual({ label: "处理未启动", retryable: true, poll: false });
+    expect(processingDisplay(file)).toMatchObject({ label: "未开始处理", stage: "failed", tone: "danger", retryable: true, poll: false });
+    expect(processingDisplay({ ...file, processing: { state: "queued", sourceEtag: "etag", updatedAt: "2026-07-21T06:00:00.000Z" } }, Date.parse("2026-07-21T06:03:00.000Z"))).toMatchObject({ label: "处理未启动", stage: "failed", tone: "danger", retryable: true, poll: false });
   });
 
   it("presents and filters the three knowledge roles", () => {
@@ -70,6 +71,71 @@ describe("knowledge client helpers", () => {
     expect(visibleFileRoles("viewer")).toEqual(["reference", "evidence"]);
     expect(visibleFileRole("viewer", "methodology")).toBe("evidence");
     expect(visibleFileRole("admin", "methodology")).toBe("methodology");
+  });
+});
+
+describe("file processing progress", () => {
+  it("keeps file stages monotonic while allowing an explicit failed retry", () => {
+    const batch = createUploadBatch("t_abcdefghijkl", "", "evidence", [
+      { name: "weekly.pdf", relativePath: "weekly.pdf", size: 100 },
+    ], 1_000);
+    expect(advanceFileTask(batch, "weekly.pdf", "uploading", { bytesUploaded: 40, bytesTotal: 100 }, 2_000)).toBe(true);
+    expect(fileTaskPercent(batch.items[0])).toBe(40);
+    expect(advanceFileTask(batch, "weekly.pdf", "validating", {}, 3_000)).toBe(false);
+    expect(batch.items[0].stage).toBe("uploading");
+    expect(advanceFileTask(batch, "weekly.pdf", "failed", { error: "上传未完成" }, 4_000)).toBe(true);
+    expect(batch.items[0].failedStage).toBe("uploading");
+    expect(stepState("failed", "uploading", batch.items[0].failedStage)).toBe("failed");
+    expect(advanceFileTask(batch, "weekly.pdf", "queued", {}, 5_000)).toBe(true);
+    expect(batch.items[0].stage).toBe("queued");
+  });
+
+  it("reconciles registered files with persisted processing states", () => {
+    const batch = createUploadBatch("t_abcdefghijkl", "", "evidence", [
+      { name: "weekly.pdf", relativePath: "weekly.pdf", size: 100 },
+    ], 1_000);
+    advanceFileTask(batch, "weekly.pdf", "registering", { sourceEtag: "etag-new" }, 2_000);
+    reconcileUploadBatch(batch, "t_abcdefghijkl", {
+      prefix: "",
+      folders: [],
+      nextCursor: null,
+      files: [{
+        name: "weekly.pdf",
+        path: "weekly.pdf",
+        relativePath: "weekly.pdf",
+        size: 100,
+        lastModified: "2026-07-25T00:00:00.000Z",
+        etag: "etag-old",
+        knowledgeRole: "evidence",
+        processing: { state: "ready", sourceEtag: "etag-old", updatedAt: "2026-07-25T00:00:10.000Z" },
+      }],
+    }, Date.parse("2026-07-25T00:00:10.000Z"));
+    expect(batch.items[0].stage).toBe("registering");
+    reconcileUploadBatch(batch, "t_abcdefghijkl", {
+      prefix: "",
+      folders: [],
+      nextCursor: null,
+      files: [{
+        name: "weekly.pdf",
+        path: "weekly.pdf",
+        relativePath: "weekly.pdf",
+        size: 100,
+        lastModified: "2026-07-25T00:00:00.000Z",
+        etag: "etag-new",
+        knowledgeRole: "evidence",
+        processing: { state: "ready", sourceEtag: "etag-new", updatedAt: "2026-07-25T00:00:10.000Z" },
+      }],
+    }, Date.parse("2026-07-25T00:00:10.000Z"));
+    expect(batch.items[0]).toMatchObject({ stage: "ready", state: "complete" });
+    expect(batchCounts(batch)).toEqual({ complete: 1, failed: 0, active: 0 });
+    expect(batch.expanded).toBe(false);
+  });
+
+  it("uses role-specific tracks and only exposes elapsed time after three seconds", () => {
+    expect(taskSteps("reference").map((step) => step.label)).toEqual(["校验", "上传", "登记", "归档"]);
+    expect(taskSteps("evidence").map((step) => step.label)).toEqual(["校验", "上传", "登记", "解析内容", "更新索引", "可问答"]);
+    expect(elapsedLabel(1_000, undefined, 3_999)).toBe("");
+    expect(elapsedLabel(1_000, undefined, 4_500)).toBe("3.5 秒");
   });
 });
 
@@ -112,16 +178,16 @@ describe("knowledge client surface", () => {
     expect(workspaceStyles).toMatch(/\.drive-file-row-head \{[\s\S]*?position: sticky;[\s\S]*?top: 0;/);
   });
 
-  it("validates supported formats, PDF pages and upload progress", () => {
+  it("validates supported formats, PDF pages and observable file progress", () => {
     expect(sharedPolicy).toContain('"png", "jpg", "jpeg", "bmp"');
     expect(sharedPolicy).toContain('"pdf", "doc", "docx", "ppt", "pptx"');
     expect(uploadPolicy).toContain("document.numPages > FILE_LIMITS.pdfPages");
     expect(source).toContain('uppy.on("upload-progress"');
-    expect(source).toContain('uppy.on("progress"');
-    expect(source).toContain('aria-label="总体上传进度"');
-    expect(source).toContain('phase: "registering"');
-    expect(source).toContain("文件登记超时，请稍后重试");
-    expect(source).toContain("completed.length !== prepared.length");
+    expect(source).toContain("createUploadBatch");
+    expect(source).toContain("renderFileProcessingCenter");
+    expect(source).toContain('aria-label="批次处理阶段"');
+    expect(source).toContain('api<UploadCompleteResponse>("/upload-complete"');
+    expect(source).toContain("registration.failures");
   });
 
   it("renders role tabs, contextual uploads and accessible table cells", () => {
@@ -135,6 +201,7 @@ describe("knowledge client surface", () => {
     expect(source).toContain('data-label="状态"');
     expect(source).toContain("替换专题方法论");
     expect(source).not.toContain(">上传周报<");
+    expect(source).not.toContain("drive-file-role-badge");
   });
 
   it("keeps a visual preflight shell and uses one background file refresh timer", () => {

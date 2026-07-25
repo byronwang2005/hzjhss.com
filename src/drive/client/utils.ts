@@ -1,4 +1,5 @@
 import type { KnowledgeFile, KnowledgeRole, ProcessingState, UserRole } from "../shared/contracts";
+import type { FileTaskStage } from "./file-progress";
 import { LEGACY_METHODOLOGY_PATH } from "../shared/methodology";
 import { PROCESSING_STALE_AFTER_MS } from "../shared/runtime";
 
@@ -102,33 +103,79 @@ export function fileIconName(name: string): string {
 
 export interface ProcessingDisplay {
   label: string;
+  detail: string;
+  stage: FileTaskStage;
+  tone: "neutral" | "active" | "success" | "danger";
   retryable: boolean;
   poll: boolean;
 }
 
-const PROCESSING_LABELS: Record<ProcessingState, string> = {
-  queued: "等待云处理",
-  processing: "处理中",
-  indexing: "建索引",
-  ready: "可问答",
-  failed: "失败",
-};
-
 export function processingDisplay(file: KnowledgeFile, now = Date.now()): ProcessingDisplay {
   const processing = file.processing;
-  if (!processing) return { label: "未开始处理", retryable: true, poll: false };
+  if (!processing) {
+    return {
+      label: "未开始处理",
+      detail: "没有找到有效的处理任务，可以重新提交。",
+      stage: "failed",
+      tone: "danger",
+      retryable: true,
+      poll: false,
+    };
+  }
   const staleAfter = PROCESSING_STALE_AFTER_MS[processing.state];
   const updatedAt = Date.parse(processing.updatedAt);
   if (staleAfter && (!Number.isFinite(updatedAt) || now - updatedAt > staleAfter)) {
     return {
       label: processing.state === "queued" ? "处理未启动" : "处理超时",
+      detail: processing.state === "queued" ? "云端任务长时间未启动，可以重新提交。" : "处理更新时间较长，可以重新提交。",
+      stage: "failed",
+      tone: "danger",
       retryable: true,
       poll: false,
     };
   }
-  return {
-    label: PROCESSING_LABELS[processing.state],
-    retryable: processing.state === "failed",
-    poll: processing.state === "queued" || processing.state === "processing" || processing.state === "indexing",
+  const processingLabel = file.knowledgeRole === "methodology" ? "解析方法论" : "解析内容";
+  const presentations: Record<ProcessingState, ProcessingDisplay> = {
+    queued: {
+      label: "等待云处理",
+      detail: "资料已登记，正在等待云端处理任务启动。",
+      stage: "queued",
+      tone: "neutral",
+      retryable: false,
+      poll: true,
+    },
+    processing: {
+      label: processingLabel,
+      detail: file.knowledgeRole === "methodology" ? "正在提取方法论结构与分析框架。" : "正在提取文字、结构和可检索片段。",
+      stage: "processing",
+      tone: "active",
+      retryable: false,
+      poll: true,
+    },
+    indexing: {
+      label: "更新索引",
+      detail: "内容解析已完成，正在更新专题检索索引。",
+      stage: "indexing",
+      tone: "active",
+      retryable: false,
+      poll: true,
+    },
+    ready: {
+      label: "可问答",
+      detail: "资料已完成处理，可以用于可追溯问答。",
+      stage: "ready",
+      tone: "success",
+      retryable: false,
+      poll: false,
+    },
+    failed: {
+      label: "处理未完成",
+      detail: "云端处理未完成，请检查文件后重新提交。",
+      stage: "failed",
+      tone: "danger",
+      retryable: processing.retryable !== false,
+      poll: false,
+    },
   };
+  return presentations[processing.state];
 }

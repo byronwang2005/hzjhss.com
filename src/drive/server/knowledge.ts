@@ -12,7 +12,7 @@ import {
   type DriveFile,
   type DriveFolder,
 } from "./cos";
-import { normalizeRelativeFilePath } from "./paths";
+import { normalizePrefix, normalizeRelativeFilePath } from "./paths";
 import type { SerializedSearchIndex } from "./search";
 import {
   FILE_LIMITS,
@@ -81,6 +81,8 @@ export interface ProcessingStatus {
   updatedAt: string;
   requestId?: string;
   error?: string;
+  failureCode?: "PROCESSING_FAILED";
+  retryable?: boolean;
 }
 
 export interface KnowledgeFile extends DriveFile {
@@ -261,6 +263,16 @@ export async function listKnowledgeFiles(
     ]);
     const knowledgeRole = knowledgeRoleOf(meta, relativePath, methodologyPath);
     if (knowledgeRole === "methodology" && !options.includeMethodology) return null;
+    let publicProcessing: ProcessingStatus | undefined;
+    if (processing?.sourceEtag === file.etag) {
+      const { error: _internalError, ...safeProcessing } = processing;
+      publicProcessing = {
+        ...safeProcessing,
+        ...(processing.state === "failed"
+          ? { failureCode: "PROCESSING_FAILED" as const, retryable: true }
+          : {}),
+      };
+    }
     return {
       ...file,
       name: relativePath.slice(relativePrefix.length),
@@ -274,7 +286,7 @@ export async function listKnowledgeFiles(
       reportDateSource: meta?.reportDateSource,
       incorporatedAt: meta?.incorporatedAt,
       incorporatedBy: meta?.incorporatedBy,
-      processing: processing?.sourceEtag === file.etag ? processing : undefined,
+      processing: publicProcessing,
     };
   }))).filter((file): file is KnowledgeFile => Boolean(file));
   return {
@@ -550,8 +562,7 @@ async function readJson<T>(config: DriveConfig, path: string): Promise<T | null>
 }
 
 function normalizeDirectoryPrefix(input: unknown): string {
-  const normalized = normalizeRelativeFilePath(input);
-  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+  return normalizePrefix(input);
 }
 
 function normalizePositiveSize(input: unknown): number {

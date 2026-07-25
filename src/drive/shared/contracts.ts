@@ -96,7 +96,8 @@ export interface ProcessingStatus {
   state: ProcessingState;
   sourceEtag: string;
   updatedAt: string;
-  error?: string;
+  failureCode?: "PROCESSING_FAILED";
+  retryable?: boolean;
 }
 
 export interface KnowledgeFile {
@@ -127,4 +128,17 @@ export interface FileListResponse {
   folders: KnowledgeFolder[];
   files: KnowledgeFile[];
   nextCursor: string | null;
+}
+
+export interface UploadRegistrationFailure {
+  relativePath: string;
+  code: "FILE_REGISTRATION_FAILED";
+  retryable: true;
+  message: string;
+}
+
+export interface UploadCompleteResponse {
+  ok: boolean;
+  files: KnowledgeFile[];
+  failures: UploadRegistrationFailure[];
 }

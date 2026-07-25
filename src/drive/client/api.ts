@@ -26,17 +26,3 @@ export async function api<T = unknown>(
   }
   return response.json() as Promise<T>;
 }
-
-export async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
-  let timer: number | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = window.setTimeout(() => reject(new Error(message)), milliseconds);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) window.clearTimeout(timer);
-  }
-}
