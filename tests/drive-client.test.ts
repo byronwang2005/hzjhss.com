@@ -4,6 +4,7 @@ import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
 import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
+import { processUploadBatches, splitUploadBatches, UPLOAD_REGISTRATION_BATCH_SIZE } from "../src/drive/client/upload-batches";
 
 describe("knowledge entry flow", () => {
   it("keeps session checking, successful sign-in and authentication failure distinct", () => {
@@ -71,6 +72,43 @@ describe("knowledge client helpers", () => {
     expect(visibleFileRoles("viewer")).toEqual(["reference", "evidence"]);
     expect(visibleFileRole("viewer", "methodology")).toBe("evidence");
     expect(visibleFileRole("admin", "methodology")).toBe("methodology");
+  });
+});
+
+describe("upload registration batches", () => {
+  it.each([
+    [0, []],
+    [1, [[0]]],
+    [5, [[0, 1, 2, 3, 4]]],
+    [6, [[0, 1, 2, 3, 4], [5]]],
+    [12, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11]]],
+  ])("splits %i files into batches of five", (count, expected) => {
+    expect(splitUploadBatches(Array.from({ length: count }, (_, index) => index))).toEqual(expected);
+  });
+
+  it("rejects an invalid batch size", () => {
+    expect(() => splitUploadBatches([1], 0)).toThrow("批次大小必须为正整数");
+    expect(UPLOAD_REGISTRATION_BATCH_SIZE).toBe(5);
+  });
+
+  it("continues with later batches when one registration fails", async () => {
+    const attempted: number[][] = [];
+    const succeeded: number[][] = [];
+    const failed: number[][] = [];
+    const result = await processUploadBatches(
+      [1, 2, 3, 4, 5, 6],
+      async (batch) => {
+        attempted.push(batch);
+        if (batch[0] === 1) throw new Error("登记超时");
+        return batch.join(",");
+      },
+      (_value, batch) => { succeeded.push(batch); },
+      (_error, batch) => { failed.push(batch); },
+    );
+    expect(attempted).toEqual([[1, 2, 3, 4, 5], [6]]);
+    expect(failed).toEqual([[1, 2, 3, 4, 5]]);
+    expect(succeeded).toEqual([[6]]);
+    expect(result).toEqual({ successfulBatches: 1, failedBatches: 1 });
   });
 });
 

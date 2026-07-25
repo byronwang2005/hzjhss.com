@@ -33,6 +33,7 @@ import { state, type TopicView } from "./state";
 import { createTransientStatusController } from "./transient-status";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 import { runWorkspaceTransition } from "./workspace-transition";
+import { processUploadBatches } from "./upload-batches";
 import {
   advanceFileTask,
   batchCounts,
@@ -922,24 +923,53 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       return;
     }
 
-    const registration = await api<UploadCompleteResponse>("/upload-complete", {
-      method: "POST",
-      body: { topicId, files: completed },
-    });
-    for (const file of registration.files) {
-      advanceFileTask(
-        batch,
-        file.path,
-        file.knowledgeRole === "reference" ? "archived" : "queued",
-        { sourceEtag: file.etag },
-      );
-    }
-    for (const failure of registration.failures) {
-      advanceFileTask(batch, failure.relativePath, "failed", {
-        error: failure.message,
-        retryable: failure.retryable,
-      });
-    }
+    const registration: UploadCompleteResponse = { ok: true, files: [], failures: [] };
+    await processUploadBatches(
+      completed,
+      async (registrationBatch) => api<UploadCompleteResponse>("/upload-complete", {
+        method: "POST",
+        body: { topicId, files: registrationBatch },
+      }),
+      (result) => {
+        registration.ok &&= result.ok;
+        registration.files.push(...result.files);
+        registration.failures.push(...result.failures);
+        for (const file of result.files) {
+          advanceFileTask(
+            batch!,
+            file.path,
+            file.knowledgeRole === "reference" ? "archived" : "queued",
+            { sourceEtag: file.etag },
+          );
+        }
+        for (const failure of result.failures) {
+          advanceFileTask(batch!, failure.relativePath, "failed", {
+            error: failure.message,
+            retryable: failure.retryable,
+          });
+        }
+        renderUploadBatch(batch!);
+      },
+      (error, registrationBatch) => {
+        const message = error instanceof Error && error.message.includes("超时")
+          ? "文件登记超时，请重新上传该文件。"
+          : "文件登记失败，请重新上传该文件。";
+        registration.ok = false;
+        for (const file of registrationBatch) {
+          registration.failures.push({
+            relativePath: file.relativePath,
+            code: "FILE_REGISTRATION_FAILED",
+            retryable: true,
+            message,
+          });
+          advanceFileTask(batch!, file.relativePath, "failed", {
+            error: message,
+            retryable: true,
+          });
+        }
+        renderUploadBatch(batch!);
+      },
+    );
     const counts = batchCounts(batch);
     setUploadBatchStatus(
       batch,
