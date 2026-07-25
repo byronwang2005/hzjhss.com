@@ -4222,28 +4222,6 @@ drive-pdf-preview {
   gap: 8px;
 }
 
-.drive-ai-qa-scope {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 240px;
-  min-height: 32px;
-  padding: 5px 9px;
-  overflow: hidden;
-  color: var(--jh-color-text-muted);
-  background: var(--jh-color-surface-subtle);
-  border: 1px solid var(--jh-color-border-soft);
-  border-radius: var(--jh-radius-pill);
-  font-size: 11px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.drive-ai-qa-scope .ui-icon {
-  flex: 0 0 auto;
-}
-
 .drive-ai-qa-empty {
   padding: clamp(28px, 4vw, 52px) clamp(8px, 3vw, 32px);
 }
@@ -4405,9 +4383,6 @@ drive-pdf-preview {
     width: 100%;
   }
 
-  .drive-ai-qa-scope {
-    max-width: 100%;
-  }
 }
 
 .drive-codex-handoff-entry {
@@ -5085,11 +5060,6 @@ drive-pdf-preview {
   .drive-ai-qa-symbol {
     width: 36px;
     height: 36px;
-  }
-
-  .drive-ai-qa-scope {
-    color: var(--jh-color-text-secondary);
-    background: transparent;
   }
 
   .drive-ai-qa-messages {

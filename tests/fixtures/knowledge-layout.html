@@ -61,16 +61,9 @@
       function qaPanel({ global = false, long = false } = {}) {
         return `
           <section class="drive-ai-qa ${global ? "is-global" : ""}" aria-label="${global ? "向全部资料提问" : "专题问答"}">
-            <header class="drive-ai-qa-head">
-              <div class="drive-ai-qa-heading">
-                <span class="drive-ai-qa-symbol">${icon("chat-circle-dots")}</span>
-                <div><span class="drive-eyebrow">${global ? "AI 检索" : "当前专题"}</span><h2>${global ? "向全部资料提问" : "专题问答"}</h2></div>
-              </div>
-              <div class="drive-ai-qa-head-actions">
-                <span class="drive-ai-qa-scope">${icon(global ? "files" : "folder")}${global ? "全部专题" : "新能源产业链"}</span>
-                ${long ? control("trash", "清空会话", "drive-ai-qa-clear") : ""}
-              </div>
-            </header>
+            ${long ? `<header class="drive-ai-qa-head is-actions-only">
+              ${control("plus", "新对话", "drive-ai-qa-clear")}
+            </header>` : ""}
             <div class="drive-ai-qa-messages" data-qa-messages aria-live="polite">
               ${long ? messages : `<div class="drive-ai-qa-empty"><div><h3>${global ? "早上好，设计验收用户" : "对新能源产业链提问"}</h3><p>回答将附带来源，方便继续核对资料。</p></div></div>`}
             </div>

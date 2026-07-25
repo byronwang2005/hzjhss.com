@@ -218,16 +218,11 @@ export class DriveAiQa extends LitElement {
         "is-empty": this.messages.length === 0,
         "has-notice": !this.ready,
       })} aria-label=${title} aria-busy=${String(this.streaming)}>
-        ${isGlobal || this.messages.length ? html`
-          <header class=${`drive-ai-qa-head${isGlobal ? "" : " is-actions-only"}`}>
-            ${isGlobal ? html`
-              <span class="drive-ai-qa-scope">${renderIcon("files")}全部资料</span>
-            ` : nothing}
-            ${this.messages.length
-              ? html`<button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>
-                  ${renderIcon("plus")}新对话
-                </button>`
-              : html`<span class="drive-ai-qa-grounding">${renderIcon("link")}回答将标注资料来源</span>`}
+        ${this.messages.length ? html`
+          <header class="drive-ai-qa-head is-actions-only">
+            <button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>
+              ${renderIcon("plus")}新对话
+            </button>
           </header>
         ` : nothing}
 

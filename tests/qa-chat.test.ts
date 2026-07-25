@@ -251,8 +251,8 @@ describe("drive AI Q&A component", () => {
     expect(globalQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("今天想从资料里确认什么？");
     expect(topicQa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("从这个专题开始提问");
     expect(globalQa.querySelector(".drive-ai-qa-typewriter")).toBeNull();
-    expect(globalQa.querySelector(".drive-ai-qa-scope")?.textContent).toContain("全部资料");
-    expect(topicQa.querySelector(".drive-ai-qa-scope")).toBeNull();
+    expect(globalQa.querySelector(".drive-ai-qa-head")).toBeNull();
+    expect(globalQa.textContent).not.toContain("回答将标注资料来源");
     expect(topicQa.querySelector(".drive-ai-qa")?.getAttribute("aria-label")).toBe("在新能源中提问");
   });
 
@@ -282,9 +282,15 @@ describe("drive AI Q&A component", () => {
     await waitForAnswer(qa);
 
     expect(qa.querySelector(".drive-ai-qa-empty")).toBeNull();
+    expect(qa.querySelector(".drive-ai-qa-head")).not.toBeNull();
+    expect(qa.querySelector(".drive-ai-qa-head")?.children).toHaveLength(1);
+    expect(qa.querySelector(".drive-ai-qa-clear")?.textContent).toContain("新对话");
+    expect(qa.querySelector(".drive-ai-qa-scope")).toBeNull();
+    expect(qa.textContent).not.toContain("回答将标注资料来源");
     qa.querySelector<HTMLButtonElement>(".drive-ai-qa-clear")!.click();
     await qa.updateComplete;
     expect(qa.querySelector(".drive-ai-qa-empty h3")?.textContent).toBe("今天想从资料里确认什么？");
+    expect(qa.querySelector(".drive-ai-qa-head")).toBeNull();
   });
 
   it("marks only unavailable knowledge states as having a notice row", async () => {

@@ -20,24 +20,6 @@
   justify-content: flex-end;
 }
 
-.drive-ai-qa-scope,
-.drive-ai-qa-grounding {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  color: var(--jh-color-text-secondary);
-  background: transparent;
-  border: 0;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.drive-ai-qa-grounding {
-  color: var(--jh-color-text-muted);
-  font-weight: 500;
-}
-
 .drive-ai-qa-clear {
   min-height: 36px;
 }
@@ -171,16 +153,9 @@
 
 .drive-ai-qa.is-empty:not(.has-notice) {
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
   align-content: center;
   padding-block: 18px 5vh;
-}
-
-.drive-ai-qa.is-empty:not(.has-notice) .drive-ai-qa-head {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
 }
 
 .drive-ai-qa.is-empty:not(.has-notice) .drive-ai-qa-messages,
@@ -218,10 +193,6 @@
 
   .drive-ai-qa-head {
     padding-inline: 13px;
-  }
-
-  .drive-ai-qa-grounding {
-    display: none;
   }
 
   .drive-ai-qa-messages {
