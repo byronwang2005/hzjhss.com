@@ -11,7 +11,23 @@ import type {
   CodexHandoffRequest,
   CodexHandoffServerStage,
   CodexHandoffStage,
+  QaErrorEventData,
+  QaNoResultsEventData,
+  QaProgressStage,
+  QaRetrievalSummary,
 } from "../shared/contracts";
+
+interface QaProgressUi {
+  mode: "working" | "complete" | "no-results" | "stopped" | "error";
+  stage: QaProgressStage;
+  completed: QaProgressStage[];
+  deepThinking: boolean;
+  elapsedSeconds: number;
+  expanded: boolean;
+  retrieval?: QaRetrievalSummary;
+  noResults?: QaNoResultsEventData;
+  totalMs?: number;
+}
 
 interface QaChatMessage {
   id: string;
@@ -20,6 +36,8 @@ interface QaChatMessage {
   pending?: boolean;
   error?: boolean;
   excludeFromHistory?: boolean;
+  failure?: QaErrorEventData;
+  progress?: QaProgressUi;
 }
 
 interface CodexHandoffUi {
@@ -39,6 +57,12 @@ const GREETING_HOLD_MS = 1_800;
 const GREETING_DELETE_SPEED_MS = 35;
 const GREETING_GAP_MS = 250;
 const CODEX_LAUNCH_CONFIRM_MS = 2_500;
+const QA_PROGRESS_STAGES: Array<{ stage: QaProgressStage; label: string; icon: string }> = [
+  { stage: "parsing", label: "解析问题", icon: "chat-circle-dots" },
+  { stage: "retrieving", label: "检索资料", icon: "magnifying-glass" },
+  { stage: "reasoning", label: "分析证据", icon: "brain" },
+  { stage: "composing", label: "组织回答", icon: "article" },
+];
 
 function initialHandoffUi(): CodexHandoffUi {
   return {
@@ -47,6 +71,17 @@ function initialHandoffUi(): CodexHandoffUi {
     elapsedSeconds: 0,
     showCopyFallback: false,
     copied: false,
+  };
+}
+
+function initialQaProgress(): QaProgressUi {
+  return {
+    mode: "working",
+    stage: "parsing",
+    completed: [],
+    deepThinking: false,
+    elapsedSeconds: 0,
+    expanded: true,
   };
 }
 
@@ -110,6 +145,7 @@ export class DriveAiQa extends LitElement {
   private greetingIndex = -1;
   private greetingMotionQuery: MediaQueryList | null = null;
   private handoffElapsedTimer: number | undefined;
+  private qaElapsedTimer: number | undefined;
   private handoffLaunchTimer: number | undefined;
   private handoffResizeObserver: ResizeObserver | null = null;
   private handoffObservedRail: HTMLElement | null = null;
@@ -132,6 +168,7 @@ export class DriveAiQa extends LitElement {
   disconnectedCallback(): void {
     this.abortController?.abort();
     this.abortController = null;
+    this.stopQaElapsedTimer();
     this.resetHandoff();
     this.stopGreetingAnimation();
     this.greetingMotionQuery?.removeEventListener?.("change", this.handleGreetingMotionChange);
@@ -221,7 +258,11 @@ export class DriveAiQa extends LitElement {
                   ${renderIcon("paper-plane-tilt", "bold")}
                 </button>`}
           </div>
-          <span class="drive-ai-qa-status" role="status">
+          <span
+            class="drive-ai-qa-status"
+            role=${this.streaming ? nothing : "status"}
+            aria-live=${this.streaming ? "off" : "polite"}
+          >
             ${this.status || (this.ready ? "对话仅保存在当前页面，刷新后清空。" : "文件处理和索引完成后即可使用。")}
           </span>
         </form>
@@ -348,20 +389,189 @@ export class DriveAiQa extends LitElement {
     const showHandoff = this.shouldRenderHandoff(message, index);
     return html`
       <article class=${classMap({ "drive-ai-qa-message": true, "is-user": message.role === "user", "is-error": Boolean(message.error) })}>
-        <header><span>${message.role === "user" ? "您" : "AI"}</span>${message.pending ? html`<small>生成中</small>` : nothing}</header>
+        <header><span>${message.role === "user" ? "您" : "AI"}</span>${message.pending ? html`<small>处理中</small>` : nothing}</header>
         ${message.role === "assistant"
-          ? message.content
-            ? html`<div class="drive-ai-qa-markdown">${unsafeHTML(rendered)}</div>`
-            : message.pending
-              ? this.renderSkeleton()
-              : nothing
+          ? html`
+              ${message.progress ? this.renderQaProgress(message) : nothing}
+              ${message.progress?.mode === "no-results"
+                ? this.renderNoResults(message)
+                : message.content
+                  ? html`<div class="drive-ai-qa-markdown">${unsafeHTML(rendered)}</div>`
+                  : message.pending && !message.progress
+                    ? this.renderSkeleton()
+                    : nothing}
+            `
           : html`<p>${message.content}</p>`}
         ${message.error
-          ? html`<div class="drive-ai-qa-error"><span>本次生成失败。</span><button type="button" @click=${() => this.retry(message.id)}>${renderIcon("arrow-clockwise")}重试</button></div>`
+          ? html`<div class="drive-ai-qa-error">
+              <span>${message.failure?.message || "本次生成失败。"}</span>
+              ${message.failure?.retryable === false
+                ? nothing
+                : html`<button type="button" @click=${() => this.retry(message.id)}>${renderIcon("arrow-clockwise")}重试</button>`}
+            </div>`
           : nothing}
         ${showHandoff ? this.renderCodexHandoff() : nothing}
       </article>
     `;
+  }
+
+  private renderQaProgress(message: QaChatMessage): TemplateResult {
+    const progress = message.progress!;
+    const isCompact = progress.mode === "complete" || progress.mode === "stopped" || (Boolean(message.content) && !progress.expanded);
+    const summary = this.qaProgressSummary(progress);
+    if (isCompact) {
+      return html`
+        <button
+          class="drive-ai-qa-progress-summary"
+          type="button"
+          aria-expanded=${String(progress.expanded)}
+          @click=${() => this.toggleQaProgress(message.id)}
+        >
+          <span class="drive-ai-qa-progress-summary-icon">${renderIcon(progress.mode === "complete" ? "check-circle-fill" : "spinner-gap")}</span>
+          <span>${summary}</span>
+          ${renderIcon(progress.expanded ? "caret-up" : "caret-down")}
+        </button>
+        ${progress.expanded ? this.renderQaProgressSteps(progress) : nothing}
+      `;
+    }
+    return this.renderQaProgressSteps(progress);
+  }
+
+  private renderQaProgressSteps(progress: QaProgressUi): TemplateResult {
+    const activeText = this.qaProgressStatus(progress);
+    const activeIndex = qaProgressStageIndex(progress.stage);
+    return html`
+      <section
+        class=${classMap({
+          "drive-ai-qa-progress": true,
+          "is-complete": progress.mode === "complete",
+          "is-no-results": progress.mode === "no-results",
+          "is-stopped": progress.mode === "stopped",
+          "is-error": progress.mode === "error",
+        })}
+        aria-label="AI 回答处理进度"
+      >
+        <div class="drive-ai-qa-progress-head">
+          <div>
+            <strong>${progress.mode === "no-results"
+              ? "检索已完成"
+              : progress.mode === "stopped"
+                ? "已停止生成"
+                : progress.mode === "error"
+                  ? "处理未完成"
+                  : activeText}</strong>
+            ${progress.retrieval && progress.mode !== "no-results"
+              ? html`<span>${this.qaRetrievalDetail(progress.retrieval)}</span>`
+              : nothing}
+          </div>
+          ${progress.elapsedSeconds >= 3 && progress.mode === "working"
+            ? html`<small aria-hidden="true">已等待 ${formatElapsed(progress.elapsedSeconds)}</small>`
+            : nothing}
+        </div>
+        <div class="drive-ai-qa-progress-live" role="status" aria-live="polite">${activeText}</div>
+        <ol class="drive-ai-qa-progress-steps">
+          ${QA_PROGRESS_STAGES.map((item, index) => {
+            const isDone = progress.completed.includes(item.stage) || progress.mode === "complete";
+            const isSkipped = progress.mode === "no-results" && index > qaProgressStageIndex("retrieving");
+            const isActive = progress.mode === "working" && index === activeIndex && !isDone;
+            const isError = progress.mode === "error" && index === activeIndex;
+            return html`
+              <li class=${classMap({
+                "drive-ai-qa-progress-step": true,
+                "is-done": isDone,
+                "is-active": isActive,
+                "is-skipped": isSkipped,
+                "is-error": isError,
+              })}>
+                <span class="drive-ai-qa-progress-node">
+                  <span class="drive-ai-qa-progress-icon">${renderIcon(item.icon)}</span>
+                  <span class="drive-ai-qa-progress-check">${renderIcon("check-circle-fill")}</span>
+                </span>
+                <span class="drive-ai-qa-progress-copy">
+                  <strong>${item.label}</strong>
+                  <small>${isSkipped ? "未执行" : this.qaStageDetail(item.stage, progress)}</small>
+                </span>
+              </li>
+            `;
+          })}
+        </ol>
+      </section>
+    `;
+  }
+
+  private renderNoResults(message: QaChatMessage): TemplateResult {
+    const progress = message.progress!;
+    const result = progress.noResults || progress.retrieval;
+    const scopeText = result?.scope === "global"
+      ? `已检查 ${result.topicCount} 个可用专题`
+      : "已检查当前专题";
+    return html`
+      <div class="drive-ai-qa-no-results">
+        <span class="drive-ai-qa-no-results-icon">${renderIcon("magnifying-glass")}</span>
+        <div>
+          <strong>已完成检索，但暂未找到足以支持回答的资料。</strong>
+          <p>${scopeText}。${progress.noResults?.hint || "可尝试补充时间、对象、指标或资料名称后重新提问。"}</p>
+        </div>
+        <button type="button" @click=${() => this.modifyQuestion(message.id)}>
+          ${renderIcon("pencil-simple")}修改问题
+        </button>
+      </div>
+    `;
+  }
+
+  private qaProgressStatus(progress: QaProgressUi): string {
+    if (progress.mode === "no-results") return "资料检索完成，未发现有效依据";
+    if (progress.mode === "complete") return this.qaProgressSummary(progress);
+    if (progress.mode === "stopped") return "已停止生成，已保留当前回答";
+    if (progress.mode === "error") return `${qaProgressStageLabel(progress.stage)}未完成`;
+    if (progress.stage === "parsing") return "正在确认问题与检索范围";
+    if (progress.stage === "retrieving") {
+      return this.scope === "global" ? "正在检索全部可用专题" : "正在检索当前专题";
+    }
+    if (progress.stage === "reasoning") {
+      return `正在分析证据${progress.deepThinking ? " · 深度思考已启用" : ""}`;
+    }
+    return "正在组织可追溯回答";
+  }
+
+  private qaStageDetail(stage: QaProgressStage, progress: QaProgressUi): string {
+    if (stage === "parsing") return progress.completed.includes(stage) ? "范围已确认" : "确认问题与资料范围";
+    if (stage === "retrieving") {
+      return progress.retrieval
+        ? this.qaRetrievalDetail(progress.retrieval)
+        : this.scope === "global" ? "扫描可用专题索引" : "扫描当前专题索引";
+    }
+    if (stage === "reasoning") {
+      if (progress.deepThinking) return "深度思考已启用";
+      return progress.completed.includes(stage) ? "证据分析完成" : "核对证据与方法框架";
+    }
+    return progress.completed.includes(stage) ? "回答组织完成" : "生成可追溯回答";
+  }
+
+  private qaRetrievalDetail(summary: QaRetrievalSummary): string {
+    const range = summary.scope === "global" ? `${summary.topicCount} 个专题` : "当前专题";
+    const methodology = summary.methodologyCount
+      ? ` · ${summary.methodologyCount} 个方法片段`
+      : "";
+    return `${range} · ${summary.evidenceSourceCount} 份证据资料 · ${summary.evidenceCount} 个证据片段${methodology}`;
+  }
+
+  private qaProgressSummary(progress: QaProgressUi): string {
+    const summary = progress.retrieval;
+    const range = summary
+      ? summary.scope === "global" ? `已检索 ${summary.topicCount} 个专题` : "已检索当前专题"
+      : "处理过程";
+    const sources = summary ? ` · 引用 ${summary.evidenceSourceCount} 份资料` : "";
+    const durationMs = progress.totalMs ?? progress.elapsedSeconds * 1_000;
+    const duration = durationMs > 0 ? ` · 用时 ${formatDurationMs(durationMs)}` : "";
+    return `${range}${sources}${duration}`;
+  }
+
+  private toggleQaProgress(messageId: string): void {
+    const message = this.messages.find((item) => item.id === messageId);
+    if (!message?.progress) return;
+    message.progress = { ...message.progress, expanded: !message.progress.expanded };
+    this.messages = [...this.messages];
   }
 
   private shouldRenderHandoff(message: QaChatMessage, index: number): boolean {
@@ -800,13 +1010,20 @@ export class DriveAiQa extends LitElement {
     this.resetHandoff();
     const history = this.completedHistory();
     const userMessage: QaChatMessage = { id: this.messageId(), role: "user", content: question };
-    const assistantMessage: QaChatMessage = { id: this.messageId(), role: "assistant", content: "", pending: true };
+    const assistantMessage: QaChatMessage = {
+      id: this.messageId(),
+      role: "assistant",
+      content: "",
+      pending: true,
+      progress: initialQaProgress(),
+    };
     this.messages = [...this.messages, userMessage, assistantMessage];
     this.question = "";
     this.streaming = true;
     const controller = new AbortController();
     this.abortController = controller;
-    this.setStatus("正在生成回答...");
+    this.startQaElapsedTimer(assistantMessage);
+    this.setStatus("正在确认问题与检索范围...");
 
     try {
       const response = await fetch(`${DRIVE_API_ROOT}/qa`, {
@@ -827,8 +1044,22 @@ export class DriveAiQa extends LitElement {
       if (!response.body) throw new Error("模型没有返回流式响应");
       await this.consumeStream(response.body, assistantMessage);
       if (this.abortController !== controller) return;
+      if (assistantMessage.progress?.mode === "no-results") {
+        assistantMessage.pending = false;
+        assistantMessage.excludeFromHistory = true;
+        this.messages = [...this.messages];
+        this.setStatus("检索完成，未找到有效资料。");
+        return;
+      }
       if (!assistantMessage.content) throw new Error("模型没有返回可显示的流式内容");
       assistantMessage.pending = false;
+      assistantMessage.progress = {
+        ...(assistantMessage.progress || initialQaProgress()),
+        mode: "complete",
+        stage: "composing",
+        completed: QA_PROGRESS_STAGES.map(({ stage }) => stage),
+        expanded: false,
+      };
       this.messages = [...this.messages];
       this.setStatus("回答完成。", "success");
     } catch (error) {
@@ -839,15 +1070,27 @@ export class DriveAiQa extends LitElement {
           this.messages = this.messages.filter((message) => message.id !== assistantMessage.id && message.id !== userMessage.id);
         } else {
           assistantMessage.excludeFromHistory = true;
+          if (assistantMessage.progress) {
+            assistantMessage.progress = {
+              ...assistantMessage.progress,
+              mode: "stopped",
+              expanded: false,
+              totalMs: assistantMessage.progress.elapsedSeconds * 1_000,
+            };
+          }
           this.messages = [...this.messages];
         }
         this.setStatus("已停止生成。");
       } else {
         assistantMessage.error = true;
+        if (assistantMessage.progress) {
+          assistantMessage.progress = { ...assistantMessage.progress, mode: "error", expanded: true };
+        }
         this.messages = [...this.messages];
         this.setStatus(error instanceof Error ? error.message : "问答请求失败", "danger");
       }
     } finally {
+      this.stopQaElapsedTimer();
       if (this.abortController === controller) {
         this.abortController = null;
         this.streaming = false;
@@ -868,14 +1111,73 @@ export class DriveAiQa extends LitElement {
         buffer = buffer.slice(boundary + 2);
         const event = /^event:\s*(.+)$/m.exec(block)?.[1]?.trim();
         const dataText = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-        const data = dataText ? (JSON.parse(dataText) as { active?: unknown; content?: unknown; error?: unknown }) : {};
-        if (event === "thinking" && typeof data.active === "boolean") {
-          this.setStatus(data.active ? "正在深度思考…" : "正在生成回答…");
+        const data = dataText ? JSON.parse(dataText) as Record<string, unknown> : {};
+        if (event === "phase" && isQaProgressStage(data.stage) && isQaProgressState(data.state)) {
+          this.applyQaPhase(assistantMessage, data.stage, data.state);
+        } else if (event === "retrieval_summary") {
+          const summary = parseQaRetrievalSummary(data);
+          if (summary) {
+            assistantMessage.progress = {
+              ...(assistantMessage.progress || initialQaProgress()),
+              retrieval: summary,
+            };
+            this.messages = [...this.messages];
+          }
+        } else if (event === "no_results") {
+          const noResults = parseQaNoResults(data);
+          if (noResults) {
+            assistantMessage.progress = {
+              ...(assistantMessage.progress || initialQaProgress()),
+              mode: "no-results",
+              stage: "retrieving",
+              completed: ["parsing", "retrieving"],
+              retrieval: noResults,
+              noResults,
+              expanded: true,
+            };
+            assistantMessage.pending = false;
+            assistantMessage.excludeFromHistory = true;
+            this.messages = [...this.messages];
+          }
+        } else if (event === "thinking" && typeof data.active === "boolean") {
+          const progress = assistantMessage.progress || initialQaProgress();
+          assistantMessage.progress = {
+            ...progress,
+            stage: qaProgressStageIndex(progress.stage) > qaProgressStageIndex("reasoning") ? progress.stage : "reasoning",
+            deepThinking: data.active || progress.deepThinking,
+          };
+          this.messages = [...this.messages];
         } else if (event === "delta" && typeof data.content === "string") {
+          const progress = assistantMessage.progress || initialQaProgress();
+          assistantMessage.progress = {
+            ...progress,
+            stage: "composing",
+            completed: mergeQaCompleted(progress.completed, ["parsing", "retrieving", "reasoning"]),
+            expanded: false,
+          };
           assistantMessage.content += data.content;
           this.messages = [...this.messages];
+        } else if (event === "done" && typeof data.totalMs === "number" && Number.isFinite(data.totalMs)) {
+          const progress = assistantMessage.progress || initialQaProgress();
+          assistantMessage.progress = { ...progress, totalMs: Math.max(0, data.totalMs) };
+          this.messages = [...this.messages];
         } else if (event === "error") {
-          throw new Error(typeof data.error === "string" ? data.error : "模型流式输出失败");
+          const failure = parseQaError(data);
+          if (failure) {
+            assistantMessage.failure = failure;
+            if (assistantMessage.progress) {
+              assistantMessage.progress = { ...assistantMessage.progress, stage: failure.stage, mode: "error" };
+            }
+          }
+          throw new Error(
+            failure
+              ? failure.message
+              : typeof data.message === "string"
+                ? data.message
+                : typeof data.error === "string"
+                  ? data.error
+                  : "模型流式输出失败",
+          );
         }
         boundary = buffer.indexOf("\n\n");
       }
@@ -890,6 +1192,7 @@ export class DriveAiQa extends LitElement {
   private clearConversation(announce = true): void {
     this.abortController?.abort();
     this.abortController = null;
+    this.stopQaElapsedTimer();
     this.resetHandoff();
     this.messages = [];
     this.streaming = false;
@@ -905,6 +1208,61 @@ export class DriveAiQa extends LitElement {
     if (question.role !== "user") return;
     this.messages = this.messages.filter((_, index) => index !== failedIndex && index !== failedIndex - 1);
     void this.submitQuestion(question.content);
+  }
+
+  private modifyQuestion(messageId: string): void {
+    if (this.streaming) return;
+    const assistantIndex = this.messages.findIndex((message) => message.id === messageId && message.role === "assistant");
+    if (assistantIndex < 1) return;
+    const userMessage = this.messages[assistantIndex - 1];
+    if (userMessage.role !== "user") return;
+    this.messages = this.messages.filter((_, index) => index !== assistantIndex && index !== assistantIndex - 1);
+    this.question = userMessage.content;
+    this.setStatus("可补充时间、对象、指标或资料名称后重新提问。");
+    void this.updateComplete.then(() => {
+      const textarea = this.querySelector<HTMLTextAreaElement>("textarea");
+      textarea?.focus();
+      if (textarea) textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+  }
+
+  private applyQaPhase(
+    assistantMessage: QaChatMessage,
+    stage: QaProgressStage,
+    state: "active" | "complete",
+  ): void {
+    const progress = assistantMessage.progress || initialQaProgress();
+    const currentIndex = qaProgressStageIndex(progress.stage);
+    const nextIndex = qaProgressStageIndex(stage);
+    if (nextIndex < currentIndex) return;
+    assistantMessage.progress = {
+      ...progress,
+      stage,
+      completed: state === "complete"
+        ? mergeQaCompleted(progress.completed, [stage])
+        : progress.completed,
+    };
+    this.messages = [...this.messages];
+  }
+
+  private startQaElapsedTimer(assistantMessage: QaChatMessage): void {
+    this.stopQaElapsedTimer();
+    const startedAt = Date.now();
+    this.qaElapsedTimer = window.setInterval(() => {
+      if (!assistantMessage.pending || !assistantMessage.progress) return;
+      assistantMessage.progress = {
+        ...assistantMessage.progress,
+        elapsedSeconds: Math.max(0, Math.floor((Date.now() - startedAt) / 1_000)),
+      };
+      this.messages = [...this.messages];
+    }, 1_000);
+  }
+
+  private stopQaElapsedTimer(): void {
+    if (this.qaElapsedTimer !== undefined) {
+      window.clearInterval(this.qaElapsedTimer);
+      this.qaElapsedTimer = undefined;
+    }
   }
 
   private completedHistory(): QaChatMessage[] {
@@ -984,10 +1342,103 @@ function handoffStageIndex(stage: CodexHandoffStage): number {
   return 0;
 }
 
+function isQaProgressStage(value: unknown): value is QaProgressStage {
+  return value === "parsing" || value === "retrieving" || value === "reasoning" || value === "composing";
+}
+
+function isQaProgressState(value: unknown): value is "active" | "complete" {
+  return value === "active" || value === "complete";
+}
+
+function qaProgressStageIndex(stage: QaProgressStage): number {
+  return QA_PROGRESS_STAGES.findIndex((item) => item.stage === stage);
+}
+
+function qaProgressStageLabel(stage: QaProgressStage): string {
+  return QA_PROGRESS_STAGES.find((item) => item.stage === stage)?.label || "处理";
+}
+
+function mergeQaCompleted(current: QaProgressStage[], incoming: QaProgressStage[]): QaProgressStage[] {
+  const completed = new Set([...current, ...incoming]);
+  return QA_PROGRESS_STAGES.map(({ stage }) => stage).filter((stage) => completed.has(stage));
+}
+
+function parseQaRetrievalSummary(value: Record<string, unknown>): QaRetrievalSummary | null {
+  const scope = value.scope;
+  if (scope !== "global" && scope !== "topic") return null;
+  const fields = ["topicCount", "candidateCount", "evidenceCount", "methodologyCount", "elapsedMs"] as const;
+  if (!fields.every((field) => typeof value[field] === "number" && Number.isFinite(value[field]) && Number(value[field]) >= 0)) {
+    return null;
+  }
+  const evidenceSourceCount = value.evidenceSourceCount ?? value.sourceCount;
+  const methodologySourceCount = value.methodologySourceCount ?? 0;
+  if (
+    typeof evidenceSourceCount !== "number"
+    || !Number.isFinite(evidenceSourceCount)
+    || evidenceSourceCount < 0
+    || typeof methodologySourceCount !== "number"
+    || !Number.isFinite(methodologySourceCount)
+    || methodologySourceCount < 0
+  ) return null;
+  return {
+    scope,
+    topicCount: Math.floor(Number(value.topicCount)),
+    candidateCount: Math.floor(Number(value.candidateCount)),
+    evidenceCount: Math.floor(Number(value.evidenceCount)),
+    methodologyCount: Math.floor(Number(value.methodologyCount)),
+    evidenceSourceCount: Math.floor(evidenceSourceCount),
+    methodologySourceCount: Math.floor(methodologySourceCount),
+    elapsedMs: Math.max(0, Number(value.elapsedMs)),
+  };
+}
+
+function parseQaError(value: Record<string, unknown>): QaErrorEventData | null {
+  if (
+    !isQaProgressStage(value.stage)
+    || !isQaErrorCode(value.code)
+    || typeof value.retryable !== "boolean"
+    || typeof value.message !== "string"
+    || !value.message.trim()
+  ) return null;
+  return {
+    stage: value.stage,
+    code: value.code,
+    retryable: value.retryable,
+    message: value.message.trim(),
+  };
+}
+
+function isQaErrorCode(value: unknown): value is QaErrorEventData["code"] {
+  return value === "RETRIEVAL_SCOPE_INVALID"
+    || value === "RETRIEVAL_SCOPE_UNAVAILABLE"
+    || value === "RETRIEVAL_FAILED"
+    || value === "MODEL_CAPACITY_EXCEEDED"
+    || value === "MODEL_CONFIGURATION_ERROR"
+    || value === "MODEL_BUSY"
+    || value === "MODEL_START_FAILED"
+    || value === "MODEL_STREAM_FAILED";
+}
+
+function parseQaNoResults(value: Record<string, unknown>): QaNoResultsEventData | null {
+  const summary = parseQaRetrievalSummary(value);
+  if (!summary) return null;
+  return {
+    ...summary,
+    hint: typeof value.hint === "string" && value.hint.trim()
+      ? value.hint.trim()
+      : "可尝试补充时间、对象、指标或资料名称后重新提问。",
+  };
+}
+
 function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return minutes ? `${minutes}:${String(remainder).padStart(2, "0")}` : `${remainder} 秒`;
+}
+
+function formatDurationMs(milliseconds: number): string {
+  if (milliseconds < 1_000) return `${Math.max(1, Math.round(milliseconds))} 毫秒`;
+  return `${(milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 1 : 0)} 秒`;
 }
 
 function formatExpiry(value: string): string {

@@ -10,9 +10,27 @@ export interface RetrievedKnowledge {
   methodology: RetrievedChunk[];
 }
 
-export async function retrieveKnowledge(config: DriveConfig, input: { scope: "global" | "topic"; topicId?: unknown; query: string; now?: Date }): Promise<RetrievedKnowledge> {
+export interface RetrievedKnowledgeResult extends RetrievedKnowledge {
+  stats: {
+    topicCount: number;
+    candidateCount: number;
+    evidenceCount: number;
+    methodologyCount: number;
+    evidenceSourceCount: number;
+    methodologySourceCount: number;
+  };
+}
+
+export class KnowledgeScopeError extends Error {
+  constructor(readonly kind: "invalid" | "unavailable", message: string) {
+    super(message);
+    this.name = "KnowledgeScopeError";
+  }
+}
+
+export async function retrieveKnowledge(config: DriveConfig, input: { scope: "global" | "topic"; topicId?: unknown; query: string; now?: Date }): Promise<RetrievedKnowledgeResult> {
   const topics = input.scope === "topic"
-    ? [await readKnowledgeTopic(config, input.topicId)]
+    ? [await readScopedTopic(config, input.topicId)]
     : (await listKnowledgeTopics(config)).filter((topic) => topic.ready);
   const resultSets = await Promise.all(topics.map(async (topic) => {
     const envelope = await loadIndex(config, topic.id, topic.indexVersion);
@@ -23,18 +41,43 @@ export async function retrieveKnowledge(config: DriveConfig, input: { scope: "gl
     };
   }));
   const evidence = resultSets.flatMap((set) => set.evidence).sort((a, b) => b.score - a.score);
+  let methodology: RetrievedChunk[];
   if (input.scope === "topic") {
-    return {
-      evidence,
-      methodology: resultSets.flatMap((set) => set.methodology).sort((a, b) => b.score - a.score),
-    };
+    methodology = resultSets.flatMap((set) => set.methodology).sort((a, b) => b.score - a.score);
+  } else {
+    const evidenceTopicIds = new Set(evidence.map((chunk) => chunk.topicId));
+    methodology = resultSets
+      .filter((set) => evidence.length ? evidenceTopicIds.has(set.topicId) : isMethodologyQuery(input.query))
+      .flatMap((set) => set.methodology)
+      .sort((a, b) => b.score - a.score);
   }
-  const evidenceTopicIds = new Set(evidence.map((chunk) => chunk.topicId));
-  const methodology = resultSets
-    .filter((set) => evidence.length ? evidenceTopicIds.has(set.topicId) : isMethodologyQuery(input.query))
-    .flatMap((set) => set.methodology)
-    .sort((a, b) => b.score - a.score);
-  return { evidence, methodology };
+  return {
+    evidence,
+    methodology,
+    stats: {
+      topicCount: topics.length,
+      candidateCount: evidence.length + methodology.length,
+      evidenceCount: evidence.length,
+      methodologyCount: methodology.length,
+      evidenceSourceCount: new Set(evidence.map((chunk) => `${chunk.topicId}:${chunk.path}`)).size,
+      methodologySourceCount: new Set(methodology.map((chunk) => `${chunk.topicId}:${chunk.path}`)).size,
+    },
+  };
+}
+
+async function readScopedTopic(config: DriveConfig, topicId: unknown) {
+  try {
+    return await readKnowledgeTopic(config, topicId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/专题不存在|未找到专题/.test(message)) {
+      throw new KnowledgeScopeError("unavailable", message);
+    }
+    if (/专题 ID|资料范围|不能为空|必须/.test(message)) {
+      throw new KnowledgeScopeError("invalid", message);
+    }
+    throw error;
+  }
 }
 
 export function isMethodologyQuery(query: string): boolean {

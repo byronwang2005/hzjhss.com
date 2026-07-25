@@ -12,13 +12,13 @@ const phosphorPackageDir = path.join(root, "node_modules", "@phosphor-icons", "c
 const iconSets = {
   regular: [
     "apple-logo", "arrow-clockwise", "arrow-left", "arrow-right", "arrow-square-out",
-    "arrows-out-line-horizontal", "article", "book-open", "broadcast", "caret-down",
+    "arrows-out-line-horizontal", "article", "book-open", "brain", "broadcast", "caret-down", "caret-up",
     "caret-left", "caret-right", "chat-circle-dots", "check", "check-circle", "circle-notch", "clipboard-text",
     "copy", "cpu", "database", "download-simple", "eye", "eye-slash", "file", "file-arrow-up",
     "file-doc", "file-html", "file-image", "file-pdf", "file-ppt", "file-text", "file-xls",
     "files", "floppy-disk", "folder", "folder-open", "folder-plus", "folder-simple-plus",
-    "house", "info", "link", "list", "minus", "package", "plus", "sign-out",
-    "paper-plane-tilt", "sliders-horizontal", "star", "stop-circle", "terminal-window", "trash", "tray", "upload-simple",
+    "house", "info", "link", "list", "magnifying-glass", "minus", "package", "pencil-simple", "plus", "sign-out",
+    "paper-plane-tilt", "sliders-horizontal", "spinner-gap", "star", "stop-circle", "terminal-window", "trash", "tray", "upload-simple",
     "moon", "sun", "user-switch", "warning", "windows-logo", "x", "x-circle",
   ],
   bold: [

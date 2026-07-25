@@ -91,9 +91,9 @@ describe("drive AI Q&A component", () => {
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
     await qa.updateComplete;
     qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
-    await waitForText(qa, "正在深度思考");
+    await waitForText(qa, "深度思考已启用");
 
-    expect(qa.textContent).toContain("正在深度思考");
+    expect(qa.textContent).toContain("深度思考已启用");
     expect(qa.textContent).not.toContain("内部思维链");
 
     streamController?.enqueue(encoder.encode('event: thinking\ndata: {"active":false}\n\nevent: delta\ndata: {"content":"最终结论"}\n\nevent: done\ndata: {"ok":true}\n\n'));
@@ -101,6 +101,128 @@ describe("drive AI Q&A component", () => {
     await waitForAnswer(qa);
     expect(qa.textContent).toContain("最终结论");
     expect(qa.textContent).toContain("回答完成");
+  });
+
+  it("renders real retrieval phases and collapses them into a completion summary", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response([
+      'event: phase\ndata: {"stage":"parsing","state":"active","elapsedMs":0}',
+      'event: phase\ndata: {"stage":"parsing","state":"complete","elapsedMs":1}',
+      'event: phase\ndata: {"stage":"retrieving","state":"active","elapsedMs":1}',
+      'event: phase\ndata: {"stage":"retrieving","state":"complete","elapsedMs":18}',
+      'event: retrieval_summary\ndata: {"scope":"global","topicCount":12,"candidateCount":18,"evidenceCount":16,"methodologyCount":2,"sourceCount":4,"elapsedMs":17}',
+      'event: phase\ndata: {"stage":"reasoning","state":"active","elapsedMs":19}',
+      'event: thinking\ndata: {"active":true}',
+      'event: thinking\ndata: {"active":false}',
+      'event: phase\ndata: {"stage":"reasoning","state":"complete","elapsedMs":80}',
+      'event: phase\ndata: {"stage":"composing","state":"active","elapsedMs":80}',
+      'event: delta\ndata: {"content":"带引用的结论"}',
+      'event: phase\ndata: {"stage":"composing","state":"complete","elapsedMs":1250}',
+      'event: done\ndata: {"ok":true,"totalMs":1250}',
+      "",
+    ].join("\n\n"), { headers: { "content-type": "text/event-stream" } })));
+    const qa = await mountQa("global");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "比较所有专题";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForAnswer(qa);
+
+    const summary = qa.querySelector<HTMLButtonElement>(".drive-ai-qa-progress-summary")!;
+    expect(summary.textContent).toContain("已检索 12 个专题");
+    expect(summary.textContent).toContain("引用 4 份资料");
+    expect(summary.textContent).toContain("用时 1.3 秒");
+    expect(summary.getAttribute("aria-expanded")).toBe("false");
+    summary.click();
+    await qa.updateComplete;
+    expect(qa.querySelectorAll(".drive-ai-qa-progress-step")).toHaveLength(4);
+    expect(qa.textContent).toContain("深度思考已启用");
+    expect(qa.textContent).toContain("带引用的结论");
+  });
+
+  it("treats no retrieval matches as a neutral recoverable result", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response([
+      'event: phase\ndata: {"stage":"parsing","state":"complete","elapsedMs":1}',
+      'event: phase\ndata: {"stage":"retrieving","state":"active","elapsedMs":1}',
+      'event: phase\ndata: {"stage":"retrieving","state":"complete","elapsedMs":20}',
+      'event: retrieval_summary\ndata: {"scope":"global","topicCount":12,"candidateCount":0,"evidenceCount":0,"methodologyCount":0,"sourceCount":0,"elapsedMs":19}',
+      'event: no_results\ndata: {"scope":"global","topicCount":12,"candidateCount":0,"evidenceCount":0,"methodologyCount":0,"sourceCount":0,"elapsedMs":19,"hint":"请补充指标或资料名称。"}',
+      'event: done\ndata: {"ok":true,"totalMs":22}',
+      "",
+    ].join("\n\n"), { headers: { "content-type": "text/event-stream" } })));
+    const qa = await mountQa("global");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "一个没有命中的问题";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForText(qa, "暂未找到足以支持回答的资料");
+
+    expect(qa.querySelector(".drive-ai-qa-no-results")).not.toBeNull();
+    expect(qa.querySelector(".drive-ai-qa-message.is-error")).toBeNull();
+    expect(qa.querySelector(".drive-ai-qa-error")).toBeNull();
+    expect(qa.querySelector(".drive-codex-handoff-entry")).toBeNull();
+    expect(qa.textContent).toContain("已检查 12 个可用专题");
+    const skippedSteps = Array.from(qa.querySelectorAll(".drive-ai-qa-progress-step.is-skipped")).map((step) => step.textContent);
+    expect(skippedSteps).toHaveLength(2);
+    expect(skippedSteps[0]).toContain("分析证据");
+    expect(skippedSteps[0]).toContain("未执行");
+    expect(skippedSteps[1]).toContain("组织回答");
+    expect(skippedSteps[1]).toContain("未执行");
+
+    qa.querySelector<HTMLButtonElement>(".drive-ai-qa-no-results button")!.click();
+    await qa.updateComplete;
+    expect(qa.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("一个没有命中的问题");
+    expect(qa.querySelector(".drive-ai-qa-no-results")).toBeNull();
+  });
+
+  it("keeps a partial answer in a settled stopped state", async () => {
+    const encoder = new TextEncoder();
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          'event: phase\ndata: {"stage":"composing","state":"active","elapsedMs":120}',
+          'event: delta\ndata: {"content":"已经生成的部分"}',
+          "",
+        ].join("\n\n")));
+        init?.signal?.addEventListener("abort", () => {
+          controller.error(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      },
+    }), { headers: { "content-type": "text/event-stream" } })));
+    const qa = await mountQa("global");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "生成一个较长回答";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForText(qa, "已经生成的部分");
+    qa.querySelector<HTMLButtonElement>(".drive-ai-qa-action.is-stop")!.click();
+    await waitForText(qa, "已停止生成");
+
+    expect(qa.textContent).toContain("已经生成的部分");
+    expect(qa.textContent).toContain("已停止生成");
+    expect(qa.querySelector(".drive-ai-qa-progress-summary")).not.toBeNull();
+    expect(qa.querySelector(".drive-ai-qa-message.is-error")).toBeNull();
+  });
+
+  it("respects non-retryable structured stream errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response([
+      'event: phase\ndata: {"stage":"retrieving","state":"active","elapsedMs":1}',
+      'event: error\ndata: {"stage":"retrieving","code":"RETRIEVAL_SCOPE_UNAVAILABLE","retryable":false,"message":"当前专题已不存在或暂不可用，请返回专题列表重新选择。"}',
+      "",
+    ].join("\n\n"), { headers: { "content-type": "text/event-stream" } })));
+    const qa = await mountQa("topic");
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "查询已删除专题";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForText(qa, "当前专题已不存在");
+
+    expect(qa.querySelector(".drive-ai-qa-message.is-error")).not.toBeNull();
+    expect(qa.querySelector(".drive-ai-qa-error")?.textContent).toContain("当前专题已不存在");
+    expect(qa.querySelector(".drive-ai-qa-error button")).toBeNull();
   });
 
   it("sends the topic prefix and resets when the topic changes", async () => {

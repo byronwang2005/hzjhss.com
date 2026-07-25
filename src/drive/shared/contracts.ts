@@ -9,6 +9,53 @@ export type CodexHandoffStage =
   | "launching"
   | "complete"
   | "error";
+export type QaProgressStage = "parsing" | "retrieving" | "reasoning" | "composing";
+export type QaProgressState = "active" | "complete";
+
+export interface QaPhaseEventData {
+  stage: QaProgressStage;
+  state: QaProgressState;
+  elapsedMs: number;
+}
+
+export interface QaRetrievalSummary {
+  scope: "global" | "topic";
+  topicCount: number;
+  candidateCount: number;
+  evidenceCount: number;
+  methodologyCount: number;
+  evidenceSourceCount: number;
+  methodologySourceCount: number;
+  elapsedMs: number;
+}
+
+export interface QaNoResultsEventData extends QaRetrievalSummary {
+  hint: string;
+}
+
+export interface QaErrorEventData {
+  stage: QaProgressStage;
+  code:
+    | "RETRIEVAL_SCOPE_INVALID"
+    | "RETRIEVAL_SCOPE_UNAVAILABLE"
+    | "RETRIEVAL_FAILED"
+    | "MODEL_CAPACITY_EXCEEDED"
+    | "MODEL_CONFIGURATION_ERROR"
+    | "MODEL_BUSY"
+    | "MODEL_START_FAILED"
+    | "MODEL_STREAM_FAILED";
+  retryable: boolean;
+  message: string;
+}
+
+export type QaSseEvent =
+  | { event: "phase"; data: QaPhaseEventData }
+  | { event: "retrieval_summary"; data: QaRetrievalSummary }
+  | { event: "no_results"; data: QaNoResultsEventData }
+  | { event: "thinking"; data: { active: boolean } }
+  | { event: "delta"; data: { content: string } }
+  | { event: "done"; data: { ok: true; totalMs: number } }
+  | { event: "error"; data: QaErrorEventData };
 
 export interface CodexHandoffRequest {
   scope: "global" | "topic";
