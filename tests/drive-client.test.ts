@@ -144,6 +144,7 @@ describe("knowledge client surface", () => {
   const stateSource = readFileSync(new URL("../src/drive/client/state.ts", import.meta.url), "utf8");
   const workspaceStyles = readFileSync(new URL("../src/drive/client/styles/workspace.css", import.meta.url), "utf8");
   const fileStyles = readFileSync(new URL("../src/drive/client/styles/files.css", import.meta.url), "utf8");
+  const motionStyles = readFileSync(new URL("../src/drive/client/styles/motion.css", import.meta.url), "utf8");
   const uploadPolicy = readFileSync(new URL("../src/drive/client/upload-policy.ts", import.meta.url), "utf8");
   const sharedPolicy = readFileSync(new URL("../src/drive/shared/policy.ts", import.meta.url), "utf8");
   const entryMarkup = readFileSync(new URL("../src/site/pages/index.html", import.meta.url), "utf8");
@@ -250,7 +251,14 @@ describe("knowledge client surface", () => {
     expect(source.match(/runWorkspaceTransition\(/g)).toHaveLength(4);
     const loadFilesSource = source.slice(source.indexOf("async function loadFiles"), source.indexOf("function fileLoadIsCurrent"));
     expect(loadFilesSource).not.toContain("runWorkspaceTransition");
-    expect(source).toContain('class="drive-scope-active-indicator"');
+    expect(source.match(/class="drive-scope-track-indicator"/g)).toHaveLength(1);
+    expect(source).not.toContain("drive-scope-active-indicator");
+    expect(source).toContain("syncScopeIndicator(false)");
+    expect(source).toContain("--drive-scope-indicator-x");
+    expect(motionStyles).toContain(".drive-scope-list > :not(.drive-scope-track-indicator)");
+    expect(motionStyles).toContain("transform var(--jh-duration-medium) var(--jh-motion-ios)");
+    expect(motionStyles).not.toContain("view-transition-name: drive-scope-active");
+    expect(motionStyles).toContain("::view-transition-old(root)");
     expect(source).toContain('class="drive-tab-active-indicator"');
     expect(source).toContain('class="drive-file-role-active-indicator"');
   });

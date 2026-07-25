@@ -68,12 +68,17 @@ let fileLoadClockTimer: number | undefined;
 let fileLoadAbortController: AbortController | null = null;
 let fileLoadRequestId = 0;
 let uploadOperationActive = false;
+let observedScopeList: HTMLElement | null = null;
+const scopeListResizeObserver = typeof ResizeObserver === "function"
+  ? new ResizeObserver(() => syncScopeIndicator(false))
+  : null;
 
 root.addEventListener("click", (event) => void handleClick(event));
 root.addEventListener("submit", (event) => void handleSubmit(event));
 root.addEventListener("input", handleInput);
 root.addEventListener("change", (event) => void handleChange(event));
 root.addEventListener("keydown", handleTabKeydown);
+window.addEventListener("resize", () => syncScopeIndicator(false), { passive: true });
 window.jhssTheme.subscribe((theme) => {
   if (state.theme !== theme) {
     state.theme = theme;
@@ -927,19 +932,57 @@ function renderApp(): void {
   if (state.entryState === "checking-session") {
     render(renderSessionCheck(), root);
     removePreflightShell();
+    syncScopeIndicator();
     return;
   }
   if (state.entryState === "preparing-workspace") {
     render(renderWorkspaceLoading(), root);
     removePreflightShell();
+    syncScopeIndicator();
     return;
   }
   render(state.mode === "login" ? renderLogin() : renderShell(), root);
   removePreflightShell();
+  syncScopeIndicator();
 }
 
 function removePreflightShell(): void {
   root.querySelector(".drive-preflight-shell")?.remove();
+}
+
+function syncScopeIndicator(animate = true): void {
+  const list = root.querySelector<HTMLElement>(".drive-scope-list");
+  const indicator = list?.querySelector<HTMLElement>(".drive-scope-track-indicator");
+  const activeItem = list?.querySelector<HTMLElement>(".drive-scope-item.is-active");
+  if (!list || !indicator || !activeItem) {
+    scopeListResizeObserver?.disconnect();
+    observedScopeList = null;
+    return;
+  }
+
+  if (observedScopeList !== list) {
+    scopeListResizeObserver?.disconnect();
+    scopeListResizeObserver?.observe(list);
+    observedScopeList = list;
+  }
+
+  const reducedMotion = typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const positioned = indicator.dataset.positioned === "true";
+  const instant = !positioned || !animate || reducedMotion;
+  const listBounds = list.getBoundingClientRect();
+  const activeBounds = activeItem.getBoundingClientRect();
+  indicator.classList.toggle("is-instant", instant);
+  indicator.style.setProperty("--drive-scope-indicator-x", `${activeBounds.left - listBounds.left + list.scrollLeft}px`);
+  indicator.style.setProperty("--drive-scope-indicator-y", `${activeBounds.top - listBounds.top + list.scrollTop}px`);
+  indicator.style.setProperty("--drive-scope-indicator-width", `${activeBounds.width}px`);
+  indicator.style.setProperty("--drive-scope-indicator-height", `${activeBounds.height}px`);
+  indicator.dataset.positioned = "true";
+
+  if (instant && !reducedMotion) {
+    void indicator.offsetWidth;
+    indicator.classList.remove("is-instant");
+  }
 }
 
 function renderLogin(): TemplateResult {
@@ -1090,8 +1133,8 @@ function renderScopeRail(): TemplateResult {
         ` : nothing}
       </div>
       <nav class="drive-scope-list" aria-label="知识库范围">
+        <span class="drive-scope-track-indicator" aria-hidden="true"></span>
         <button class=${`drive-scope-item is-global${state.mode === "overview" ? " is-active" : ""}`} type="button" data-action="back" aria-current=${state.mode === "overview" ? "page" : nothing}>
-          ${state.mode === "overview" ? html`<span class="drive-scope-active-indicator" aria-hidden="true"></span>` : nothing}
           <span class="drive-scope-item-icon">${renderIcon("files", "duotone")}</span>
           <span><strong>全部资料</strong><small>${state.topics.filter((topic) => topic.ready).length} 个专题可问答</small></span>
         </button>
@@ -1105,7 +1148,6 @@ function renderScopeRail(): TemplateResult {
                 data-topic-id=${topic.id}
                 aria-current=${state.topic?.id === topic.id ? "page" : nothing}
               >
-                ${state.topic?.id === topic.id ? html`<span class="drive-scope-active-indicator" aria-hidden="true"></span>` : nothing}
                 <span class="drive-scope-item-icon">${renderIcon("folder")}</span>
                 <span><strong>${topic.name}</strong><small class=${topic.ready ? "is-ready" : ""}>${topic.ready ? "可问答" : "处理中"}</small></span>
               </button>

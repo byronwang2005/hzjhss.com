@@ -24,6 +24,16 @@
   isolation: isolate;
 }
 
+.drive-scope-list {
+  position: relative;
+  isolation: isolate;
+}
+
+.drive-scope-list > :not(.drive-scope-track-indicator) {
+  position: relative;
+  z-index: 1;
+}
+
 .drive-scope-item > *,
 .drive-tabs button > *,
 .drive-file-role-tab > * {
@@ -39,7 +49,6 @@
   box-shadow: none;
 }
 
-.drive-scope-active-indicator,
 .drive-tab-active-indicator,
 .drive-file-role-active-indicator {
   position: absolute;
@@ -47,13 +56,37 @@
   pointer-events: none;
 }
 
-.drive-scope-active-indicator {
-  inset: 0;
+.drive-scope-track-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: var(--drive-scope-indicator-width, 0);
+  height: var(--drive-scope-indicator-height, 0);
   background: var(--jh-color-surface);
   border: 1px solid var(--jh-color-border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgb(31 39 48 / 5%);
-  view-transition-name: drive-scope-active;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(
+    var(--drive-scope-indicator-x, 0),
+    var(--drive-scope-indicator-y, 0),
+    0
+  );
+  transition:
+    width var(--jh-duration-medium) var(--jh-motion-ios),
+    height var(--jh-duration-medium) var(--jh-motion-ios),
+    opacity var(--jh-duration-fast) var(--jh-motion-ios),
+    transform var(--jh-duration-medium) var(--jh-motion-ios);
+}
+
+.drive-scope-track-indicator[data-positioned="true"] {
+  opacity: 1;
+}
+
+.drive-scope-track-indicator.is-instant {
+  transition: none;
 }
 
 .drive-tab-active-indicator {
@@ -114,7 +147,6 @@ drive-ai-qa {
   transition: transform var(--jh-duration-fast) var(--jh-motion-ios);
 }
 
-::view-transition-group(drive-scope-active),
 ::view-transition-group(drive-tab-active),
 ::view-transition-group(drive-file-role-active),
 ::view-transition-group(drive-topic-header),
@@ -123,6 +155,11 @@ drive-ai-qa {
 ::view-transition-group(drive-file-role-panel) {
   animation-duration: var(--jh-duration-medium);
   animation-timing-function: var(--jh-motion-ios);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  display: none;
 }
 
 ::view-transition-old(drive-ai-surface),
@@ -203,7 +240,7 @@ html[data-workspace-transition="file-role"]::view-transition-new(drive-file-role
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drive-scope-active-indicator,
+  .drive-scope-track-indicator,
   .drive-tab-active-indicator,
   .drive-file-role-active-indicator,
   .drive-topic-workspace-head,
