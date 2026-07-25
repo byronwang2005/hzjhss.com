@@ -281,7 +281,7 @@ export class DriveAiQa extends LitElement {
     return html`
       <div class="drive-ai-qa-empty">
         <div class="drive-ai-qa-empty-copy">
-          <span class="drive-eyebrow">${name ? `欢迎回来，${name}` : "AI 知识检索"}</span>
+          <span class="drive-eyebrow">${name ? `欢迎回来，${name}` : "AI知识检索"}</span>
           <h3>${this.ready ? isGlobal ? "今天想从资料里确认什么？" : "从这个专题开始提问" : "等待文件处理"}</h3>
           <p>${this.ready ? "描述你想比较、核实或追溯的问题，回答会尽量关联到原始资料。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p>
         </div>
@@ -513,7 +513,7 @@ export class DriveAiQa extends LitElement {
           "is-stopped": progress.mode === "stopped",
           "is-error": progress.mode === "error",
         })}
-        aria-label="AI 回答处理进度"
+        aria-label="AI回答处理进度"
       >
         <div class="drive-ai-qa-progress-head">
           <div>

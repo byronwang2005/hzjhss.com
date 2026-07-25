@@ -2,15 +2,15 @@ import path from "node:path";
 
 function sharedHeader(prefix, home) {
   const href = home ? "/docs/" : "../index.html";
-  const ariaLabel = home ? "嘉合杉升 AI 手册首页" : "返回AI手册";
+  const ariaLabel = home ? "嘉合杉升AI手册首页" : "返回AI手册";
   return `<header class="site-header blog-header" aria-label="手册导航">
         <a class="brand-lockup docs-brand" href="${href}" aria-label="${ariaLabel}">
           <img class="company-logo" src="${prefix}/assets/jhss-logo-cropped.png" width="400" height="501" alt="${home ? "" : "嘉合杉升 Logo"}">
-          <span><strong>嘉合杉升</strong><small>AI 手册</small></span>
+          <span><strong>嘉合杉升</strong><small>AI手册</small></span>
         </a>
         <nav class="top-nav" aria-label="站点导航">
-          <a href="/">AI 知识库</a>
-          <a href="http://124.222.133.97/">AI 接入系统</a>
+          <a href="/">AI知识库</a>
+          <a href="http://124.222.133.97/">AI接入系统</a>
         </nav>
       </header>`;
 }

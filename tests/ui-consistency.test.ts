@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const htmlFiles = ["dist/404.html", "dist/docs/index.html", ...globSync("dist/docs/articles/*.html")];
 const publicMarkup = htmlFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 const allPublicHtml = ["dist/index.html", ...htmlFiles].map((file) => readFileSync(file, "utf8"));
+const chineseAiSpacingPattern = /(?:\p{Script=Han}(?:\s|&nbsp;)+AI\b|(?<![A-Za-z])AI(?:\s|&nbsp;)+\p{Script=Han})/u;
 const driveSource = ["src/drive/client/index.ts", "src/drive/client/pdf-preview.ts", "src/drive/client/qa-chat.ts", "src/drive/client/upload-policy.ts"]
   .map((file) => readFileSync(file, "utf8"))
   .join("\n");
@@ -14,6 +15,19 @@ const cssSource = globSync("src/**/*.css")
   .join("\n");
 
 describe("shared UI system", () => {
+  it("keeps standalone AI adjacent to neighboring Chinese text", () => {
+    const userVisibleSources = [
+      ...allPublicHtml,
+      readFileSync("dist/assets/drive.js", "utf8"),
+      readFileSync("tests/fixtures/knowledge-layout.html", "utf8"),
+      readFileSync("functions/api/drive/process-retry.ts", "utf8"),
+    ];
+
+    for (const source of userVisibleSources) {
+      expect(source).not.toMatch(chineseAiSpacingPattern);
+    }
+  });
+
   it("loads the generated PDF worker from the hashed drive-assets directory", () => {
     const workerPath = globSync("dist/assets/drive-assets/pdf.worker-*.mjs")[0];
     expect(workerPath).toBeTruthy();

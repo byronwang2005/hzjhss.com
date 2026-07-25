@@ -1162,7 +1162,7 @@ function renderLogin(): TemplateResult {
         ${authenticating ? html`<span class="drive-spin">${renderIcon("spinner-gap")}</span>` : renderIcon("arrow-right", "bold")}
       </button>
       ${renderStatus()}
-      <div class="drive-login-foot"><p class="drive-login-help">仅限授权成员访问</p><a class="drive-docs-link" href="/docs/">${renderIcon("book-open")}浏览 AI 手册</a></div>
+      <div class="drive-login-foot"><p class="drive-login-help">仅限授权成员访问</p><a class="drive-docs-link" href="/docs/">${renderIcon("book-open")}浏览AI手册</a></div>
     </form>
   </section>`;
 }
@@ -1230,10 +1230,10 @@ function renderShell(): TemplateResult {
   return html`<section class="drive-dashboard">
     <header class="drive-appbar">
       <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" data-action="back" aria-label="返回知识库首页">
-        <img src="/assets/jhss-logo-cropped.png" alt=""><span><strong>嘉合杉升</strong><small>AI 知识库</small></span>
+        <img src="/assets/jhss-logo-cropped.png" alt=""><span><strong>嘉合杉升</strong><small>AI知识库</small></span>
       </button>
       <div class="drive-appbar-meta">
-        <a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a>
+        <a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI手册</a>
         ${renderThemeToggle()}
         <wa-dropdown class="drive-account-menu" placement="bottom-end">
           <button class="drive-account-trigger" type="button" slot="trigger">
