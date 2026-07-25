@@ -210,23 +210,26 @@ export class DriveAiQa extends LitElement {
 
   protected render(): TemplateResult {
     const isGlobal = this.scope === "global";
-    const title = isGlobal ? "向全部资料提问" : "专题问答";
+    const title = isGlobal ? "向全部资料提问" : `在${this.topicName || "当前专题"}中提问`;
     return html`
-      <section class=${classMap({ "drive-ai-qa": true, "is-global": isGlobal, "has-notice": !this.ready })} aria-label=${title} aria-busy=${String(this.streaming)}>
-        <header class="drive-ai-qa-head">
-          <div class="drive-ai-qa-heading">
-            <span class="drive-ai-qa-symbol">${renderIcon("chat-circle-dots")}</span>
-            <div><span class="drive-eyebrow">${isGlobal ? "AI 检索" : "当前专题"}</span><h2>${title}</h2></div>
-          </div>
-          <div class="drive-ai-qa-head-actions">
-            <span class="drive-ai-qa-scope">${renderIcon(isGlobal ? "files" : "folder")}${isGlobal ? "全部专题" : this.topicName || "当前专题"}</span>
+      <section class=${classMap({
+        "drive-ai-qa": true,
+        "is-global": isGlobal,
+        "is-empty": this.messages.length === 0,
+        "has-notice": !this.ready,
+      })} aria-label=${title} aria-busy=${String(this.streaming)}>
+        ${isGlobal || this.messages.length ? html`
+          <header class=${`drive-ai-qa-head${isGlobal ? "" : " is-actions-only"}`}>
+            ${isGlobal ? html`
+              <span class="drive-ai-qa-scope">${renderIcon("files")}全部资料</span>
+            ` : nothing}
             ${this.messages.length
               ? html`<button class="drive-control drive-ai-qa-clear" type="button" @click=${() => this.clearConversation()} ?disabled=${this.streaming}>
-                  ${renderIcon("trash")}清空会话
+                  ${renderIcon("plus")}新对话
                 </button>`
-              : nothing}
-          </div>
-        </header>
+              : html`<span class="drive-ai-qa-grounding">${renderIcon("link")}回答将标注资料来源</span>`}
+          </header>
+        ` : nothing}
 
         ${this.ready
           ? nothing
@@ -258,6 +261,10 @@ export class DriveAiQa extends LitElement {
                   ${renderIcon("paper-plane-tilt", "bold")}
                 </button>`}
           </div>
+          <div class="drive-ai-qa-composer-meta">
+            <span>${renderIcon(isGlobal ? "files" : "folder")}${isGlobal ? "检索全部资料" : `仅检索「${this.topicName || "当前专题"}」`}</span>
+            <span>Enter 发送 · Shift + Enter 换行</span>
+          </div>
           <span
             class="drive-ai-qa-status"
             role=${this.streaming ? nothing : "status"}
@@ -271,22 +278,33 @@ export class DriveAiQa extends LitElement {
   }
 
   private renderEmptyState(): TemplateResult {
-    const isAnimatedGreeting = this.scope === "global" && this.ready;
-    const fallbackGreeting = greetingOptions(this.displayName)[0];
-    const readyTitle = isAnimatedGreeting ? fallbackGreeting : `对${this.topicName || "当前专题"}提问`;
+    const isGlobal = this.scope === "global";
+    const name = this.displayName.trim();
+    const suggestions = isGlobal
+      ? ["比较不同专题的共同结论", "找出资料中的主要风险", "按来源汇总关键证据"]
+      : ["概括这个专题的核心结论", "提取最重要的数据和日期", "哪些判断仍存在不确定性"];
     return html`
       <div class="drive-ai-qa-empty">
-        <div><h3
-          class=${isAnimatedGreeting ? "drive-ai-qa-typewriter-title" : nothing}
-          aria-label=${isAnimatedGreeting ? this.greetingLabel || fallbackGreeting : nothing}
-          aria-live=${isAnimatedGreeting ? "off" : nothing}
-        >${this.ready
-            ? isAnimatedGreeting
-              ? html`<span class=${classMap({ "drive-ai-qa-typewriter": true, "is-active": !this.reduceGreetingMotion })} aria-hidden="true">${this.typedGreeting}</span>`
-              : readyTitle
-            : "等待文件处理"}</h3>${this.ready ? nothing : html`<p>索引完成后，这里会提供基于资料的可追溯回答。</p>`}</div>
+        <div class="drive-ai-qa-empty-copy">
+          <span class="drive-eyebrow">${isGlobal ? name ? `欢迎回来，${name}` : "AI 知识检索" : `当前专题 · ${this.topicName || "未命名专题"}`}</span>
+          <h3>${this.ready ? isGlobal ? "今天想从资料里确认什么？" : "从这个专题开始提问" : "等待文件处理"}</h3>
+          <p>${this.ready ? "描述你想比较、核实或追溯的问题，回答会尽量关联到原始资料。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p>
+        </div>
+        ${this.ready ? html`
+          <div class="drive-ai-qa-suggestions" aria-label="建议问题">
+            ${suggestions.map((suggestion) => html`
+              <button type="button" @click=${() => this.applySuggestion(suggestion)}>${renderIcon("arrow-right")}<span>${suggestion}</span></button>
+            `)}
+          </div>
+        ` : nothing}
       </div>
     `;
+  }
+
+  private applySuggestion(suggestion: string): void {
+    if (!this.ready || this.streaming) return;
+    this.question = suggestion;
+    void this.updateComplete.then(() => this.querySelector<HTMLTextAreaElement>('textarea[name="qaQuestion"]')?.focus());
   }
 
   private handleGreetingMotionChange = (event: MediaQueryListEvent): void => {
@@ -306,7 +324,7 @@ export class DriveAiQa extends LitElement {
   }
 
   private shouldAnimateGreeting(): boolean {
-    return this.isConnected && this.scope === "global" && this.ready && this.messages.length === 0;
+    return false;
   }
 
   private showStaticGreeting(): void {

@@ -1,7 +1,7 @@
-import type { FileListResponse, KnowledgeRole, TopicSummary, UserRole } from "../shared/contracts";
+import type { FileListProgressStage, FileListResponse, KnowledgeRole, TopicSummary, UserRole } from "../shared/contracts";
 import type { UploadBatchState } from "./file-progress";
 
-export type Mode = "login" | "overview" | "topic" | "create";
+export type Mode = "login" | "overview" | "topic";
 export type TopicView = "qa" | "files";
 export type ThemeName = "light" | "dark";
 export type EntryState =
@@ -18,6 +18,28 @@ export interface DeleteConfirmation {
   path?: string;
   targetName: string;
   input: string;
+  pending: boolean;
+  error: string;
+}
+
+export interface FileListLoadState {
+  requestId: number;
+  active: boolean;
+  mode: "initial" | "navigation" | "refresh" | "background";
+  stage: FileListProgressStage;
+  completedStages: FileListProgressStage[];
+  completed: number;
+  total: number;
+  startedAt: number;
+  elapsedMs: number;
+  slow: boolean;
+  error: string;
+}
+
+export interface EditReportDateState {
+  path: string;
+  fileName: string;
+  value: string;
   pending: boolean;
   error: string;
 }
@@ -55,6 +77,9 @@ export interface DriveClientState {
   topicName: string;
   theme: ThemeName;
   deleteConfirmation: DeleteConfirmation | null;
+  createTopicOpen: boolean;
+  editReportDate: EditReportDateState | null;
+  fileLoad: FileListLoadState | null;
   uploadBatch: UploadBatchState | null;
   expandedFilePath: string | null;
 }
@@ -80,6 +105,9 @@ export const state: DriveClientState = {
   topicName: "",
   theme: window.jhssTheme.getResolvedTheme(),
   deleteConfirmation: null,
+  createTopicOpen: false,
+  editReportDate: null,
+  fileLoad: null,
   uploadBatch: null,
   expandedFilePath: null,
 };

@@ -11,7 +11,7 @@ const phosphorPackageDir = path.join(root, "node_modules", "@phosphor-icons", "c
 
 const iconSets = {
   regular: [
-    "apple-logo", "arrow-clockwise", "arrow-left", "arrow-right", "arrow-square-out",
+    "apple-logo", "arrow-clockwise", "arrows-clockwise", "arrow-left", "arrow-right", "arrow-square-out",
     "arrows-out-line-horizontal", "article", "book-open", "brain", "broadcast", "caret-down", "caret-up",
     "caret-left", "caret-right", "chat-circle-dots", "check", "check-circle", "circle-notch", "clipboard-text",
     "copy", "cpu", "database", "download-simple", "eye", "eye-slash", "file", "file-arrow-up",
@@ -27,7 +27,7 @@ const iconSets = {
     "trash", "upload-simple", "user-switch",
   ],
   fill: ["check-circle", "star"],
-  duotone: ["books", "calendar-dots", "database", "eye-slash", "files", "folder-plus", "package", "tray"],
+  duotone: ["arrows-clockwise", "books", "calendar-dots", "database", "eye-slash", "files", "folder", "folder-plus", "package", "tray", "warning"],
 };
 
 async function buildIconSprite() {

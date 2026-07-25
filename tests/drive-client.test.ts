@@ -143,14 +143,15 @@ describe("knowledge client surface", () => {
   const source = readFileSync(new URL("../src/drive/client/index.ts", import.meta.url), "utf8");
   const stateSource = readFileSync(new URL("../src/drive/client/state.ts", import.meta.url), "utf8");
   const workspaceStyles = readFileSync(new URL("../src/drive/client/styles/workspace.css", import.meta.url), "utf8");
+  const fileStyles = readFileSync(new URL("../src/drive/client/styles/files.css", import.meta.url), "utf8");
   const uploadPolicy = readFileSync(new URL("../src/drive/client/upload-policy.ts", import.meta.url), "utf8");
   const sharedPolicy = readFileSync(new URL("../src/drive/shared/policy.ts", import.meta.url), "utf8");
   const entryMarkup = readFileSync(new URL("../src/site/pages/index.html", import.meta.url), "utf8");
 
   it("keeps only Q&A and administrator file management", () => {
-    expect(source).toContain('<drive-ai-qa scope="global"');
+    expect(source).toContain('scope="global"');
     expect(source).toContain(".displayName=${state.displayName}");
-    expect(source).toContain('<drive-ai-qa scope="topic"');
+    expect(source).toContain('scope="topic"');
     expect(source).toContain('state.role === "admin"');
     expect(source).not.toContain("Agent");
     expect(source).not.toContain("成果");
@@ -161,8 +162,10 @@ describe("knowledge client surface", () => {
   it("keeps the overview compact and exposes topic creation only to administrators", () => {
     expect(source).not.toContain('<span class="drive-eyebrow">知识工作台</span>');
     expect(source).not.toContain("从全部资料中提问，快速获得带来源的可靠答案。");
-    expect(source).toContain('<div class="drive-topic-panel-actions">');
-    expect(source).toContain('state.role === "admin" ? html`<button class="drive-control" data-action="create-topic"');
+    expect(source).toContain('class="drive-scope-rail"');
+    expect(source).toContain('state.role === "admin"');
+    expect(source).toContain('data-action="create-topic"');
+    expect(stateSource).not.toContain('"create"');
   });
 
   it("keeps desktop scrolling inside the conversation, topic list and file table", () => {
@@ -198,7 +201,7 @@ describe("knowledge client surface", () => {
     expect(workspaceStyles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(source).toContain('role="tabpanel"');
     expect(source).toContain('role="columnheader"');
-    expect(source).toContain('data-label="状态"');
+    expect(source).toContain('data-label="处理状态"');
     expect(source).toContain("替换专题方法论");
     expect(source).toContain('data-action="pick-reference-folder"');
     expect(source).toContain("file.webkitRelativePath || file.name");
@@ -216,6 +219,27 @@ describe("knowledge client surface", () => {
     expect(source).toContain("window.clearTimeout(fileRefreshTimer)");
     expect(source).toContain("void loadFiles(true)");
     expect(source).not.toContain("!file.processing ||");
+  });
+
+  it("cancels stale file listings, keeps refreshes in place and exposes real progress accessibly", () => {
+    expect(source).toContain("fileLoadAbortController?.abort()");
+    expect(source).toContain("++fileLoadRequestId");
+    expect(source).toContain("fileLoadIsCurrent(requestId, topicId, prefix)");
+    expect(source).toContain('mode: background ? "background" : state.listing ? "refresh" : "initial"');
+    expect(source).toContain('aria-current=${stepState === "active" ? "step" : nothing}');
+    expect(source).toContain('aria-live=${load.mode === "background" ? "off" : "polite"}');
+    expect(source).toContain("COS 响应较慢，仍在继续读取");
+    expect(fileStyles).toContain(".drive-file-sync-strip.is-slow");
+  });
+
+  it("keeps account and destructive actions contextual instead of placing them in the global toolbar", () => {
+    expect(source).toContain('<wa-dropdown class="drive-account-menu"');
+    expect(source).toContain('<wa-dropdown-item value="logout"');
+    expect(source).not.toContain('data-action="refresh"');
+    expect(source).toContain('class="drive-topic-delete"');
+    expect(source).toContain('data-action="edit-report-date"');
+    expect(source).not.toContain("window.prompt");
+    expect(fileStyles).toContain(".drive-row-action-menu");
   });
 
   it("renders the three entry states without showing a success loader before authentication", () => {

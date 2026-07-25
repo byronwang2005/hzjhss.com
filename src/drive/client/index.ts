@@ -2,6 +2,8 @@ import "@awesome.me/webawesome/dist/styles/webawesome.css";
 import "@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js";
 import "@awesome.me/webawesome/dist/components/callout/callout.js";
 import "@awesome.me/webawesome/dist/components/dialog/dialog.js";
+import "@awesome.me/webawesome/dist/components/dropdown/dropdown.js";
+import "@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js";
 import "./drive.css";
 
 import Uppy from "@uppy/core";
@@ -12,10 +14,19 @@ import { repeat } from "lit/directives/repeat.js";
 import { renderIcon } from "./icons";
 import { transitionEntryState } from "./entry-flow";
 import "./qa-chat";
-import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse, UploadCompleteResponse } from "../shared/contracts";
+import type {
+  FileListErrorEvent,
+  FileListPhaseEvent,
+  FileListProgressStage,
+  FileListResponse,
+  KnowledgeFile,
+  KnowledgeRole,
+  OverviewResponse,
+  UploadCompleteResponse,
+} from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, formatDate, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "./utils";
-import { api, ApiError } from "./api";
+import { api, apiStream, ApiError, consumeSse } from "./api";
 import { state, type TopicView } from "./state";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
 import {
@@ -52,6 +63,9 @@ const root = rootElement;
 
 let fileRefreshTimer: number | undefined;
 let fileProgressClockTimer: number | undefined;
+let fileLoadClockTimer: number | undefined;
+let fileLoadAbortController: AbortController | null = null;
+let fileLoadRequestId = 0;
 let uploadOperationActive = false;
 
 root.addEventListener("click", (event) => void handleClick(event));
@@ -113,6 +127,7 @@ async function loadOverview(): Promise<void> {
 }
 
 function applyOverview(overview: OverviewResponse): void {
+  cancelFileLoad();
   state.role = overview.role;
   state.displayName = overview.displayName;
   state.topics = overview.topics;
@@ -168,11 +183,13 @@ async function runEntryRequest<T>(
 async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void> {
   const topic = state.topics.find((entry) => entry.id === topicId);
   if (!topic) return;
+  cancelFileLoad();
   state.topic = topic;
   state.topicView = view;
   state.fileRoleView = "evidence";
   state.prefix = "";
   state.listing = null;
+  state.fileLoad = null;
   state.mode = "topic";
   renderApp();
   syncFileProgressClock();
@@ -185,42 +202,130 @@ async function loadFiles(background = false): Promise<void> {
     window.clearTimeout(fileRefreshTimer);
     fileRefreshTimer = undefined;
   }
+  fileLoadAbortController?.abort();
+  const controller = new AbortController();
+  fileLoadAbortController = controller;
+  const requestId = ++fileLoadRequestId;
   const topicId = state.topic.id;
   const prefix = state.prefix;
-  if (!background) {
-    state.loading = true;
-    renderApp();
-  }
-  const listing = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(prefix)}`);
-  const batchSnapshot = state.uploadBatch?.topicId === topicId ? state.uploadBatch : null;
-  const batchListing = batchSnapshot?.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage))
-    ? await loadBatchStatusListing(topicId, batchSnapshot, batchSnapshot.prefix === prefix ? listing : null)
-    : listing;
-  if (state.topic?.id !== topicId || state.prefix !== prefix || state.topicView !== "files") return;
-  state.listing = listing;
-  if (state.uploadBatch === batchSnapshot) reconcileUploadBatch(batchSnapshot, topicId, batchListing);
-  state.loading = false;
+  state.fileLoad = {
+    requestId,
+    active: true,
+    mode: background ? "background" : state.listing ? "refresh" : "initial",
+    stage: "topic",
+    completedStages: [],
+    completed: 0,
+    total: 0,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    slow: false,
+    error: "",
+  };
   renderApp();
-  syncFileProgressClock();
-  const batchHasServerWork = state.uploadBatch?.topicId === topicId
-    && state.uploadBatch.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage));
-  if (listing.files.some((file) => processingDisplay(file).poll) || batchHasServerWork) {
-    fileRefreshTimer = window.setTimeout(() => {
-      fileRefreshTimer = undefined;
-      if (state.mode === "topic" && state.topicView === "files") void loadFiles(true);
-    }, batchHasServerWork ? CLIENT_TIMING.activeFileRefreshMs : CLIENT_TIMING.fileRefreshMs);
+  syncFileLoadClock();
+  let listing: FileListResponse | null = null;
+  let streamError: FileListErrorEvent | null = null;
+  try {
+    const path = `/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(prefix)}`;
+    const stream = await apiStream(path, { signal: controller.signal });
+    await consumeSse(stream, (event, data) => {
+      if (!fileLoadIsCurrent(requestId, topicId, prefix)) return;
+      if (event === "phase") {
+        const phase = parseFileListPhase(data);
+        if (phase) applyFileListPhase(phase);
+      } else if (event === "result" && isFileListResponse(data)) {
+        listing = data;
+      } else if (event === "error") {
+        streamError = parseFileListError(data);
+      }
+    });
+    if (streamError) throw new Error((streamError as FileListErrorEvent).message);
+    if (!listing) throw new Error("COS 文件列表未返回结果，请重新加载。");
+    const resolvedListing = listing as FileListResponse;
+    const batchSnapshot = state.uploadBatch?.topicId === topicId ? state.uploadBatch : null;
+    const batchListing = batchSnapshot?.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage))
+      ? await loadBatchStatusListing(topicId, batchSnapshot, batchSnapshot.prefix === prefix ? resolvedListing : null, controller.signal)
+      : resolvedListing;
+    if (!fileLoadIsCurrent(requestId, topicId, prefix)) return;
+    state.listing = resolvedListing;
+    if (state.uploadBatch === batchSnapshot) reconcileUploadBatch(batchSnapshot, topicId, batchListing);
+    if (state.fileLoad?.requestId === requestId) {
+      state.fileLoad.active = false;
+      state.fileLoad.elapsedMs = Date.now() - state.fileLoad.startedAt;
+      state.fileLoad.completedStages = ["topic", "objects", "metadata", "assembling"];
+    }
+    renderApp();
+    syncFileProgressClock();
+    const batchHasServerWork = state.uploadBatch?.topicId === topicId
+      && state.uploadBatch.items.some((item) => item.state === "active" && ["registering", "queued", "processing", "indexing"].includes(item.stage));
+    if (resolvedListing.files.some((file) => processingDisplay(file).poll) || batchHasServerWork) {
+      fileRefreshTimer = window.setTimeout(() => {
+        fileRefreshTimer = undefined;
+        if (state.mode === "topic" && state.topicView === "files") void loadFiles(true);
+      }, batchHasServerWork ? CLIENT_TIMING.activeFileRefreshMs : CLIENT_TIMING.fileRefreshMs);
+    }
+  } catch (error) {
+    if (controller.signal.aborted || !fileLoadIsCurrent(requestId, topicId, prefix)) return;
+    if (state.fileLoad?.requestId === requestId) {
+      state.fileLoad.active = false;
+      state.fileLoad.elapsedMs = Date.now() - state.fileLoad.startedAt;
+      state.fileLoad.error = error instanceof Error ? error.message : "COS 文件列表加载失败，请重试。";
+    }
+    renderApp();
+  } finally {
+    if (fileLoadAbortController === controller) fileLoadAbortController = null;
+    syncFileLoadClock();
   }
+}
+
+function fileLoadIsCurrent(requestId: number, topicId: string, prefix: string): boolean {
+  return state.fileLoad?.requestId === requestId
+    && state.topic?.id === topicId
+    && state.prefix === prefix
+    && state.topicView === "files";
+}
+
+function applyFileListPhase(phase: FileListPhaseEvent): void {
+  const load = state.fileLoad;
+  if (!load) return;
+  load.stage = phase.stage;
+  load.elapsedMs = phase.elapsedMs;
+  load.completed = phase.completed || 0;
+  load.total = phase.total || 0;
+  if (phase.state === "complete" && !load.completedStages.includes(phase.stage)) {
+    load.completedStages = [...load.completedStages, phase.stage];
+  }
+  load.slow = load.elapsedMs >= 8_000;
+  renderApp();
+}
+
+function syncFileLoadClock(): void {
+  if (fileLoadClockTimer !== undefined) {
+    window.clearTimeout(fileLoadClockTimer);
+    fileLoadClockTimer = undefined;
+  }
+  const load = state.fileLoad;
+  if (!load?.active) return;
+  fileLoadClockTimer = window.setTimeout(() => {
+    fileLoadClockTimer = undefined;
+    if (!state.fileLoad?.active || state.fileLoad.requestId !== load.requestId) return;
+    state.fileLoad.elapsedMs = Date.now() - state.fileLoad.startedAt;
+    state.fileLoad.slow = state.fileLoad.elapsedMs >= 8_000;
+    renderApp();
+    syncFileLoadClock();
+  }, 1_000);
 }
 
 async function loadBatchStatusListing(
   topicId: string,
   batch: UploadBatchState,
   firstPage: FileListResponse | null,
+  signal?: AbortSignal,
 ): Promise<FileListResponse> {
   const files = [...(firstPage?.files || [])];
   let cursor = firstPage?.nextCursor;
   if (!firstPage) {
-    const page = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}`);
+    const page = await api<FileListResponse>(`/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}`, { signal });
     files.push(...page.files);
     cursor = page.nextCursor;
   }
@@ -229,6 +334,7 @@ async function loadBatchStatusListing(
   while (cursor && [...wantedPaths].some((path) => !foundPaths.has(path))) {
     const page = await api<FileListResponse>(
       `/list?topicId=${encodeURIComponent(topicId)}&prefix=${encodeURIComponent(batch.prefix)}&cursor=${encodeURIComponent(cursor)}`,
+      { signal },
     );
     files.push(...page.files);
     page.files.forEach((file) => foundPaths.add(file.path));
@@ -277,6 +383,10 @@ function handleInput(event: Event): void {
   if (target.name === "displayName") state.loginName = target.value;
   if (target.name === "accessCode") state.accessCode = target.value;
   if (target.name === "topicName") state.topicName = target.value;
+  if (target.name === "reportDate" && state.editReportDate) {
+    state.editReportDate.value = target.value;
+    state.editReportDate.error = "";
+  }
   if (target.name === "deleteConfirmation" && state.deleteConfirmation) {
     state.deleteConfirmation.input = target.value;
     state.deleteConfirmation.error = "";
@@ -329,10 +439,20 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
   }
   if (form.matches("[data-topic-form]")) {
     try {
-      await api("/topic", { method: "POST", body: { name: state.topicName } });
+      const result = await api<{ topic: Omit<OverviewResponse["topics"][number], "ready"> }>("/topic", {
+        method: "POST",
+        body: { name: state.topicName },
+      });
+      const topic = { ...result.topic, ready: false };
+      state.topics = [topic, ...state.topics];
       state.topicName = "";
-      await loadOverview();
+      state.createTopicOpen = false;
+      await openTopic(topic.id, "files");
     } catch (error) { showError(error); }
+    return;
+  }
+  if (form.matches("[data-report-date-form]")) {
+    await submitReportDate();
   }
 }
 
@@ -346,21 +466,28 @@ async function handleClick(event: MouseEvent): Promise<void> {
     if (state.entryState === "checking-session") await boot();
     if (state.entryState === "preparing-workspace") await loadEntryOverview();
   } else if (action === "logout") {
+    cancelFileLoad();
     await api("/logout", { method: "POST" });
     location.reload();
-  } else if (action === "refresh") {
-    if (state.mode === "topic" && state.topicView === "files") await loadFiles(); else await loadOverview();
   } else if (action === "create-topic") {
-    state.mode = "create";
+    state.createTopicOpen = true;
+    state.topicName = "";
+    renderApp();
+  } else if (action === "cancel-create-topic") {
+    state.createTopicOpen = false;
+    state.topicName = "";
     renderApp();
   } else if (action === "back") {
+    cancelFileLoad();
     state.mode = "overview";
     state.topic = null;
+    state.fileLoad = null;
     renderApp();
     syncFileProgressClock();
   } else if (action === "open-topic") {
     await openTopic(String(button.dataset.topicId));
   } else if (action === "topic-view") {
+    if (state.topicView === "files" && button.dataset.view !== "files") cancelFileLoad();
     state.topicView = button.dataset.view === "files" ? "files" : "qa";
     renderApp();
     syncFileProgressClock();
@@ -380,9 +507,15 @@ async function handleClick(event: MouseEvent): Promise<void> {
     renderApp();
   } else if (action === "open-folder") {
     state.prefix = String(button.dataset.path || "");
+    state.listing = null;
+    state.fileLoad = null;
     await loadFiles();
   } else if (action === "up-folder") {
     state.prefix = directoryPrefix(state.prefix.replace(/\/$/, ""));
+    state.listing = null;
+    state.fileLoad = null;
+    await loadFiles();
+  } else if (action === "refresh-files" || action === "retry-file-list") {
     await loadFiles();
   } else if (action === "pick-reference") {
     root.querySelector<HTMLInputElement>("[data-reference-input]")?.click();
@@ -430,18 +563,19 @@ async function handleClick(event: MouseEvent): Promise<void> {
     setStatus(button.dataset.incorporated === "true" ? "已取消纳入标记。" : "已标记为已纳入方法论。", "success");
     await loadFiles();
   } else if (action === "edit-report-date") {
-    const value = window.prompt("请输入资料日期（YYYY-MM-DD）", button.dataset.reportDate || "");
-    if (value === null) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-      setStatus("资料日期必须为 YYYY-MM-DD。", "danger");
-      return;
+    state.editReportDate = {
+      path: String(button.dataset.path || ""),
+      fileName: String(button.dataset.name || fileNameFromPath(String(button.dataset.path || ""))),
+      value: String(button.dataset.reportDate || ""),
+      pending: false,
+      error: "",
+    };
+    renderApp();
+  } else if (action === "cancel-report-date") {
+    if (!state.editReportDate?.pending) {
+      state.editReportDate = null;
+      renderApp();
     }
-    await api("/object", {
-      method: "PATCH",
-      body: { topicId: state.topic?.id, path: button.dataset.path, reportDate: value.trim() },
-    });
-    setStatus("资料日期已更新，索引正在重建。", "success");
-    await loadFiles();
   } else if (action === "delete-topic" && state.topic) {
     state.deleteConfirmation = {
       kind: "topic",
@@ -487,6 +621,43 @@ async function submitDeleteConfirmation(): Promise<void> {
     confirmation.pending = false;
     confirmation.error = error instanceof Error ? error.message : "删除失败，请稍后重试";
     renderApp();
+  }
+}
+
+async function submitReportDate(): Promise<void> {
+  const edit = state.editReportDate;
+  if (!edit || edit.pending) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(edit.value.trim())) {
+    edit.error = "请选择有效的资料日期。";
+    renderApp();
+    return;
+  }
+  edit.pending = true;
+  edit.error = "";
+  renderApp();
+  try {
+    await api("/object", {
+      method: "PATCH",
+      body: { topicId: state.topic?.id, path: edit.path, reportDate: edit.value.trim() },
+    });
+    if (state.editReportDate !== edit) return;
+    state.editReportDate = null;
+    setStatus("资料日期已更新，索引正在重建。", "success");
+    await loadFiles();
+  } catch (error) {
+    if (state.editReportDate !== edit) return;
+    edit.pending = false;
+    edit.error = error instanceof Error ? error.message : "资料日期更新失败，请重试。";
+    renderApp();
+  }
+}
+
+function cancelFileLoad(): void {
+  fileLoadAbortController?.abort();
+  fileLoadAbortController = null;
+  if (fileLoadClockTimer !== undefined) {
+    window.clearTimeout(fileLoadClockTimer);
+    fileLoadClockTimer = undefined;
   }
 }
 
@@ -861,29 +1032,92 @@ function renderEntryNetwork(): TemplateResult {
 }
 
 function renderShell(): TemplateResult {
-  const title = state.mode === "topic" ? state.topic?.name : "新建专题";
-  const description = state.mode === "topic"
-    ? state.topic?.ready ? "从当前专题中提问，或管理专题资料。" : "资料仍在处理中，完成后即可开始问答。"
-    : "建立一个独立的资料范围，让后续问答更聚焦。";
   return html`<section class="drive-dashboard">
     <header class="drive-appbar">
       <button class="drive-brand-lockup drive-brand-button drive-title-button" type="button" data-action="back" aria-label="返回知识库首页">
         <img src="/assets/jhss-logo-cropped.png" alt=""><span><strong>嘉合杉升</strong><small>AI 知识库</small></span>
       </button>
-      <div class="drive-appbar-meta"><a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a>${renderThemeToggle()}<span class="drive-user-badge">${state.displayName}<small>${state.role === "admin" ? "管理员" : "成员"}</small></span>${iconButton("arrow-clockwise", "刷新", "refresh")}${iconButton("sign-out", "退出", "logout")}</div>
+      <div class="drive-appbar-meta">
+        <a class="drive-appbar-docs" href="/docs/">${renderIcon("book-open")}AI 手册</a>
+        ${renderThemeToggle()}
+        <wa-dropdown class="drive-account-menu" placement="bottom-end">
+          <button class="drive-account-trigger" type="button" slot="trigger">
+            <span class="drive-account-avatar" aria-hidden="true">${state.displayName.trim().slice(0, 1) || "用"}</span>
+            <span class="drive-account-copy"><strong>${state.displayName}</strong><small>${state.role === "admin" ? "管理员" : "成员"}</small></span>
+            ${renderIcon("caret-down")}
+          </button>
+          <wa-dropdown-item disabled>${state.displayName}<span slot="details">${state.role === "admin" ? "管理员" : "成员"}</span></wa-dropdown-item>
+          <wa-dropdown-item value="logout" variant="danger" data-action="logout">${renderIcon("sign-out")}退出知识库</wa-dropdown-item>
+        </wa-dropdown>
+      </div>
     </header>
-    <main class=${`drive-dashboard-main is-${state.mode}`} data-mode=${state.mode}>
-      ${state.mode === "overview" ? nothing : html`
-        <div class="drive-page-head"><div>
-          <button class="drive-back-link" type="button" data-action="back">${renderIcon("arrow-left")}返回知识库</button>
-          <h1>${title}</h1><p>${description}</p>
-        </div></div>
-      `}
-      ${renderStatus()}
-      ${state.loading ? renderLoading() : state.mode === "overview" ? renderOverview() : state.mode === "create" ? renderCreate() : renderTopic()}
-    </main>
+    <div class="drive-workbench">
+      ${renderScopeRail()}
+      <main class=${`drive-dashboard-main is-${state.mode}`} data-mode=${state.mode}>
+        ${state.mode === "topic" ? renderTopicHeader() : nothing}
+        ${renderStatus()}
+        ${state.loading ? renderLoading() : state.mode === "overview" ? renderOverview() : renderTopic()}
+      </main>
+    </div>
     ${renderDeleteConfirmation()}
+    ${renderCreateTopicDialog()}
+    ${renderReportDateDialog()}
   </section>`;
+}
+
+function renderScopeRail(): TemplateResult {
+  return html`
+    <aside class="drive-scope-rail" aria-label="资料范围">
+      <div class="drive-scope-rail-head">
+        <span class="drive-eyebrow">资料范围</span>
+        ${state.role === "admin" ? html`
+          <button class="drive-scope-create" data-action="create-topic" type="button" aria-label="新建专题" title="新建专题">
+            ${renderIcon("folder-plus", "bold")}<span>新建专题</span>
+          </button>
+        ` : nothing}
+      </div>
+      <nav class="drive-scope-list" aria-label="知识库范围">
+        <button class=${`drive-scope-item is-global${state.mode === "overview" ? " is-active" : ""}`} type="button" data-action="back" aria-current=${state.mode === "overview" ? "page" : nothing}>
+          <span class="drive-scope-item-icon">${renderIcon("files", "duotone")}</span>
+          <span><strong>全部资料</strong><small>${state.topics.filter((topic) => topic.ready).length} 个专题可问答</small></span>
+        </button>
+        <div class="drive-scope-section-label"><span>专题</span><small>${state.topics.length}</small></div>
+        ${state.topics.length
+          ? repeat(state.topics, (topic) => topic.id, (topic) => html`
+              <button
+                class=${`drive-scope-item${state.topic?.id === topic.id ? " is-active" : ""}`}
+                type="button"
+                data-action="open-topic"
+                data-topic-id=${topic.id}
+                aria-current=${state.topic?.id === topic.id ? "page" : nothing}
+              >
+                <span class="drive-scope-item-icon">${renderIcon("folder")}</span>
+                <span><strong>${topic.name}</strong><small class=${topic.ready ? "is-ready" : ""}>${topic.ready ? "可问答" : "处理中"}</small></span>
+              </button>
+            `)
+          : html`<div class="drive-scope-empty"><span>还没有专题</span><small>创建后即可上传资料</small></div>`}
+      </nav>
+    </aside>
+  `;
+}
+
+function renderTopicHeader(): TemplateResult | typeof nothing {
+  if (!state.topic) return nothing;
+  return html`
+    <header class="drive-topic-workspace-head">
+      <div class="drive-topic-title">
+        <span class="drive-topic-title-icon">${renderIcon("folder", "duotone")}</span>
+        <span><strong>${state.topic.name}</strong><small class=${state.topic.ready ? "is-ready" : ""}>${state.topic.ready ? "可问答" : "资料处理中"}</small></span>
+        ${state.role === "admin" ? html`
+          <button class="drive-topic-delete" type="button" data-action="delete-topic">${renderIcon("trash")}删除专题</button>
+        ` : nothing}
+      </div>
+      <div class="drive-tabs" role="tablist" aria-label="专题工作区">
+        ${tabButton("qa", "问答", "chat-circle-dots")}
+        ${tabButton("files", state.role === "admin" ? "文件" : "资料", "files")}
+      </div>
+    </header>
+  `;
 }
 
 function renderDeleteConfirmation(): TemplateResult | typeof nothing {
@@ -952,25 +1186,88 @@ function renderDeleteConfirmation(): TemplateResult | typeof nothing {
   `;
 }
 
-function renderOverview(): TemplateResult {
-  const ready = state.topics.some((topic) => topic.ready);
-  return html`<div class="drive-two-column"><drive-ai-qa scope="global" .displayName=${state.displayName} .ready=${ready}></drive-ai-qa><aside class="drive-panel drive-topic-panel"><div class="drive-panel-head"><div><span class="drive-eyebrow">资料范围</span><h2>专题</h2></div><div class="drive-topic-panel-actions"><span>${state.topics.length} 个</span>${state.role === "admin" ? html`<button class="drive-control" data-action="create-topic" type="button">${renderIcon("folder-plus")}新建专题</button>` : nothing}</div></div>
-    ${state.topics.length ? html`<div class="drive-topic-grid">${repeat(state.topics, (topic) => topic.id, (topic) => html`<button class="drive-topic-card" type="button" data-action="open-topic" data-topic-id=${topic.id}><span class="drive-topic-card-icon">${renderIcon("folder")}</span><span><strong>${topic.name}</strong><small class=${topic.ready ? "is-ready" : ""}>${topic.ready ? "可问答" : "处理中"}</small></span>${renderIcon("arrow-right")}</button>`)}</div>` : html`<div class="drive-empty">${renderIcon("folder")}<h3>还没有专题</h3><p>创建专题并上传资料后，即可开始可追溯问答。</p></div>`}
-  </aside></div>`;
+function renderCreateTopicDialog(): TemplateResult | typeof nothing {
+  if (!state.createTopicOpen) return nothing;
+  return html`
+    <wa-dialog
+      class="drive-create-topic-dialog"
+      label="新建专题"
+      with-footer
+      .open=${true}
+      @wa-after-hide=${handleCreateTopicDialogAfterHide}
+    >
+      <form id="drive-create-topic-form" class="drive-dialog-form" data-topic-form>
+        <div class="drive-dialog-intro">
+          <span class="drive-dialog-intro-icon">${renderIcon("folder-plus", "duotone")}</span>
+          <div><strong>建立独立的资料范围</strong><p>创建后将直接进入文件页，上传第一份资料并查看真实处理进度。</p></div>
+        </div>
+        <label class="drive-field">
+          <span>专题名称</span>
+          <input name="topicName" placeholder="例如：鸡蛋" .value=${state.topicName} maxlength="80" autofocus required>
+        </label>
+      </form>
+      <div class="drive-delete-dialog-actions" slot="footer">
+        <button class="drive-control" type="button" data-action="cancel-create-topic">${renderIcon("x-circle")}取消</button>
+        <button class="drive-control drive-control-primary" type="submit" form="drive-create-topic-form">${renderIcon("check", "bold")}创建并上传资料</button>
+      </div>
+    </wa-dialog>
+  `;
 }
 
-function renderCreate(): TemplateResult {
-  return html`<form class="drive-form drive-create-card" data-topic-form><div class="drive-create-icon">${renderIcon("folder-plus")}</div><div><h2>专题信息</h2><p>专题创建后，可继续上传文件并等待系统处理。</p></div><label class="drive-field"><span>专题名称</span><input name="topicName" placeholder="例如：鸡蛋" .value=${state.topicName} required></label><div class="drive-form-actions"><button class="drive-control" type="button" data-action="back">${renderIcon("x-circle")}取消</button><button class="drive-control drive-control-primary" type="submit">${renderIcon("check", "bold")}创建专题</button></div></form>`;
+function renderReportDateDialog(): TemplateResult | typeof nothing {
+  const edit = state.editReportDate;
+  if (!edit) return nothing;
+  return html`
+    <wa-dialog
+      class="drive-report-date-dialog"
+      label="编辑资料日期"
+      with-footer
+      .open=${true}
+      @wa-hide=${(event: Event) => { if (edit.pending) event.preventDefault(); }}
+      @wa-after-hide=${handleReportDateDialogAfterHide}
+    >
+      <form id="drive-report-date-form" class="drive-dialog-form" data-report-date-form>
+        <div class="drive-date-target">
+          <span>资料</span><strong>${edit.fileName}</strong>
+        </div>
+        <label class="drive-field">
+          <span>资料日期</span>
+          <small>用于排序和检索时识别资料对应的实际日期。</small>
+          <input name="reportDate" type="date" .value=${edit.value} ?disabled=${edit.pending} required>
+        </label>
+        ${edit.error ? html`<div class="drive-delete-dialog-error" role="alert">${edit.error}</div>` : nothing}
+      </form>
+      <div class="drive-delete-dialog-actions" slot="footer">
+        <button class="drive-control" type="button" data-action="cancel-report-date" ?disabled=${edit.pending}>${renderIcon("x-circle")}取消</button>
+        <button class="drive-control drive-control-primary" type="submit" form="drive-report-date-form" ?disabled=${edit.pending || !edit.value}>
+          ${edit.pending ? html`<span class="drive-spin">${renderIcon("spinner-gap")}</span>保存中…` : html`${renderIcon("check", "bold")}保存日期`}
+        </button>
+      </div>
+    </wa-dialog>
+  `;
+}
+
+function handleCreateTopicDialogAfterHide(): void {
+  state.createTopicOpen = false;
+  state.topicName = "";
+  renderApp();
+}
+
+function handleReportDateDialogAfterHide(): void {
+  if (!state.editReportDate?.pending) {
+    state.editReportDate = null;
+    renderApp();
+  }
+}
+
+function renderOverview(): TemplateResult {
+  const ready = state.topics.some((topic) => topic.ready);
+  return html`<drive-ai-qa class="drive-primary-qa" scope="global" .displayName=${state.displayName} .ready=${ready}></drive-ai-qa>`;
 }
 
 function renderTopic(): TemplateResult {
   if (!state.topic) return html``;
-  return html`
-    <div class="drive-tabs" role="tablist" aria-label="专题工作区">
-      ${tabButton("qa", "问答", "chat-circle-dots")}
-      ${tabButton("files", state.role === "admin" ? "文件" : "资料", "files")}
-    </div>
-    <div
+  return html`<div
       id="topic-panel"
       class="drive-topic-view-panel"
       role="tabpanel"
@@ -980,8 +1277,7 @@ function renderTopic(): TemplateResult {
       ${state.topicView === "qa"
         ? html`<drive-ai-qa scope="topic" .topicId=${state.topic.id} .topicName=${state.topic.name} .ready=${state.topic.ready}></drive-ai-qa>`
         : renderFiles()}
-    </div>
-  `;
+    </div>`;
 }
 
 function renderFiles(): TemplateResult {
@@ -1016,6 +1312,10 @@ function renderFiles(): TemplateResult {
           </div>
           <div class="drive-upload-actions">
             ${state.prefix ? html`<button class="drive-control" type="button" data-action="up-folder">${renderIcon("arrow-left")}上一级</button>` : nothing}
+            <button class="drive-control drive-refresh-files" type="button" data-action="refresh-files" ?disabled=${Boolean(state.fileLoad?.active)}>
+              <span class=${state.fileLoad?.active ? "drive-spin" : ""}>${renderIcon("arrow-clockwise")}</span>
+              ${state.fileLoad?.active ? "正在同步" : "刷新状态"}
+            </button>
             ${state.role === "admin"
               ? html`
                   <button class="drive-control drive-control-primary" type="button" data-action=${presentation.uploadAction}>
@@ -1037,18 +1337,90 @@ function renderFiles(): TemplateResult {
         <input data-evidence-input type="file" multiple hidden>
         <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
         ${uploadBatch ? renderFileProcessingCenter(uploadBatch) : nothing}
-        ${listing ? renderFileList(listing, roleFiles, presentation) : renderLoading()}
-        ${state.role === "admin" && !state.prefix
-          ? html`
-              <div class="drive-topic-danger-zone">
-                <div><strong>专题管理</strong><span>删除专题会永久移除其中的全部资料。</span></div>
-                <button class="drive-control drive-control-danger" type="button" data-action="delete-topic">${renderIcon("trash")}删除专题</button>
-              </div>
-            `
-          : nothing}
+        ${renderFileLoadProgress(Boolean(listing))}
+        ${listing ? renderFileList(listing, roleFiles, presentation) : state.fileLoad ? nothing : renderLoading()}
       </div>
     </section>
   `;
+}
+
+const FILE_LIST_PROGRESS_STEPS: Array<{ stage: FileListProgressStage; label: string; detail: string; icon: string }> = [
+  { stage: "topic", label: "确认专题", detail: "检查专题与访问权限", icon: "folder" },
+  { stage: "objects", label: "读取目录", detail: "连接 COS 并读取对象列表", icon: "database" },
+  { stage: "metadata", label: "同步状态", detail: "读取资料元数据与处理结果", icon: "arrows-clockwise" },
+  { stage: "assembling", label: "整理列表", detail: "合并权限、状态与目录信息", icon: "list" },
+];
+
+function renderFileLoadProgress(hasListing: boolean): TemplateResult | typeof nothing {
+  const load = state.fileLoad;
+  if (!load) return nothing;
+  if (hasListing && !load.error) {
+    if (!load.active) return nothing;
+    return html`
+      <div class=${`drive-file-sync-strip${load.slow ? " is-slow" : ""}`} role="status" aria-live=${load.mode === "background" ? "off" : "polite"}>
+        <span class="drive-spin">${renderIcon("arrows-clockwise", "duotone")}</span>
+        <span>
+          <strong>${load.slow ? "COS 响应较慢，仍在继续读取" : fileListStageLabel(load.stage)}</strong>
+          <small>${fileLoadSummary(load)}</small>
+        </span>
+      </div>
+    `;
+  }
+  if (load.error) {
+    return html`
+      <section class="drive-file-load-state is-error" role="alert">
+        <span class="drive-file-load-state-icon">${renderIcon("warning", "duotone")}</span>
+        <div><strong>资料列表暂未加载完成</strong><p>${load.error}</p></div>
+        <button class="drive-control" type="button" data-action="retry-file-list">${renderIcon("arrow-clockwise")}重新加载</button>
+      </section>
+    `;
+  }
+  return html`
+    <section class=${`drive-file-load-progress${load.slow ? " is-slow" : ""}`} role="status" aria-live="polite" aria-label="资料列表加载进度">
+      <div class="drive-file-load-progress-head">
+        <span class="drive-file-load-progress-icon drive-spin">${renderIcon("arrows-clockwise", "duotone")}</span>
+        <div>
+          <span class="drive-eyebrow">正在连接文件存储</span>
+          <strong>${fileListStageLabel(load.stage)}</strong>
+          <small>${fileLoadSummary(load)}</small>
+        </div>
+      </div>
+      <ol class="drive-file-load-steps">
+        ${FILE_LIST_PROGRESS_STEPS.map((step) => {
+          const stepState = fileListProgressStepState(load.stage, load.completedStages, step.stage);
+          return html`
+            <li class=${`is-${stepState}`} aria-current=${stepState === "active" ? "step" : nothing}>
+              <span class="drive-file-load-step-icon">
+                ${stepState === "complete" ? renderIcon("check", "bold") : renderIcon(step.icon)}
+              </span>
+              <span><strong>${step.label}</strong><small>${step.detail}</small></span>
+            </li>
+          `;
+        })}
+      </ol>
+      ${load.slow ? html`<p class="drive-file-load-slow">${renderIcon("info")}COS 响应较慢，仍在继续读取，请保持页面开启。</p>` : nothing}
+    </section>
+  `;
+}
+
+function fileListStageLabel(stage: FileListProgressStage): string {
+  return FILE_LIST_PROGRESS_STEPS.find((step) => step.stage === stage)?.detail || "正在读取资料";
+}
+
+function fileLoadSummary(load: NonNullable<typeof state.fileLoad>): string {
+  const parts = [];
+  if (load.stage === "metadata" && load.total) parts.push(`${load.completed}/${load.total} 份`);
+  if (load.elapsedMs >= 3_000) parts.push(elapsedLabel(load.startedAt, undefined, load.startedAt + load.elapsedMs));
+  return parts.join(" · ") || "请稍候，完成后将自动显示资料";
+}
+
+function fileListProgressStepState(
+  current: FileListProgressStage,
+  completed: FileListProgressStage[],
+  stage: FileListProgressStage,
+): "pending" | "active" | "complete" {
+  if (completed.includes(stage)) return "complete";
+  return current === stage ? "active" : "pending";
 }
 
 function renderFileRoleTab(role: KnowledgeRole, selectedRole: KnowledgeRole, listing: FileListResponse | null): TemplateResult {
@@ -1086,14 +1458,14 @@ function renderFileList(listing: FileListResponse, files: KnowledgeFile[], prese
   return html`
     <div class="drive-file-table" role="table" aria-label=${presentation.label}>
       <div class="drive-file-row drive-file-row-head" role="row">
-        <span role="columnheader">名称</span><span role="columnheader">大小</span><span role="columnheader">状态</span><span role="columnheader">更新</span><span role="columnheader">操作</span>
+        <span role="columnheader">名称</span><span role="columnheader">资料日期</span><span role="columnheader">处理状态</span><span role="columnheader">最近更新</span><span role="columnheader">操作</span>
       </div>
       ${repeat(listing.folders, (folder) => folder.path, (folder) => html`
         <div class="drive-file-row" role="row">
           <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
-          <span role="cell" data-label="大小">-</span>
-          <span role="cell" data-label="状态">目录</span>
-          <span role="cell" data-label="更新">-</span>
+          <span role="cell" data-label="资料日期">—</span>
+          <span role="cell" data-label="处理状态"><span class="drive-file-state-chip is-neutral">目录</span></span>
+          <span role="cell" data-label="最近更新">—</span>
           <span class="drive-row-actions" role="cell" data-label="操作"><button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path}>${renderIcon("folder-open")}打开</button></span>
         </div>
       `)}
@@ -1114,10 +1486,10 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
     <div class=${`drive-file-row is-${file.knowledgeRole}`} role="row">
       <span class="drive-file-name" role="cell" data-label="名称">
         <span class="drive-file-type-icon">${renderIcon(fileIconName(displayName))}</span>
-        <span class="drive-file-name-copy"><strong title=${displayName}>${displayName}</strong></span>
+        <span class="drive-file-name-copy"><strong title=${displayName}>${displayName}</strong><small>${formatBytes(file.size)}</small></span>
       </span>
-      <span role="cell" data-label="大小">${formatBytes(file.size)}</span>
-      <span role="cell" data-label="状态">
+      <span role="cell" data-label="资料日期">${file.knowledgeRole === "evidence" ? file.reportDate || "待补充" : "—"}</span>
+      <span role="cell" data-label="处理状态">
         <button
           class=${`drive-file-status is-${tone}`}
           type="button"
@@ -1125,23 +1497,36 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
           data-path=${file.path}
           aria-expanded=${String(expanded)}
         >
-          <span class="drive-file-status-copy"><strong>${status}</strong><small>${file.reportDate || (file.knowledgeRole === "reference" ? file.incorporatedAt ? "已纳入方法论" : "待纳入方法论" : "")}</small></span>
-          <span class="drive-file-status-nodes" aria-hidden="true">
-            ${taskSteps(file.knowledgeRole).map((step) => {
-              const stateName = stepState(stage, step.stage, stage === "failed" ? "processing" : undefined);
-              return html`<i class=${`is-${stateName}`}></i>`;
-            })}
-          </span>
+          <span class="drive-file-status-copy"><strong>${status}</strong>${file.knowledgeRole === "reference" ? html`<small>${file.incorporatedAt ? "已纳入方法论" : "待纳入方法论"}</small>` : nothing}</span>
           ${renderIcon(expanded ? "caret-up" : "caret-down")}
         </button>
       </span>
-      <span role="cell" data-label="更新">${formatDate(file.processing?.updatedAt || file.uploadedAt || file.lastModified)}</span>
+      <span role="cell" data-label="最近更新">${formatDate(file.processing?.updatedAt || file.uploadedAt || file.lastModified)}</span>
       <span class="drive-row-actions" role="cell" data-label="操作">
-        ${state.role === "admin" && file.knowledgeRole === "reference" ? html`<button class="drive-table-action" type="button" data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>${renderIcon(file.incorporatedAt ? "x-circle" : "check")} ${file.incorporatedAt ? "取消纳入" : "标记纳入"}</button>` : nothing}
-        ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`<button class="drive-table-action" type="button" data-action="edit-report-date" data-path=${file.path} data-report-date=${file.reportDate || ""}>${renderIcon("calendar-dots", "duotone")}日期</button>` : nothing}
         ${state.role === "admin" && processing?.retryable ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}
-        <button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button>
-        ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`<button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${displayName}>${renderIcon("trash")}删除</button>` : nothing}
+        <span class="drive-row-actions-desktop">
+          ${state.role === "admin" && file.knowledgeRole === "reference" ? html`<button class="drive-table-action" type="button" data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>${renderIcon(file.incorporatedAt ? "x-circle" : "check")} ${file.incorporatedAt ? "取消纳入" : "标记纳入"}</button>` : nothing}
+          ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`<button class="drive-table-action" type="button" data-action="edit-report-date" data-path=${file.path} data-name=${displayName} data-report-date=${file.reportDate || ""}>${renderIcon("calendar-dots", "duotone")}编辑资料日期</button>` : nothing}
+          <button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button>
+          ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`<button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${displayName}>${renderIcon("trash")}删除</button>` : nothing}
+        </span>
+        <wa-dropdown class="drive-row-action-menu" placement="bottom-end">
+          <button class="drive-table-action" type="button" slot="trigger" aria-label=${`打开 ${displayName} 的操作菜单`}>
+            ${renderIcon("list")}操作
+          </button>
+          ${state.role === "admin" && file.knowledgeRole === "reference" ? html`
+            <wa-dropdown-item data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>
+              ${file.incorporatedAt ? "取消纳入方法论" : "标记纳入方法论"}
+            </wa-dropdown-item>
+          ` : nothing}
+          ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`
+            <wa-dropdown-item data-action="edit-report-date" data-path=${file.path} data-name=${displayName} data-report-date=${file.reportDate || ""}>编辑资料日期</wa-dropdown-item>
+          ` : nothing}
+          <wa-dropdown-item data-action="download-file" data-path=${file.path}>下载文件</wa-dropdown-item>
+          ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`
+            <wa-dropdown-item variant="danger" data-action="delete-file" data-path=${file.path} data-name=${displayName}>删除文件</wa-dropdown-item>
+          ` : nothing}
+        </wa-dropdown>
       </span>
     </div>
     ${expanded ? renderFileProgressDetail(file, stage, status, detail) : nothing}
@@ -1290,6 +1675,45 @@ function renderLoading(): TemplateResult { return html`<div class="drive-inline-
 function renderStatus(): TemplateResult | typeof nothing { return state.status ? html`<wa-callout variant=${state.statusTone === "danger" ? "danger" : state.statusTone === "success" ? "success" : "neutral"}>${state.status}</wa-callout>` : nothing; }
 function setStatus(message: string, tone: "neutral" | "success" | "danger" = "neutral"): void { state.status = message; state.statusTone = tone; renderApp(); }
 function showError(error: unknown): void { state.loading = false; setStatus(error instanceof Error ? error.message : "请求失败", "danger"); }
+
+function parseFileListPhase(data: Record<string, unknown>): FileListPhaseEvent | null {
+  if (!isFileListProgressStage(data.stage) || (data.state !== "active" && data.state !== "complete")) return null;
+  return {
+    stage: data.stage,
+    state: data.state,
+    elapsedMs: typeof data.elapsedMs === "number" && Number.isFinite(data.elapsedMs) ? Math.max(0, data.elapsedMs) : 0,
+    ...(typeof data.completed === "number" && Number.isFinite(data.completed) ? { completed: Math.max(0, data.completed) } : {}),
+    ...(typeof data.total === "number" && Number.isFinite(data.total) ? { total: Math.max(0, data.total) } : {}),
+  };
+}
+
+function parseFileListError(data: Record<string, unknown>): FileListErrorEvent | null {
+  if (
+    !isFileListProgressStage(data.stage)
+    || data.code !== "FILE_LIST_FAILED"
+    || data.retryable !== true
+    || typeof data.message !== "string"
+  ) return null;
+  return {
+    stage: data.stage,
+    code: "FILE_LIST_FAILED",
+    retryable: true,
+    message: data.message,
+  };
+}
+
+function isFileListProgressStage(value: unknown): value is FileListProgressStage {
+  return value === "topic" || value === "objects" || value === "metadata" || value === "assembling";
+}
+
+function isFileListResponse(value: unknown): value is FileListResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<FileListResponse>;
+  return typeof candidate.prefix === "string"
+    && Array.isArray(candidate.folders)
+    && Array.isArray(candidate.files)
+    && (typeof candidate.nextCursor === "string" || candidate.nextCursor === null);
+}
 function showEntryError(error: unknown): void {
   state.loading = false;
   state.entrySlow = false;

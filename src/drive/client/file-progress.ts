@@ -219,6 +219,7 @@ export function stepState(
   }
   const currentOrder = STAGE_ORDER[currentStage];
   const stepOrder = STAGE_ORDER[stepStage];
+  if ((currentStage === "ready" || currentStage === "archived") && stepOrder <= currentOrder) return "complete";
   if (stepOrder < currentOrder) return "complete";
   if (stepOrder === currentOrder || (currentStage === "authorizing" && stepStage === "uploading")) return "active";
   return "pending";

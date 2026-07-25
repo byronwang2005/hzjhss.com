@@ -1,4 +1,5 @@
 import type { DriveConfig } from "./config";
+import pLimit from "p-limit";
 import {
   copyObject,
   deleteObject,
@@ -20,7 +21,13 @@ import {
   filePolicyForExtension,
   type ProcessingKind,
 } from "../shared/policy";
-import type { KnowledgeRole, ProcessingState, ReportDateSource } from "../shared/contracts";
+import type {
+  FileListProgressStage,
+  FileListProgressState,
+  KnowledgeRole,
+  ProcessingState,
+  ReportDateSource,
+} from "../shared/contracts";
 import {
   isReservedMethodologyPath,
   knowledgeRoleForPath,
@@ -101,6 +108,13 @@ export interface FilePolicy {
   extension: string;
   maxBytes: number;
   processingKind: ProcessingKind;
+}
+
+export interface FileListProgressUpdate {
+  stage: FileListProgressStage;
+  state: FileListProgressState;
+  completed?: number;
+  total?: number;
 }
 
 export function normalizeTopicId(input: unknown): string {
@@ -247,54 +261,75 @@ export async function listKnowledgeFiles(
   topicIdInput: unknown,
   relativePrefixInput: unknown,
   cursor?: string | null,
-  options: { includeMethodology?: boolean } = {},
+  options: {
+    includeMethodology?: boolean;
+    onProgress?: (update: FileListProgressUpdate) => void;
+    metadataConcurrency?: number;
+  } = {},
 ): Promise<{ prefix: string; folders: DriveFolder[]; files: KnowledgeFile[]; nextCursor: string | null }> {
   const topicId = normalizeTopicId(topicIdInput);
+  options.onProgress?.({ stage: "topic", state: "active" });
   const topic = await readKnowledgeTopic(config, topicId);
+  options.onProgress?.({ stage: "topic", state: "complete" });
   const methodologyPath = methodologyPathForTopic(topic);
   const relativePrefix = relativePrefixInput ? normalizeDirectoryPrefix(relativePrefixInput) : "";
   const storagePrefix = `${topicPrefix(topicId)}files/${relativePrefix}`;
+  options.onProgress?.({ stage: "objects", state: "active" });
   const listed = await listObjects(config, storagePrefix, cursor);
-  const files = (await Promise.all(listed.files.map(async (file): Promise<KnowledgeFile | null> => {
-    const relativePath = file.path.slice(`${topicPrefix(topicId)}files/`.length);
-    const [meta, processing] = await Promise.all([
-      readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
-      readJson<ProcessingStatus>(config, processingStatusPath(topicId, relativePath)),
-    ]);
-    const knowledgeRole = knowledgeRoleOf(meta, relativePath, methodologyPath);
-    if (knowledgeRole === "methodology" && !options.includeMethodology) return null;
-    let publicProcessing: ProcessingStatus | undefined;
-    if (processing?.sourceEtag === file.etag) {
-      const { error: _internalError, ...safeProcessing } = processing;
-      publicProcessing = {
-        ...safeProcessing,
-        ...(processing.state === "failed"
-          ? { failureCode: "PROCESSING_FAILED" as const, retryable: true }
-          : {}),
+  options.onProgress?.({ stage: "objects", state: "complete", total: listed.files.length });
+  const total = listed.files.length;
+  let completed = 0;
+  options.onProgress?.({ stage: "metadata", state: "active", completed, total });
+  const limit = pLimit(Math.max(1, options.metadataConcurrency || 8));
+  const enriched = await Promise.all(listed.files.map((file) => limit(async (): Promise<KnowledgeFile | null> => {
+    try {
+      const relativePath = file.path.slice(`${topicPrefix(topicId)}files/`.length);
+      const [meta, processing] = await Promise.all([
+        readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath)),
+        readJson<ProcessingStatus>(config, processingStatusPath(topicId, relativePath)),
+      ]);
+      const knowledgeRole = knowledgeRoleOf(meta, relativePath, methodologyPath);
+      if (knowledgeRole === "methodology" && !options.includeMethodology) return null;
+      let publicProcessing: ProcessingStatus | undefined;
+      if (processing?.sourceEtag === file.etag) {
+        const { error: _internalError, ...safeProcessing } = processing;
+        publicProcessing = {
+          ...safeProcessing,
+          ...(processing.state === "failed"
+            ? { failureCode: "PROCESSING_FAILED" as const, retryable: true }
+            : {}),
+        };
+      }
+      return {
+        ...file,
+        name: relativePath.slice(relativePrefix.length),
+        path: relativePath,
+        relativePath,
+        contentType: meta?.contentType,
+        uploadedBy: meta?.uploadedBy,
+        uploadedAt: meta?.uploadedAt,
+        knowledgeRole,
+        reportDate: meta?.reportDate,
+        reportDateSource: meta?.reportDateSource,
+        incorporatedAt: meta?.incorporatedAt,
+        incorporatedBy: meta?.incorporatedBy,
+        processing: publicProcessing,
       };
+    } finally {
+      completed += 1;
+      options.onProgress?.({ stage: "metadata", state: "active", completed, total });
     }
-    return {
-      ...file,
-      name: relativePath.slice(relativePrefix.length),
-      path: relativePath,
-      relativePath,
-      contentType: meta?.contentType,
-      uploadedBy: meta?.uploadedBy,
-      uploadedAt: meta?.uploadedAt,
-      knowledgeRole,
-      reportDate: meta?.reportDate,
-      reportDateSource: meta?.reportDateSource,
-      incorporatedAt: meta?.incorporatedAt,
-      incorporatedBy: meta?.incorporatedBy,
-      processing: publicProcessing,
-    };
-  }))).filter((file): file is KnowledgeFile => Boolean(file));
-  return {
+  })));
+  options.onProgress?.({ stage: "metadata", state: "complete", completed, total });
+  options.onProgress?.({ stage: "assembling", state: "active" });
+  const response = {
     prefix: relativePrefix,
     folders: listed.folders.map((folder) => ({ name: folder.name, path: folder.path.slice(`${topicPrefix(topicId)}files/`.length) })),
-    files,
+    files: enriched.filter((file): file is KnowledgeFile => Boolean(file)),
     nextCursor: listed.nextCursor,
   };
+  options.onProgress?.({ stage: "assembling", state: "complete" });
+  return response;
 }
 
 export async function createUpload(config: DriveConfig, input: { topicId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown }): Promise<{ url: string; uploadId: string; path: string; contentType: string; knowledgeRole: KnowledgeRole; maxFileBytes: number; requiredHeaders: Record<string, string>; expiresIn: number }> {

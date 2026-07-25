@@ -23,6 +23,7 @@ import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive
 import { jsonResponse } from "../src/drive/server/http";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 import { onRequestPost as uploadComplete } from "../functions/api/drive/upload-complete";
+import { onRequestGet as listFiles } from "../functions/api/drive/list";
 
 const env: DriveEnv = {
   COS_SECRET_ID: "id",
@@ -432,6 +433,103 @@ describe("knowledge topic and upload flow", () => {
 });
 
 describe("administrator API enforcement", () => {
+  it("preserves JSON list responses and streams real file-list phases in order", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "流式列表");
+    const signature = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "报告.txt",
+      size: 3,
+      contentType: "text/plain",
+    });
+    storage.set(tempUploadPath(signature.uploadId), { body: "abc", contentType: "text/plain", etag: "etag-stream" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: signature.uploadId,
+      relativePath: signature.path,
+      size: 3,
+      contentType: "text/plain",
+      uploadedBy: "汪旭",
+    });
+    const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
+    const url = `https://example.com/api/drive/list?topicId=${topic.id}&prefix=`;
+
+    const json = await listFiles({
+      request: new Request(url, { headers: { cookie } }),
+      env,
+    } as never);
+    expect(json.headers.get("content-type")).toContain("application/json");
+    expect(await json.json()).toMatchObject({ prefix: "", files: [expect.objectContaining({ path: "报告.txt" })] });
+
+    const stream = await listFiles({
+      request: new Request(url, { headers: { cookie, accept: "text/event-stream" } }),
+      env,
+    } as never);
+    const body = await stream.text();
+    expect(stream.headers.get("content-type")).toContain("text/event-stream");
+    const phases = [...body.matchAll(/event: phase\ndata: (.+)/g)].map((match) => JSON.parse(match[1]) as {
+      stage: string;
+      state: string;
+      completed?: number;
+      total?: number;
+    });
+    expect(phases.map(({ stage, state }) => `${stage}:${state}`)).toEqual([
+      "topic:active",
+      "topic:complete",
+      "objects:active",
+      "objects:complete",
+      "metadata:active",
+      "metadata:active",
+      "metadata:complete",
+      "assembling:active",
+      "assembling:complete",
+    ]);
+    expect(phases.find((phase) => phase.stage === "metadata" && phase.state === "complete")).toMatchObject({
+      completed: 1,
+      total: 1,
+    });
+    expect(body).toContain("event: result");
+    expect(body).toContain("event: done");
+  });
+
+  it("reports a complete zero-of-zero metadata phase for an empty directory", async () => {
+    installCosMock();
+    const topic = await createKnowledgeTopic(config, "空目录");
+    const updates: Array<{ stage: string; state: string; completed?: number; total?: number }> = [];
+    const result = await listKnowledgeFiles(config, topic.id, "", null, {
+      onProgress: (update) => updates.push(update),
+    });
+    expect(result.files).toEqual([]);
+    expect(updates).toContainEqual({ stage: "metadata", state: "complete", completed: 0, total: 0 });
+    expect(updates.at(-1)).toEqual({ stage: "assembling", state: "complete" });
+  });
+
+  it("reports the real failing stage when COS directory listing fails", async () => {
+    installCosMock();
+    const topic = await createKnowledgeTopic(config, "异常目录");
+    const workingFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      if (url.searchParams.get("list-type") === "2" && url.searchParams.get("delimiter") === "/") {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      return workingFetch(input, init);
+    };
+    const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
+    const response = await listFiles({
+      request: new Request(`https://example.com/api/drive/list?topicId=${topic.id}&prefix=`, {
+        headers: { cookie, accept: "text/event-stream" },
+      }),
+      env,
+    } as never);
+    const body = await response.text();
+    expect(body).toContain('event: phase\ndata: {"stage":"objects","state":"active"');
+    expect(body).toContain('event: error\ndata: {"stage":"objects","code":"FILE_LIST_FAILED"');
+    expect(body).not.toContain("event: result");
+    expect(body).not.toContain("event: done");
+  });
+
   it("returns 403 to viewers before issuing an upload URL", async () => {
     installCosMock();
     const cookie = (await createSessionCookie(env, "https://example.com", "王小明")).split(";", 1)[0];

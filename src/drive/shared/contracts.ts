@@ -11,6 +11,8 @@ export type CodexHandoffStage =
   | "error";
 export type QaProgressStage = "parsing" | "retrieving" | "reasoning" | "composing";
 export type QaProgressState = "active" | "complete";
+export type FileListProgressStage = "topic" | "objects" | "metadata" | "assembling";
+export type FileListProgressState = "active" | "complete";
 
 export interface QaPhaseEventData {
   stage: QaProgressStage;
@@ -129,6 +131,27 @@ export interface FileListResponse {
   files: KnowledgeFile[];
   nextCursor: string | null;
 }
+
+export interface FileListPhaseEvent {
+  stage: FileListProgressStage;
+  state: FileListProgressState;
+  elapsedMs: number;
+  completed?: number;
+  total?: number;
+}
+
+export interface FileListErrorEvent {
+  stage: FileListProgressStage;
+  code: "FILE_LIST_FAILED";
+  retryable: true;
+  message: string;
+}
+
+export type FileListSseEvent =
+  | { event: "phase"; data: FileListPhaseEvent }
+  | { event: "result"; data: FileListResponse }
+  | { event: "done"; data: { ok: true; totalMs: number } }
+  | { event: "error"; data: FileListErrorEvent };
 
 export interface UploadRegistrationFailure {
   relativePath: string;
