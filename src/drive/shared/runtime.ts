@@ -4,6 +4,8 @@ export const DRIVE_API_ROOT = "/api/drive";
 
 export const CLIENT_TIMING = {
   initialUnauthorizedRetryMs: 150,
+  entrySlowMs: 8_000,
+  entryTimeoutMs: 20_000,
   fileRefreshMs: 10_000,
   uploadRegistrationTimeoutMs: 60_000,
 } as const;

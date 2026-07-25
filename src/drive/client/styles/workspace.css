@@ -1652,6 +1652,279 @@ body.drive-body {
   padding: 12px 15px;
 }
 
+.drive-field.has-error input {
+  border-color: var(--jh-color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jh-color-danger) 16%, transparent);
+}
+
+.drive-field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--jh-color-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.drive-field-error .ui-icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.drive-preflight-shell,
+.drive-entry-screen {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--jh-color-page);
+}
+
+.drive-preflight-logo {
+  position: absolute;
+  top: clamp(28px, 5vw, 60px);
+  left: clamp(28px, 6vw, 88px);
+  z-index: 1;
+  width: 42px;
+  height: 52px;
+  object-fit: contain;
+  animation: drive-entry-breathe 1.8s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-preflight-network {
+  position: absolute;
+  top: 50%;
+  right: clamp(-180px, -8vw, -72px);
+  width: min(76vw, 900px);
+  height: min(76vw, 900px);
+  object-fit: contain;
+  opacity: 0.46;
+  transform: translateY(-50%);
+  animation: drive-entry-network-drift 2.4s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-preflight-network-dark,
+.drive-entry-network-dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .drive-preflight-network-light,
+:root[data-theme="dark"] .drive-entry-network-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .drive-preflight-network-dark,
+:root[data-theme="dark"] .drive-entry-network-dark {
+  display: block;
+}
+
+.drive-entry-screen {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 24px;
+  padding: clamp(28px, 4vw, 56px) clamp(28px, 6vw, 88px) 64px;
+}
+
+.drive-entry-header {
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.drive-entry-layout {
+  display: grid;
+  grid-template-columns: minmax(440px, 0.88fr) minmax(520px, 1.12fr);
+  gap: clamp(26px, 5vw, 88px);
+  align-items: center;
+  width: min(1320px, 100%);
+  margin: 0 auto;
+  transform: translateY(-4vh);
+}
+
+.drive-entry-content {
+  z-index: 2;
+  max-width: 620px;
+}
+
+.drive-entry-content h1 {
+  max-width: 12ch;
+  margin: 18px 0 12px;
+  color: var(--jh-color-text);
+  font-size: clamp(46px, 4.4vw, 64px);
+  font-weight: 680;
+  letter-spacing: -0.055em;
+  line-height: 1.02;
+}
+
+.drive-entry-content > p {
+  max-width: 35ch;
+  margin: 0;
+  color: var(--jh-color-text-muted);
+  font-size: clamp(15px, 1.3vw, 18px);
+  line-height: 1.65;
+}
+
+.drive-entry-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 34px;
+  color: var(--jh-color-text-secondary);
+  font-size: 13px;
+}
+
+.drive-entry-live .ui-icon {
+  color: var(--jh-color-brand);
+}
+
+.drive-entry-retry {
+  min-width: 154px;
+  margin-top: 30px;
+}
+
+.drive-entry-network {
+  position: relative;
+  display: grid;
+  place-items: center;
+  justify-self: end;
+  width: min(112%, 820px);
+  aspect-ratio: 1;
+}
+
+.drive-entry-network > img:not(.drive-entry-network-mark) {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: drive-entry-network-pulse 2.8s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-entry-network-mark {
+  z-index: 1;
+  grid-area: 1 / 1;
+  width: clamp(58px, 6vw, 88px);
+  height: clamp(72px, 7.4vw, 108px);
+  object-fit: contain;
+  filter: drop-shadow(0 10px 24px color-mix(in srgb, var(--jh-color-brand) 18%, transparent));
+  animation: drive-entry-breathe 1.9s var(--jh-motion-enter) infinite alternate;
+}
+
+.drive-entry-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 38px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drive-entry-steps li {
+  position: relative;
+  display: grid;
+  grid-template-rows: 34px auto;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 18px;
+}
+
+.drive-entry-steps li:not(:last-child)::after {
+  position: absolute;
+  top: 16px;
+  right: 0;
+  left: 34px;
+  height: 1px;
+  content: "";
+  background: var(--jh-color-border-strong);
+}
+
+.drive-entry-steps li.is-complete:not(:last-child)::after {
+  background: var(--jh-color-brand);
+}
+
+.drive-entry-step-icon {
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--jh-color-text-muted);
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-strong);
+  border-radius: 50%;
+}
+
+.drive-entry-step-icon .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.drive-entry-steps .is-complete .drive-entry-step-icon {
+  color: var(--jh-color-on-brand);
+  background: var(--jh-color-brand);
+  border-color: var(--jh-color-brand);
+}
+
+.drive-entry-steps .is-active .drive-entry-step-icon {
+  color: var(--jh-color-brand);
+  border-color: var(--jh-color-brand);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--jh-color-brand) 13%, transparent);
+}
+
+.drive-entry-steps strong,
+.drive-entry-steps small {
+  display: block;
+}
+
+.drive-entry-steps strong {
+  color: var(--jh-color-text-secondary);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.drive-entry-steps small {
+  margin-top: 4px;
+  color: var(--jh-color-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.drive-entry-footer {
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  padding-top: 22px;
+  color: var(--jh-color-text-muted);
+  border-top: 1px solid var(--jh-color-border-soft);
+  font-size: 12px;
+}
+
+.drive-entry-footer .ui-icon {
+  color: var(--jh-color-brand);
+}
+
+.drive-entry-screen.has-error .drive-entry-network {
+  opacity: 0.34;
+}
+
+@keyframes drive-entry-breathe {
+  from { opacity: 0.72; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes drive-entry-network-pulse {
+  from { opacity: 0.72; transform: scale(0.99); }
+  to { opacity: 0.96; transform: scale(1); }
+}
+
+@keyframes drive-entry-network-drift {
+  from { opacity: 0.38; transform: translateY(-50%) scale(0.99); }
+  to { opacity: 0.5; transform: translateY(-50%) scale(1); }
+}
+
 .drive-control {
   min-height: 40px;
   padding: 9px 14px;
@@ -2212,6 +2485,15 @@ wa-callout {
     font-size: clamp(54px, 8vw, 76px);
   }
 
+  .drive-entry-layout {
+    grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
+    gap: 18px;
+  }
+
+  .drive-entry-content h1 {
+    font-size: clamp(44px, 6.5vw, 62px);
+  }
+
   .drive-two-column {
     grid-template-columns: 1fr;
   }
@@ -2269,6 +2551,103 @@ wa-callout {
     max-width: none;
     justify-self: stretch;
     padding: 26px 22px;
+  }
+
+  .drive-preflight-logo {
+    top: 22px;
+    left: 20px;
+    width: 34px;
+    height: 42px;
+  }
+
+  .drive-preflight-network {
+    top: 54%;
+    right: -45vw;
+    width: 130vw;
+    height: 130vw;
+    opacity: 0.3;
+  }
+
+  .drive-entry-screen {
+    gap: 18px;
+    padding: 22px 20px 24px;
+  }
+
+  .drive-entry-layout {
+    position: relative;
+    display: block;
+    min-height: 0;
+    transform: none;
+  }
+
+  .drive-entry-content {
+    position: relative;
+    z-index: 2;
+    max-width: none;
+    padding-top: clamp(54px, 12vh, 112px);
+  }
+
+  .drive-entry-content h1 {
+    max-width: 10ch;
+    margin-top: 14px;
+    font-size: clamp(40px, 13vw, 56px);
+  }
+
+  .drive-entry-content > p {
+    max-width: 29ch;
+    font-size: 14px;
+  }
+
+  .drive-entry-network {
+    position: absolute;
+    top: 40%;
+    right: -58vw;
+    z-index: 0;
+    width: 128vw;
+    opacity: 0.28;
+    transform: translateY(-50%);
+  }
+
+  .drive-entry-network-mark {
+    width: 58px;
+    height: 72px;
+  }
+
+  .drive-entry-steps {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    max-width: 300px;
+    margin-top: 30px;
+  }
+
+  .drive-entry-steps li {
+    grid-template-columns: 32px 1fr;
+    grid-template-rows: auto;
+    padding: 0;
+  }
+
+  .drive-entry-steps li:not(:last-child)::after {
+    top: 32px;
+    right: auto;
+    bottom: -17px;
+    left: 15px;
+    width: 1px;
+    height: auto;
+  }
+
+  .drive-entry-step-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .drive-entry-steps small {
+    white-space: normal;
+  }
+
+  .drive-entry-footer {
+    max-width: 100%;
+    padding-top: 16px;
+    font-size: 11px;
   }
 
   .drive-appbar {
@@ -2363,6 +2742,15 @@ wa-callout {
     background: var(--jh-color-surface-subtle);
     border-color: var(--jh-color-border-soft);
     border-radius: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drive-preflight-logo,
+  .drive-preflight-network,
+  .drive-entry-network > img,
+  .drive-entry-step-icon.drive-spin {
+    animation: none;
   }
 }
 

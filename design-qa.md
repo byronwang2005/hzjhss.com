@@ -1,101 +1,52 @@
-# Product Design QA — AI 知识库视口与密度优化
+# Product Design QA — Three-state entry flow
 
-## 范围与视觉基准
+- Source visual truth: `/Users/macbook/.codex/generated_images/019f97d1-2c9e-74f1-8188-9a562e69b3ad/call_D4IU7u3vUF7jS5Cc1ybGfdAr.png`
+- Implementation screenshot: `/Users/macbook/git/hzjhss.com/design-qa-entry-workspace.png`
+- Side-by-side evidence: `/Users/macbook/git/hzjhss.com/design-qa-comparison.png`
+- Supporting states: `design-qa-entry-checking.png`, `design-qa-entry-error.png`, `design-qa-entry-workspace-dark.png`, `design-qa-entry-mobile.png`
+- Viewport: 1440 × 1024 CSS px, device density 1
+- Source pixels: 1487 × 1058, normalized proportionally onto a 1440 × 1024 canvas
+- Implementation pixels: 1440 × 1024
+- State: authenticated, preparing workspace
 
-- 仅检查 AI 知识库；AI 手册未调整。
-- 视觉基准：修改前由当前生产 DOM、图标和设计令牌生成的浏览器画面。
-- 实现画面：修改后使用相同 DOM、数据、主题与视口重新捕获。
-- QA 夹具：`tests/fixtures/knowledge-layout.html`
-- 证据目录：`/Users/macbook/.codex/visualizations/2026/07/24/019f94cf-a4a9-74d1-abf8-825ff6ac268d/hzjhss-knowledge-density-2026-07-25`
-- 桌面视口：`1366 × 768`、`1440 × 810`、`1920 × 1080`
-- 窄屏回退：`390 × 844`
-- 主题：深色
-- 数据状态：首页 14 个专题、专题问答 8 轮长对话、文件管理 30 条文件；首页同时覆盖空对话。
+## Full-view comparison
 
-## 同画布对比
+The implementation preserves the selected direction's split composition, restrained ivory/charcoal/gold palette, large editorial status headline, horizontal three-stage progress model, upper-corner brand/theme controls, bottom trust line, and right-side knowledge-network illustration. The implementation deliberately uses the product's existing semantic page color and actual logo asset.
 
-- 首页：`comparisons/overview-1366x768-side-by-side.png`
-- 专题问答：`comparisons/qa-1366x768-side-by-side.png`
-- 文件管理：`comparisons/files-1366x768-side-by-side.png`
-- 专题问答焦点区域：`comparisons/qa-focus-side-by-side.png`
-- 文件管理焦点区域：`comparisons/files-focus-side-by-side.png`
+## Focused comparisons
 
-以上对比均将修改前与修改后的浏览器截图放在同一画布，使用相同的 `1366 × 768` 视口和数据状态进行判断。
+- Progress model: inspected at full resolution after changing the layout to place nodes above labels and connectors only between nodes.
+- Authentication error: inspected in `design-qa-entry-error.png`; the name remains populated, access code is cleared, focus returns to the field, and the error is adjacent to the field.
+- Responsive/error recovery: inspected at 390 × 844 in `design-qa-entry-mobile.png`.
+- Dark theme: inspected in `design-qa-entry-workspace-dark.png` with the dedicated dark raster asset.
 
-## 滚动测量
+## Required fidelity surfaces
 
-九组桌面状态/视口组合均满足：
-
-- `document.documentElement.scrollHeight === document.documentElement.clientHeight`
-- `document.documentElement.scrollWidth === document.documentElement.clientWidth`
-- 浏览器页面无纵向、横向溢出。
-
-关键测量：
-
-| 状态 | 1366 × 768 | 1440 × 810 | 1920 × 1080 |
-| --- | --- | --- | --- |
-| 首页 | 页面 `768/768`；专题列表 `812/607` | 页面 `810/810`；专题列表可内部滚动 | 页面 `1080/1080`；专题列表可内部滚动 |
-| 长对话 | 页面 `768/768`；消息区 `2175/354`；输入框底部 `751` | 页面 `810/810`；消息区 `396` 高 | 页面 `1080/1080`；消息区 `589` 高 |
-| 30 条文件 | 页面 `768/768`；文件表 `1721/282`；危险区底部 `741` | 页面 `810/810`；文件表 `324` 高 | 页面 `1080/1080`；文件表 `510` 高 |
-
-真实滚轮交互验证：
-
-- 对话消息区：内部 `scrollTop 0 → 324.5`，外层 `window.scrollY` 保持 `0`。
-- 专题列表：内部 `scrollTop 0 → 204.5`，外层 `window.scrollY` 保持 `0`。
-- 文件表格：内部 `scrollTop 0 → 560`，外层 `window.scrollY` 保持 `0`。
-- `390 × 844` 下页面宽度和滚动宽度均为 `390`，无横向溢出；按设计恢复自然纵向浏览。
-
-## Product Design Findings
-
-### Typography
-
-- 保留现有中文系统字体、暖金强调色和标题层级。
-- 紧凑密度只压缩尺寸和间距，没有降低正文行距或交互文字可读性。
-- 长对话消息宽度、段落行距和轮次间距在三档桌面视口均无裁切。
-
-### Spacing and layout rhythm
-
-- 基准画面中，首页、问答和文件管理的页面高度分别达到 `1361`、`2897`、`2631` px，属于 P1 级主任务不可达问题。
-- 实现使用 `100dvh`、固定顶栏网格和完整的 `min-height: 0` 高度链路消除了外层溢出。
-- 统一密度变量集中控制顶栏、主区留白、区块间距、面板头、表格行和输入框高度。
-- 1366 × 768 启用紧凑密度，关键按钮仍保持至少 36–40 px 的可操作高度。
-
-### Colors and visual tokens
-
-- 深色石墨背景、暖金主操作、绿色时效资料标记和红色危险操作均沿用现有令牌。
-- 普通文件操作降低对比度，删除操作保持独立危险样式。
-- 焦点样式和键盘可达结构未被覆盖。
-
-### Image quality and asset fidelity
-
-- 继续使用项目现有品牌图片和 Phosphor sprite。
-- 未引入新素材、手绘图标、组件库或视觉风格。
-
-### Copy and content
-
-- 登录、首页、问答、文件类型、上传、状态和删除文案保持原意。
-- DOM 仅增加 `is-overview`、`is-topic`、`is-create` 与 `data-mode` 布局标识；未修改 API、数据结构或共享类型。
-
-## 状态与交互覆盖
-
-- [x] 登录页 1366 × 768 回归：`scrollHeight === clientHeight`，无横向溢出。
-- [x] 首页空对话与长专题列表。
-- [x] 专题长对话，输入框固定在底部。
-- [x] 30 条文件，表头吸顶、表格内部滚动、危险区持续可见。
-- [x] 消息区、专题列表、文件表格的真实滚轮交互。
-- [x] 浏览器控制台无 warning/error。
-- [x] 窄屏自然页面滚动与无横向溢出。
-- [x] 现有加载、空列表、上传进度、错误提示和删除弹窗 DOM/类名保持不变，布局容器为其预留稳定高度。
-- [x] Vitest 布局结构测试、类型检查、生产构建。
+- Fonts and typography: existing SF Pro/PingFang system stack retained; display weight, tracking, line-height, and hierarchy closely match the source without adding a font dependency.
+- Spacing and layout rhythm: header, centered main split, progress spacing, and footer baseline match the source after the second iteration.
+- Colors and tokens: all UI colors come from the shared theme; generated raster assets match the existing light and dark page backgrounds.
+- Image quality and asset fidelity: real logo and separately generated 900 px light/dark knowledge-network assets are used; no CSS/SVG network approximation or placeholder art remains.
+- Copy and content: text is adapted to the real authentication state model; progress claims are event-driven and do not use fake percentages.
 
 ## Comparison history
 
-1. 基准审计发现三个知识库主状态均存在外层纵向溢出，专题页标题和文件工具栏占用过多首屏高度。
-2. 第一轮实现将滚动职责收敛到消息、专题和文件三个内容面板，并压缩桌面密度。
-3. 同视口复查确认输入框、专题面板头、文件工具栏、表头和危险区均持续可见；未发现新的 P0/P1/P2 视觉问题。
+1. Initial capture found the static preflight shell covering the Lit-rendered entry screen and progress connectors crossing label text.
+   - Fixes: remove the preflight shell immediately after the first successful render; restructure progress items with nodes above labels.
+   - Post-fix evidence: `design-qa-entry-workspace.png`.
+2. First side-by-side comparison found the implementation headline too large and the whole main composition lower than the source.
+   - Fixes: reduce the desktop headline ceiling to 64 px, move the main layout upward by 4vh, increase network scale, and align the footer baseline.
+   - Post-fix evidence: `design-qa-comparison.png`.
 
-## 仍需人工确认
+## Findings
 
-- 本地真实入口只具备未登录态；登录后的业务数据画面使用与生产相同类名、资源和 DOM 结构的 QA 夹具验证。建议上线前在真实授权会话中快速走查一次上传中、接口错误和删除确认弹窗的文案长度。
+No actionable P0, P1, or P2 findings remain.
+
+P3: the implementation omits the small capability labels embedded around the source network graphic. This is acceptable because those labels duplicate surrounding product messaging and the generated raster stays legible in both themes and at responsive sizes.
+
+## Verification
+
+- Primary interactions tested: unsigned session fallback, invalid login, successful login, workspace loading, retry after timeout, and theme toggle.
+- Browser console errors: none.
+- Mobile viewport confirmed at 390 × 844 CSS px.
 
 final result: passed

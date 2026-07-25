@@ -4,6 +4,13 @@ export type Mode = "login" | "overview" | "topic" | "create";
 export type TopicView = "qa" | "files";
 export type UploadPhase = "preparing" | "uploading" | "registering";
 export type ThemeName = "light" | "dark";
+export type EntryState =
+  | "checking-session"
+  | "signed-out"
+  | "authenticating"
+  | "preparing-workspace"
+  | "auth-error"
+  | "ready";
 
 export interface DeleteConfirmation {
   kind: "topic" | "file";
@@ -28,6 +35,9 @@ declare global {
 }
 
 export interface DriveClientState {
+  entryState: EntryState;
+  entrySlow: boolean;
+  entryError: string;
   mode: Mode;
   role: UserRole;
   displayName: string;
@@ -56,6 +66,9 @@ export interface DriveClientState {
 }
 
 export const state: DriveClientState = {
+  entryState: "checking-session",
+  entrySlow: false,
+  entryError: "",
   mode: "login",
   role: "viewer",
   displayName: "",

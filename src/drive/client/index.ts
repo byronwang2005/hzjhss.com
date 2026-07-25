@@ -10,6 +10,7 @@ import XHRUpload from "@uppy/xhr-upload";
 import { html, nothing, render, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { renderIcon } from "./icons";
+import { transitionEntryState } from "./entry-flow";
 import "./qa-chat";
 import type { FileListResponse, KnowledgeFile, KnowledgeRole, OverviewResponse } from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
@@ -34,7 +35,6 @@ interface UploadSignature {
 const rootElement = document.querySelector<HTMLElement>("[data-drive-root]");
 if (!rootElement) throw new Error("Missing [data-drive-root] mount element");
 const root = rootElement;
-root.replaceChildren();
 
 let fileRefreshTimer: number | undefined;
 
@@ -53,26 +53,38 @@ window.jhssTheme.subscribe((theme) => {
 void boot();
 
 async function boot(): Promise<void> {
+  state.entryState = "checking-session";
+  state.entrySlow = false;
+  state.entryError = "";
+  renderApp();
   try {
-    await loadOverview();
+    const overview = await requestEntryOverview();
+    applyOverview(overview);
+    state.entryState = transitionEntryState(state.entryState, "session-valid");
+    renderApp();
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       await new Promise((resolve) => window.setTimeout(resolve, CLIENT_TIMING.initialUnauthorizedRetryMs));
       try {
-        await loadOverview();
+        const overview = await requestEntryOverview();
+        applyOverview(overview);
+        state.entryState = transitionEntryState(state.entryState, "session-valid");
+        renderApp();
         return;
       } catch (retryError) {
         if (!(retryError instanceof ApiError && retryError.status === 401)) {
-          showError(retryError);
+          showEntryError(retryError);
           return;
         }
+        state.entryState = transitionEntryState(state.entryState, "session-unauthorized");
         state.mode = "login";
         state.loading = false;
+        state.entryError = "";
         renderApp();
         return;
       }
     }
-    showError(error);
+    showEntryError(error);
   }
 }
 
@@ -80,12 +92,61 @@ async function loadOverview(): Promise<void> {
   state.loading = true;
   renderApp();
   const overview = await api<OverviewResponse>("/overview");
+  applyOverview(overview);
+  renderApp();
+}
+
+function applyOverview(overview: OverviewResponse): void {
   state.role = overview.role;
   state.displayName = overview.displayName;
   state.topics = overview.topics;
   state.mode = "overview";
   state.loading = false;
+}
+
+async function requestEntryOverview(): Promise<OverviewResponse> {
+  return runEntryRequest(
+    (signal) => api<OverviewResponse>("/overview", { signal }),
+    "连接知识库超时，请检查网络后重试。",
+  );
+}
+
+async function loadEntryOverview(): Promise<void> {
+  state.entrySlow = false;
+  state.entryError = "";
   renderApp();
+  try {
+    const overview = await requestEntryOverview();
+    applyOverview(overview);
+    state.entryState = transitionEntryState(state.entryState, "workspace-ready");
+    renderApp();
+  } catch (error) {
+    showEntryError(error);
+  }
+}
+
+async function runEntryRequest<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  timeoutMessage: string,
+): Promise<T> {
+  const controller = new AbortController();
+  let settled = false;
+  const slowTimer = window.setTimeout(() => {
+    if (settled) return;
+    state.entrySlow = true;
+    renderApp();
+  }, CLIENT_TIMING.entrySlowMs);
+  const timeoutTimer = window.setTimeout(() => controller.abort(), CLIENT_TIMING.entryTimeoutMs);
+  try {
+    return await request(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(timeoutMessage);
+    throw error;
+  } finally {
+    settled = true;
+    window.clearTimeout(slowTimer);
+    window.clearTimeout(timeoutTimer);
+  }
 }
 
 async function openTopic(topicId: string, view: TopicView = "qa"): Promise<void> {
@@ -152,13 +213,34 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
     return;
   }
   if (form.matches("[data-login-form]")) {
+    if (state.entryState === "authenticating") return;
+    state.entryState = transitionEntryState(state.entryState, "submit-login");
+    state.entryError = "";
+    state.entrySlow = false;
     state.loading = true;
     renderApp();
     try {
-      await api("/login", { method: "POST", body: { displayName: state.loginName, accessCode: state.accessCode } });
+      await runEntryRequest(
+        (signal) => api("/login", {
+          method: "POST",
+          body: { displayName: state.loginName, accessCode: state.accessCode },
+          signal,
+        }),
+        "登录验证超时，请检查网络后重试。",
+      );
       state.accessCode = "";
-      await loadOverview();
-    } catch (error) { showError(error); }
+      state.loading = false;
+      state.entryState = transitionEntryState(state.entryState, "login-succeeded");
+      await loadEntryOverview();
+    } catch (error) {
+      state.entryState = transitionEntryState(state.entryState, "login-failed");
+      state.loading = false;
+      state.entrySlow = false;
+      state.entryError = error instanceof Error ? error.message : "登录失败，请重试。";
+      state.accessCode = "";
+      renderApp();
+      window.requestAnimationFrame(() => root.querySelector<HTMLInputElement>('input[name="accessCode"]')?.focus());
+    }
   }
   if (form.matches("[data-topic-form]")) {
     try {
@@ -175,6 +257,9 @@ async function handleClick(event: MouseEvent): Promise<void> {
   const action = button.dataset.action;
   if (action === "toggle-theme") {
     window.jhssTheme.toggleTheme();
+  } else if (action === "retry-entry") {
+    if (state.entryState === "checking-session") await boot();
+    if (state.entryState === "preparing-workspace") await loadEntryOverview();
   } else if (action === "logout") {
     await api("/logout", { method: "POST" });
     location.reload();
@@ -474,10 +559,27 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
 }
 
 function renderApp(): void {
+  if (state.entryState === "checking-session") {
+    render(renderSessionCheck(), root);
+    removePreflightShell();
+    return;
+  }
+  if (state.entryState === "preparing-workspace") {
+    render(renderWorkspaceLoading(), root);
+    removePreflightShell();
+    return;
+  }
   render(state.mode === "login" ? renderLogin() : renderShell(), root);
+  removePreflightShell();
+}
+
+function removePreflightShell(): void {
+  root.querySelector(".drive-preflight-shell")?.remove();
 }
 
 function renderLogin(): TemplateResult {
+  const authenticating = state.entryState === "authenticating";
+  const hasAuthError = state.entryState === "auth-error" && Boolean(state.entryError);
   return html`<section class="drive-login-panel">
     ${renderThemeToggle("drive-login-theme-toggle")}
     <div class="drive-login-story">
@@ -494,12 +596,87 @@ function renderLogin(): TemplateResult {
     <form class="drive-form drive-login-card" data-login-form>
       <div class="drive-login-card-head"><span class="drive-eyebrow">内部访问</span><h2>欢迎回来</h2><p>使用您的姓名与访问码进入知识库。</p></div>
       <label class="drive-field"><span>登录姓名</span><input name="displayName" autocomplete="name" placeholder="请输入姓名" .value=${state.loginName} required></label>
-      <label class="drive-field"><span>访问码</span><input name="accessCode" type="password" autocomplete="current-password" placeholder="请输入访问码" .value=${state.accessCode} required></label>
-      <button class="drive-control drive-control-primary drive-login-submit" type="submit" ?disabled=${state.loading}>进入知识库${renderIcon("arrow-right", "bold")}</button>
+      <label class=${`drive-field${hasAuthError ? " has-error" : ""}`}>
+        <span>访问码</span>
+        <input
+          name="accessCode"
+          type="password"
+          autocomplete="current-password"
+          placeholder="请输入访问码"
+          .value=${state.accessCode}
+          aria-invalid=${String(hasAuthError)}
+          aria-describedby=${hasAuthError ? "drive-login-error" : nothing}
+          required
+        >
+        ${hasAuthError ? html`<small id="drive-login-error" class="drive-field-error" role="alert">${renderIcon("warning")}<span>${state.entryError}</span></small>` : nothing}
+      </label>
+      <button class="drive-control drive-control-primary drive-login-submit" type="submit" ?disabled=${authenticating}>
+        <span>${authenticating ? state.entrySlow ? "验证时间较长…" : "正在验证…" : "进入知识库"}</span>
+        ${authenticating ? html`<span class="drive-spin">${renderIcon("spinner-gap")}</span>` : renderIcon("arrow-right", "bold")}
+      </button>
       ${renderStatus()}
       <div class="drive-login-foot"><p class="drive-login-help">仅限授权成员访问</p><a class="drive-docs-link" href="/docs/">${renderIcon("book-open")}浏览 AI 手册</a></div>
     </form>
   </section>`;
+}
+
+function renderSessionCheck(): TemplateResult {
+  const hasError = Boolean(state.entryError);
+  return html`<section class=${`drive-entry-screen${hasError ? " has-error" : ""}`} data-entry-state="checking-session">
+    ${renderEntryHeader()}
+    <div class="drive-entry-layout">
+      <div class="drive-entry-content" role="status" aria-live="polite">
+        <span class="drive-eyebrow">${hasError ? "连接中断" : "安全访问检查"}</span>
+        <h1>${hasError ? "暂时无法连接知识库" : "正在确认访问状态"}</h1>
+        <p>${hasError ? state.entryError : "正在安全检查您的登录会话，请稍候。"}</p>
+        ${hasError
+          ? html`<button class="drive-control drive-control-primary drive-entry-retry" type="button" data-action="retry-entry">${renderIcon("arrow-clockwise")}重新连接</button>`
+          : html`<div class="drive-entry-live"><span class="drive-spin">${renderIcon("spinner-gap")}</span><span>${state.entrySlow ? "连接时间较长，仍在继续尝试…" : "正在建立加密连接"}</span></div>`}
+      </div>
+      ${renderEntryNetwork()}
+    </div>
+    <footer class="drive-entry-footer">${renderIcon("check-circle")}<span>企业级加密连接 · 仅限授权成员访问</span></footer>
+  </section>`;
+}
+
+function renderWorkspaceLoading(): TemplateResult {
+  const hasError = Boolean(state.entryError);
+  return html`<section class=${`drive-entry-screen${hasError ? " has-error" : ""}`} data-entry-state="preparing-workspace">
+    ${renderEntryHeader()}
+    <div class="drive-entry-layout">
+      <div class="drive-entry-content" role="status" aria-live="polite">
+        <span class="drive-eyebrow">${hasError ? "工作区同步中断" : "安全会话已建立"}</span>
+        <h1>${hasError ? "工作区暂未准备完成" : "正在连接知识库"}</h1>
+        <p>${hasError ? state.entryError : "正在恢复您的专题、资料索引与最近访问状态。"}</p>
+        ${hasError ? html`
+          <button class="drive-control drive-control-primary drive-entry-retry" type="button" data-action="retry-entry">${renderIcon("arrow-clockwise")}重新同步</button>
+        ` : html`
+          <ol class="drive-entry-steps" aria-label="工作区准备进度">
+            <li class="is-complete"><span class="drive-entry-step-icon">${renderIcon("check", "bold")}</span><span><strong>验证身份</strong><small>身份验证成功</small></span></li>
+            <li class="is-complete"><span class="drive-entry-step-icon">${renderIcon("check", "bold")}</span><span><strong>建立安全会话</strong><small>加密通道已建立</small></span></li>
+            <li class="is-active"><span class="drive-entry-step-icon drive-spin">${renderIcon("circle-notch")}</span><span><strong>同步专题索引</strong><small>${state.entrySlow ? "同步时间较长，仍在继续…" : "正在准备知识内容"}</small></span></li>
+          </ol>
+        `}
+      </div>
+      ${renderEntryNetwork()}
+    </div>
+    <footer class="drive-entry-footer">${renderIcon("check-circle")}<span>安全连接已建立，无需重复登录</span></footer>
+  </section>`;
+}
+
+function renderEntryHeader(): TemplateResult {
+  return html`<header class="drive-entry-header">
+    <div class="drive-brand-lockup"><img src="/assets/jhss-logo-cropped.png" alt="嘉合杉升"><span>嘉合杉升</span></div>
+    ${renderThemeToggle()}
+  </header>`;
+}
+
+function renderEntryNetwork(): TemplateResult {
+  return html`<div class="drive-entry-network" aria-hidden="true">
+    <img class="drive-entry-network-light" src="/assets/knowledge-network-light.png" alt="">
+    <img class="drive-entry-network-dark" src="/assets/knowledge-network-dark.png" alt="">
+    <img class="drive-entry-network-mark" src="/assets/jhss-logo-cropped.png" alt="">
+  </div>`;
 }
 
 function renderShell(): TemplateResult {
@@ -797,3 +974,9 @@ function renderLoading(): TemplateResult { return html`<div class="drive-inline-
 function renderStatus(): TemplateResult | typeof nothing { return state.status ? html`<wa-callout variant=${state.statusTone === "danger" ? "danger" : state.statusTone === "success" ? "success" : "neutral"}>${state.status}</wa-callout>` : nothing; }
 function setStatus(message: string, tone: "neutral" | "success" | "danger" = "neutral"): void { state.status = message; state.statusTone = tone; renderApp(); }
 function showError(error: unknown): void { state.loading = false; setStatus(error instanceof Error ? error.message : "请求失败", "danger"); }
+function showEntryError(error: unknown): void {
+  state.loading = false;
+  state.entrySlow = false;
+  state.entryError = error instanceof Error ? error.message : "请求失败，请重试。";
+  renderApp();
+}

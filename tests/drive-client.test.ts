@@ -1,7 +1,25 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
+
+describe("knowledge entry flow", () => {
+  it("keeps session checking, successful sign-in and authentication failure distinct", () => {
+    expect(transitionEntryState("checking-session", "session-valid")).toBe("ready");
+    expect(transitionEntryState("checking-session", "session-unauthorized")).toBe("signed-out");
+    expect(transitionEntryState("signed-out", "submit-login")).toBe("authenticating");
+    expect(transitionEntryState("authenticating", "login-succeeded")).toBe("preparing-workspace");
+    expect(transitionEntryState("preparing-workspace", "workspace-ready")).toBe("ready");
+    expect(transitionEntryState("authenticating", "login-failed")).toBe("auth-error");
+    expect(transitionEntryState("auth-error", "submit-login")).toBe("authenticating");
+  });
+
+  it("rejects impossible entry transitions", () => {
+    expect(() => transitionEntryState("checking-session", "login-succeeded")).toThrow("Invalid entry transition");
+    expect(() => transitionEntryState("ready", "submit-login")).toThrow("Invalid entry transition");
+  });
+});
 
 describe("knowledge client helpers", () => {
   it("normalizes upload paths and rejects traversal", () => {
@@ -61,6 +79,7 @@ describe("knowledge client surface", () => {
   const workspaceStyles = readFileSync(new URL("../src/drive/client/styles/workspace.css", import.meta.url), "utf8");
   const uploadPolicy = readFileSync(new URL("../src/drive/client/upload-policy.ts", import.meta.url), "utf8");
   const sharedPolicy = readFileSync(new URL("../src/drive/shared/policy.ts", import.meta.url), "utf8");
+  const entryMarkup = readFileSync(new URL("../src/site/pages/index.html", import.meta.url), "utf8");
 
   it("keeps only Q&A and administrator file management", () => {
     expect(source).toContain('<drive-ai-qa scope="global"');
@@ -118,11 +137,24 @@ describe("knowledge client surface", () => {
     expect(source).not.toContain(">上传周报<");
   });
 
-  it("clears server markup and uses one background file refresh timer", () => {
-    expect(source).toContain("root.replaceChildren()");
+  it("keeps a visual preflight shell and uses one background file refresh timer", () => {
+    expect(source).not.toContain("root.replaceChildren()");
+    expect(entryMarkup).toContain('class="drive-preflight-shell"');
+    expect(entryMarkup).toContain("knowledge-network-light.png");
+    expect(entryMarkup).not.toContain("<p>正在加载知识库...</p>");
     expect(source).toContain("window.clearTimeout(fileRefreshTimer)");
     expect(source).toContain("void loadFiles(true)");
     expect(source).not.toContain("!file.processing ||");
+  });
+
+  it("renders the three entry states without showing a success loader before authentication", () => {
+    expect(source).toContain('data-entry-state="checking-session"');
+    expect(source).toContain('data-entry-state="preparing-workspace"');
+    expect(source).toContain('state.entryState = transitionEntryState(state.entryState, "login-failed")');
+    expect(source).toContain('aria-describedby=${hasAuthError ? "drive-login-error" : nothing}');
+    expect(source).toContain('state.accessCode = ""');
+    expect(source).toContain("entryTimeoutMs");
+    expect(source.indexOf('"login-succeeded"')).toBeLessThan(source.indexOf("await loadEntryOverview()"));
   });
 
   it("requires an exact typed name in an accessible destructive dialog", () => {
