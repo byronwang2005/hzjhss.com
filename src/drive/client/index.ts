@@ -1364,7 +1364,7 @@ function renderFiles(): TemplateResult {
             <div>
               <span class="drive-eyebrow">${state.role === "admin" ? "资料管理" : "只读资料"}</span>
               <h2>${presentation.label}</h2>
-              <p>${presentation.description}</p>
+              ${presentation.description ? html`<p>${presentation.description}</p>` : nothing}
             </div>
           </div>
           <div class="drive-upload-actions">

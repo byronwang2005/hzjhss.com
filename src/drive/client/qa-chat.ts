@@ -244,7 +244,7 @@ export class DriveAiQa extends LitElement {
               name="qaQuestion"
               rows="2"
               aria-label="您的问题"
-              placeholder=${isGlobal ? "询问跨专题结论、风险或来源" : "请输入关于该专题的问题"}
+              placeholder="随心输入"
               .value=${this.question}
               @input=${this.handleInput}
               @keydown=${this.handleKeydown}
