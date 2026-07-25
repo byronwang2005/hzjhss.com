@@ -1336,7 +1336,13 @@ function renderLogin(): TemplateResult {
         ${authenticating ? html`<span class="drive-spin">${renderIcon("spinner-gap")}</span>` : renderIcon("arrow-right", "bold")}
       </button>
       ${renderStatus()}
-      <div class="drive-login-foot"><p class="drive-login-help">仅限授权成员访问</p><a class="drive-docs-link" href="/docs/">${renderIcon("book-open")}浏览AI手册</a></div>
+      <div class="drive-login-foot">
+        <p class="drive-login-help">仅限授权成员访问</p>
+        <span class="drive-login-links">
+          <a class="drive-docs-link" href="/support/">${renderIcon("info")}了解项目</a>
+          <a class="drive-docs-link" href="/docs/">${renderIcon("book-open")}浏览AI手册</a>
+        </span>
+      </div>
     </form>
   </section>`;
 }

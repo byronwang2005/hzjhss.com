@@ -1569,6 +1569,12 @@ body.drive-body {
   text-align: left;
 }
 
+.drive-login-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .drive-docs-link,
 .drive-appbar-docs {
   display: inline-flex;
@@ -2767,6 +2773,11 @@ wa-callout {
   .drive-login-foot {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .drive-login-links {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .drive-login-principles {

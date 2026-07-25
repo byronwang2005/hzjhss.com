@@ -19,15 +19,38 @@ await cp(path.join(root, "src", "shared", "styles", "tokens.css"), path.join(out
 await cp(path.join(site, "client", "theme-controller.js"), path.join(output, "theme-controller.js"));
 await cp(path.join(site, "client", "site.js"), path.join(output, "site.js"));
 await cp(path.join(root, "public", "assets"), path.join(output, "assets"), { recursive: true });
+await copyEcosystemIcons(output);
 await build({
-  entryPoints: [path.join(site, "styles", "site.css")],
-  outfile: path.join(output, "styles.css"),
+  entryPoints: {
+    styles: path.join(site, "styles", "site.css"),
+    support: path.join(site, "styles", "support.css"),
+  },
+  outdir: output,
   bundle: true,
+  entryNames: "[name]",
+  legalComments: "none",
+});
+await build({
+  entryPoints: {
+    support: path.join(site, "client", "support.ts"),
+  },
+  outfile: path.join(output, "support.js"),
+  bundle: true,
+  format: "esm",
+  target: "es2022",
+  minify: true,
   legalComments: "none",
 });
 
 await import("./build-drive.mjs");
-await versionDriveEntrypoints(output);
+await versionEntrypoints(output, "index.html", [
+  { outputPath: "assets/drive.css", publicPath: "./assets/drive.css" },
+  { outputPath: "assets/drive.js", publicPath: "./assets/drive.js" },
+]);
+await versionEntrypoints(output, "support/index.html", [
+  { outputPath: "support.css", publicPath: "/support.css" },
+  { outputPath: "support.js", publicPath: "/support.js" },
+]);
 
 const redirects = path.join(root, "_redirects");
 try {
@@ -53,15 +76,29 @@ async function renderPages(sourceDirectory, outputDirectory, relativeDirectory =
   }));
 }
 
-async function versionDriveEntrypoints(outputDirectory) {
-  const indexPath = path.join(outputDirectory, "index.html");
+async function copyEcosystemIcons(outputDirectory) {
+  const sourceDirectory = path.join(root, "node_modules", "@lobehub", "icons-static-svg", "icons");
+  const outputDirectoryPath = path.join(outputDirectory, "assets", "ecosystem");
+  const iconNames = ["cloudflare", "codex", "deepseek", "github", "tencentcloud"];
+
+  await mkdir(outputDirectoryPath, { recursive: true });
+  await Promise.all(iconNames.map((iconName) => (
+    cp(
+      path.join(sourceDirectory, `${iconName}.svg`),
+      path.join(outputDirectoryPath, `${iconName}.svg`),
+    )
+  )));
+}
+
+async function versionEntrypoints(outputDirectory, htmlPath, assets) {
+  const indexPath = path.join(outputDirectory, htmlPath);
   let markup = await readFile(indexPath, "utf8");
-  for (const asset of ["drive.css", "drive.js"]) {
-    const contents = await readFile(path.join(outputDirectory, "assets", asset));
+  for (const asset of assets) {
+    const contents = await readFile(path.join(outputDirectory, asset.outputPath));
     const version = createHash("sha256").update(contents).digest("hex").slice(0, 12);
-    const assetPath = `./assets/${asset}`;
-    const versionedAssetPattern = new RegExp(`${assetPath.replaceAll(".", "\\.")}(?:\\?v=[^\"']*)?`);
-    markup = markup.replace(versionedAssetPattern, `${assetPath}?v=${version}`);
+    const escapedPublicPath = asset.publicPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const versionedAssetPattern = new RegExp(`${escapedPublicPath}(?:\\?v=[^"']*)?`);
+    markup = markup.replace(versionedAssetPattern, `${asset.publicPath}?v=${version}`);
   }
   await writeFile(indexPath, markup);
 }
