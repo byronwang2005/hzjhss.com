@@ -19,7 +19,9 @@ import type {
   FileListPhaseEvent,
   FileListProgressStage,
   FileListResponse,
+  FolderIncorporationResult,
   KnowledgeFile,
+  KnowledgeFolder,
   KnowledgeRole,
   OverviewResponse,
   UploadCompleteResponse,
@@ -591,6 +593,11 @@ async function handleClick(event: MouseEvent): Promise<void> {
     });
     setStatus(button.dataset.incorporated === "true" ? "已取消纳入标记。" : "已标记为已纳入方法论。", "success");
     await loadFiles();
+  } else if (action === "toggle-folder-incorporated") {
+    await toggleFolderIncorporated(
+      String(button.dataset.path || ""),
+      button.dataset.incorporated !== "true",
+    );
   } else if (action === "edit-report-date") {
     state.editReportDate = {
       path: String(button.dataset.path || ""),
@@ -615,6 +622,32 @@ async function handleClick(event: MouseEvent): Promise<void> {
       error: "",
     };
     renderApp();
+  }
+}
+
+async function toggleFolderIncorporated(path: string, incorporated: boolean): Promise<void> {
+  if (!state.topic || !path || state.pendingFolderIncorporationPath) return;
+  state.pendingFolderIncorporationPath = path;
+  renderApp();
+  try {
+    const result = await api<FolderIncorporationResult>("/folder", {
+      method: "PATCH",
+      body: { topicId: state.topic.id, prefix: path, incorporated },
+    });
+    if (!result.matchedCount) {
+      setStatus("该文件夹内没有研报原件。", "neutral");
+    } else if (result.failedCount) {
+      setStatus(`已更新 ${result.changedCount} 份研报，${result.failedCount} 份更新失败。`, "danger");
+    } else if (!result.changedCount) {
+      setStatus(incorporated ? "该文件夹内的研报已全部纳入方法论。" : "该文件夹内的研报已全部取消纳入。", "success");
+    } else {
+      setStatus(incorporated ? `已将 ${result.changedCount} 份研报纳入方法论。` : `已取消 ${result.changedCount} 份研报的纳入标记。`, "success");
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    state.pendingFolderIncorporationPath = null;
+    await loadFiles();
   }
 }
 
@@ -1405,7 +1438,7 @@ function renderFiles(): TemplateResult {
         <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
         ${uploadBatch ? renderFileProcessingCenter(uploadBatch) : nothing}
         ${renderFileLoadProgress(Boolean(listing))}
-        ${listing ? renderFileList(listing, roleFiles, presentation) : state.fileLoad ? nothing : renderLoading()}
+        ${listing ? renderFileList(listing, roleFiles, presentation, role) : state.fileLoad ? nothing : renderLoading()}
       </div>
     </section>
   `;
@@ -1513,7 +1546,12 @@ function renderFileRoleTab(role: KnowledgeRole, selectedRole: KnowledgeRole, lis
   `;
 }
 
-function renderFileList(listing: FileListResponse, files: KnowledgeFile[], presentation: (typeof FILE_ROLE_PRESENTATION)[KnowledgeRole]): TemplateResult {
+function renderFileList(
+  listing: FileListResponse,
+  files: KnowledgeFile[],
+  presentation: (typeof FILE_ROLE_PRESENTATION)[KnowledgeRole],
+  role: KnowledgeRole,
+): TemplateResult {
   if (!listing.folders.length && !files.length) {
     return html`
       <div class="drive-empty drive-file-role-empty">
@@ -1528,16 +1566,39 @@ function renderFileList(listing: FileListResponse, files: KnowledgeFile[], prese
       <div class="drive-file-row drive-file-row-head" role="row">
         <span role="columnheader">名称</span><span role="columnheader">资料日期</span><span role="columnheader">处理状态</span><span role="columnheader">最近更新</span><span role="columnheader">操作</span>
       </div>
-      ${repeat(listing.folders, (folder) => folder.path, (folder) => html`
-        <div class="drive-file-row" role="row">
-          <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
-          <span role="cell" data-label="资料日期">—</span>
-          <span role="cell" data-label="处理状态"><span class="drive-file-state-chip is-neutral">目录</span></span>
-          <span role="cell" data-label="最近更新">—</span>
-          <span class="drive-row-actions" role="cell" data-label="操作"><button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path}>${renderIcon("folder-open")}打开</button></span>
-        </div>
-      `)}
+      ${repeat(listing.folders, (folder) => folder.path, (folder) => renderFolderRow(folder, role))}
       ${repeat(files, (file) => file.path, renderFileRow)}
+    </div>
+  `;
+}
+
+function renderFolderRow(folder: KnowledgeFolder, role: KnowledgeRole): TemplateResult {
+  const hasReferences = folder.referenceCount > 0;
+  const fullyIncorporated = hasReferences && folder.incorporatedCount === folder.referenceCount;
+  const partiallyIncorporated = folder.incorporatedCount > 0 && !fullyIncorporated;
+  const pending = state.pendingFolderIncorporationPath === folder.path;
+  const folderStatus = !hasReferences
+    ? "暂无研报"
+    : `${folder.incorporatedCount}/${folder.referenceCount} 已纳入`;
+  return html`
+    <div class="drive-file-row" role="row">
+      <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
+      <span role="cell" data-label="资料日期">—</span>
+      <span role="cell" data-label="处理状态">
+        <span class=${`drive-file-state-chip${partiallyIncorporated ? " is-partial" : fullyIncorporated ? " is-incorporated" : ""}`}>
+          ${role === "reference" ? folderStatus : "目录"}
+        </span>
+      </span>
+      <span role="cell" data-label="最近更新">—</span>
+      <span class="drive-row-actions" role="cell" data-label="操作">
+        ${state.role === "admin" && role === "reference" && hasReferences ? html`
+          <button class="drive-table-action" type="button" data-action="toggle-folder-incorporated" data-path=${folder.path} data-incorporated=${String(fullyIncorporated)} ?disabled=${pending}>
+            <span class=${pending ? "drive-spin" : ""}>${renderIcon(pending ? "arrows-clockwise" : fullyIncorporated ? "x-circle" : "check")}</span>
+            ${pending ? "处理中" : fullyIncorporated ? "全部取消" : "全部纳入"}
+          </button>
+        ` : nothing}
+        <button class="drive-table-action" type="button" data-action="open-folder" data-path=${folder.path} ?disabled=${pending}>${renderIcon("folder-open")}打开</button>
+      </span>
     </div>
   `;
 }

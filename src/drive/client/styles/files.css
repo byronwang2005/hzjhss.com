@@ -287,6 +287,16 @@
   font-size: 10px;
 }
 
+.drive-file-state-chip.is-partial {
+  color: var(--jh-color-warning);
+  background: var(--jh-color-warning-soft);
+}
+
+.drive-file-state-chip.is-incorporated {
+  color: var(--jh-color-success);
+  background: var(--jh-color-success-soft);
+}
+
 .drive-file-progress-detail {
   background: var(--jh-color-surface-subtle);
 }

@@ -208,6 +208,9 @@ describe("knowledge client surface", () => {
     expect(source).toContain("file.webkitRelativePath || file.name");
     expect(source).toContain("data-reference-folder-input");
     expect(source).toContain("webkitdirectory");
+    expect(source).toContain('data-action="toggle-folder-incorporated"');
+    expect(source).toContain("pendingFolderIncorporationPath");
+    expect(source).toContain('api<FolderIncorporationResult>("/folder"');
     expect(source).not.toContain(">上传周报<");
     expect(source).not.toContain("drive-file-role-badge");
   });

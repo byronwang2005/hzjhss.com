@@ -82,6 +82,7 @@ export interface DriveClientState {
   fileLoad: FileListLoadState | null;
   uploadBatch: UploadBatchState | null;
   expandedFilePath: string | null;
+  pendingFolderIncorporationPath: string | null;
 }
 
 export const state: DriveClientState = {
@@ -110,4 +111,5 @@ export const state: DriveClientState = {
   fileLoad: null,
   uploadBatch: null,
   expandedFilePath: null,
+  pendingFolderIncorporationPath: null,
 };

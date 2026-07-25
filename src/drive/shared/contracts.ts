@@ -123,6 +123,16 @@ export interface KnowledgeFile {
 export interface KnowledgeFolder {
   name: string;
   path: string;
+  referenceCount: number;
+  incorporatedCount: number;
+}
+
+export interface FolderIncorporationResult {
+  matchedCount: number;
+  changedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  failures: Array<{ path: string; message: string }>;
 }
 
 export interface FileListResponse {

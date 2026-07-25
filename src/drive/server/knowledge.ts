@@ -25,6 +25,7 @@ import type {
   FileListProgressStage,
   FileListProgressState,
   KnowledgeRole,
+  FolderIncorporationResult,
   ProcessingState,
   ReportDateSource,
 } from "../shared/contracts";
@@ -115,6 +116,11 @@ export interface FileListProgressUpdate {
   state: FileListProgressState;
   completed?: number;
   total?: number;
+}
+
+interface ReferenceMetadataEntry {
+  relativePath: string;
+  metadata: FileMetadata;
 }
 
 export function normalizeTopicId(input: unknown): string {
@@ -266,7 +272,7 @@ export async function listKnowledgeFiles(
     onProgress?: (update: FileListProgressUpdate) => void;
     metadataConcurrency?: number;
   } = {},
-): Promise<{ prefix: string; folders: DriveFolder[]; files: KnowledgeFile[]; nextCursor: string | null }> {
+): Promise<{ prefix: string; folders: Array<DriveFolder & { referenceCount: number; incorporatedCount: number }>; files: KnowledgeFile[]; nextCursor: string | null }> {
   const topicId = normalizeTopicId(topicIdInput);
   options.onProgress?.({ stage: "topic", state: "active" });
   const topic = await readKnowledgeTopic(config, topicId);
@@ -322,14 +328,111 @@ export async function listKnowledgeFiles(
   })));
   options.onProgress?.({ stage: "metadata", state: "complete", completed, total });
   options.onProgress?.({ stage: "assembling", state: "active" });
+  const folderIncorporation = listed.folders.length
+    ? await summarizeFolderIncorporation(config, topicId, relativePrefix, listed.folders, methodologyPath)
+    : new Map<string, { referenceCount: number; incorporatedCount: number }>();
   const response = {
     prefix: relativePrefix,
-    folders: listed.folders.map((folder) => ({ name: folder.name, path: folder.path.slice(`${topicPrefix(topicId)}files/`.length) })),
+    folders: listed.folders.map((folder) => {
+      const path = folder.path.slice(`${topicPrefix(topicId)}files/`.length);
+      const counts = folderIncorporation.get(path) || { referenceCount: 0, incorporatedCount: 0 };
+      return { name: folder.name, path, ...counts };
+    }),
     files: enriched.filter((file): file is KnowledgeFile => Boolean(file)),
     nextCursor: listed.nextCursor,
   };
   options.onProgress?.({ stage: "assembling", state: "complete" });
   return response;
+}
+
+export async function patchKnowledgeFolderIncorporation(
+  config: DriveConfig,
+  input: { topicId: unknown; prefix: unknown; incorporated: unknown; updatedBy: string; concurrency?: number },
+): Promise<FolderIncorporationResult> {
+  const topicId = normalizeTopicId(input.topicId);
+  const prefix = normalizeDirectoryPrefix(input.prefix);
+  if (!prefix) throw new Error("文件夹路径无效");
+  if (typeof input.incorporated !== "boolean") throw new Error("纳入状态无效");
+  const topic = await readKnowledgeTopic(config, topicId);
+  const entries = await listReferenceMetadata(config, topicId, prefix, methodologyPathForTopic(topic));
+  const changed = entries.filter(({ metadata }) => Boolean(metadata.incorporatedAt) !== input.incorporated);
+  const failures: FolderIncorporationResult["failures"] = [];
+  let changedCount = 0;
+  const limit = pLimit(Math.max(1, input.concurrency || 8));
+  await Promise.all(changed.map((entry) => limit(async () => {
+    try {
+      await patchKnowledgeFile(config, {
+        topicId,
+        relativePath: entry.relativePath,
+        incorporated: input.incorporated,
+        updatedBy: input.updatedBy,
+      });
+      changedCount += 1;
+    } catch (error) {
+      failures.push({
+        path: entry.relativePath,
+        message: error instanceof Error ? error.message : "更新失败",
+      });
+    }
+  })));
+  return {
+    matchedCount: entries.length,
+    changedCount,
+    skippedCount: entries.length - changed.length,
+    failedCount: failures.length,
+    failures,
+  };
+}
+
+async function summarizeFolderIncorporation(
+  config: DriveConfig,
+  topicId: string,
+  relativePrefix: string,
+  folders: DriveFolder[],
+  methodologyPath: string,
+): Promise<Map<string, { referenceCount: number; incorporatedCount: number }>> {
+  const entries = await listReferenceMetadata(config, topicId, relativePrefix, methodologyPath);
+  const counts = new Map<string, { referenceCount: number; incorporatedCount: number }>();
+  const filesPrefix = `${topicPrefix(topicId)}files/`;
+  for (const folder of folders) {
+    counts.set(folder.path.slice(filesPrefix.length), { referenceCount: 0, incorporatedCount: 0 });
+  }
+  for (const entry of entries) {
+    const remainder = entry.relativePath.slice(relativePrefix.length);
+    const firstSegment = remainder.split("/", 1)[0];
+    if (!firstSegment || !remainder.includes("/")) continue;
+    const folderPath = `${relativePrefix}${firstSegment}/`;
+    const folderCounts = counts.get(folderPath);
+    if (!folderCounts) continue;
+    folderCounts.referenceCount += 1;
+    if (entry.metadata.incorporatedAt) folderCounts.incorporatedCount += 1;
+  }
+  return counts;
+}
+
+async function listReferenceMetadata(
+  config: DriveConfig,
+  topicId: string,
+  relativePrefix: string,
+  methodologyPath: string,
+): Promise<ReferenceMetadataEntry[]> {
+  const storagePrefix = `${topicPrefix(topicId)}files/${relativePrefix}`;
+  const filesPrefix = `${topicPrefix(topicId)}files/`;
+  const paths: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = await listObjectPaths(config, storagePrefix, cursor);
+    paths.push(...page.paths.filter((path) => !path.endsWith("/")));
+    cursor = page.nextCursor;
+  } while (cursor);
+  const limit = pLimit(8);
+  const entries = await Promise.all(paths.map((path) => limit(async (): Promise<ReferenceMetadataEntry | null> => {
+    const relativePath = path.slice(filesPrefix.length);
+    const metadata = await readJson<FileMetadata>(config, fileMetaPath(topicId, relativePath));
+    if (!metadata || knowledgeRoleOf(metadata, relativePath, methodologyPath) !== "reference") return null;
+    return { relativePath, metadata };
+  })));
+  return entries.filter((entry): entry is ReferenceMetadataEntry => Boolean(entry));
 }
 
 export async function createUpload(config: DriveConfig, input: { topicId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown }): Promise<{ url: string; uploadId: string; path: string; contentType: string; knowledgeRole: KnowledgeRole; maxFileBytes: number; requiredHeaders: Record<string, string>; expiresIn: number }> {

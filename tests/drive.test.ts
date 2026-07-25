@@ -13,6 +13,7 @@ import {
   listKnowledgeTopics,
   METHODOLOGY_PATH,
   patchKnowledgeFile,
+  patchKnowledgeFolderIncorporation,
   processingStatusPath,
   readKnowledgeTopic,
   sourcePath,
@@ -24,6 +25,7 @@ import { jsonResponse } from "../src/drive/server/http";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 import { onRequestPost as uploadComplete } from "../functions/api/drive/upload-complete";
 import { onRequestGet as listFiles } from "../functions/api/drive/list";
+import { onRequestPatch as patchFolder } from "../functions/api/drive/folder";
 
 const env: DriveEnv = {
   COS_SECRET_ID: "id",
@@ -298,6 +300,90 @@ describe("knowledge topic and upload flow", () => {
     expect(patched.metadata).toMatchObject({ incorporatedBy: "汪旭" });
   });
 
+  it("recursively summarizes and batch-updates reference incorporation", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "批量纳入");
+    const upload = async (relativePath: string, knowledgeRole: "reference" | "evidence") => {
+      const signature = await createUpload(config, {
+        topicId: topic.id,
+        relativePath,
+        size: 3,
+        contentType: "application/pdf",
+        knowledgeRole,
+        ...(knowledgeRole === "evidence" ? { pdfPages: 1 } : {}),
+      });
+      storage.set(tempUploadPath(signature.uploadId), { body: "pdf", contentType: "application/pdf", etag: `etag-${storage.size}` });
+      await completeUpload(config, {
+        topicId: topic.id,
+        uploadId: signature.uploadId,
+        relativePath,
+        size: 3,
+        contentType: "application/pdf",
+        knowledgeRole,
+        ...(knowledgeRole === "evidence" ? { pdfPages: 1 } : {}),
+        uploadedBy: "汪旭",
+      });
+    };
+    await upload("研报/根目录.pdf", "reference");
+    await upload("研报/子目录/嵌套.pdf", "reference");
+    await upload("研报/子目录/时效资料.pdf", "evidence");
+
+    const before = await listKnowledgeFiles(config, topic.id, "");
+    expect(before.folders).toContainEqual(expect.objectContaining({
+      path: "研报/",
+      referenceCount: 2,
+      incorporatedCount: 0,
+    }));
+    const versionBefore = (await readKnowledgeTopic(config, topic.id)).indexVersion;
+
+    await expect(patchKnowledgeFolderIncorporation(config, {
+      topicId: topic.id,
+      prefix: "研报/",
+      incorporated: true,
+      updatedBy: "汪旭",
+    })).resolves.toMatchObject({ matchedCount: 2, changedCount: 2, skippedCount: 0, failedCount: 0 });
+
+    const after = await listKnowledgeFiles(config, topic.id, "");
+    expect(after.folders).toContainEqual(expect.objectContaining({ path: "研报/", referenceCount: 2, incorporatedCount: 2 }));
+    const nested = await listKnowledgeFiles(config, topic.id, "研报/子目录/");
+    expect(nested.folders).toHaveLength(0);
+    expect(nested.files).toContainEqual(expect.objectContaining({ path: "研报/子目录/嵌套.pdf", incorporatedAt: expect.any(String) }));
+    expect(nested.files).not.toContainEqual(expect.objectContaining({ path: "研报/子目录/时效资料.pdf", incorporatedAt: expect.any(String) }));
+    expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(versionBefore);
+
+    await expect(patchKnowledgeFolderIncorporation(config, {
+      topicId: topic.id,
+      prefix: "研报/",
+      incorporated: true,
+      updatedBy: "汪旭",
+    })).resolves.toMatchObject({ matchedCount: 2, changedCount: 0, skippedCount: 2, failedCount: 0 });
+    await expect(patchKnowledgeFolderIncorporation(config, {
+      topicId: topic.id,
+      prefix: "研报/",
+      incorporated: false,
+      updatedBy: "汪旭",
+    })).resolves.toMatchObject({ matchedCount: 2, changedCount: 2, skippedCount: 0, failedCount: 0 });
+
+    const mockFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const key = decodeURIComponent(new URL(request.url).pathname.replace(/^\//, "")).replace(/^ai-knowledge-base\//, "");
+      if (request.method === "PUT" && key === `topics/${topic.id}/file-meta/研报/子目录/嵌套.pdf.json`) {
+        return new Response("", { status: 500 });
+      }
+      return mockFetch(input, init);
+    };
+    await expect(patchKnowledgeFolderIncorporation(config, {
+      topicId: topic.id,
+      prefix: "研报/",
+      incorporated: true,
+      updatedBy: "汪旭",
+    })).resolves.toMatchObject({ matchedCount: 2, changedCount: 1, skippedCount: 0, failedCount: 1 });
+    globalThis.fetch = mockFetch;
+    const partial = await listKnowledgeFiles(config, topic.id, "");
+    expect(partial.folders).toContainEqual(expect.objectContaining({ path: "研报/", referenceCount: 2, incorporatedCount: 1 }));
+  });
+
   it("treats the configured methodology path as hidden even when its metadata is missing", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "异常状态");
@@ -433,6 +519,18 @@ describe("knowledge topic and upload flow", () => {
 });
 
 describe("administrator API enforcement", () => {
+  it("requires an administrator session for folder incorporation", async () => {
+    const response = await patchFolder({
+      request: new Request("https://example.com/api/drive/folder", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ topicId: "t_abcdefghijkl", prefix: "研报/", incorporated: true }),
+      }),
+      env,
+    } as never);
+    expect(response.status).toBe(401);
+  });
+
   it("preserves JSON list responses and streams real file-list phases in order", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "流式列表");
