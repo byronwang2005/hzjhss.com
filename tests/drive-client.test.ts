@@ -200,6 +200,10 @@ describe("knowledge client surface", () => {
     expect(source).toContain('role="columnheader"');
     expect(source).toContain('data-label="状态"');
     expect(source).toContain("替换专题方法论");
+    expect(source).toContain('data-action="pick-reference-folder"');
+    expect(source).toContain("file.webkitRelativePath || file.name");
+    expect(source).toContain("data-reference-folder-input");
+    expect(source).toContain("webkitdirectory");
     expect(source).not.toContain(">上传周报<");
     expect(source).not.toContain("drive-file-role-badge");
   });

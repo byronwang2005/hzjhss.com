@@ -386,6 +386,8 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await loadFiles();
   } else if (action === "pick-reference") {
     root.querySelector<HTMLInputElement>("[data-reference-input]")?.click();
+  } else if (action === "pick-reference-folder") {
+    root.querySelector<HTMLInputElement>("[data-reference-folder-input]")?.click();
   } else if (action === "pick-evidence") {
     root.querySelector<HTMLInputElement>("[data-evidence-input]")?.click();
   } else if (action === "pick-methodology") {
@@ -533,22 +535,25 @@ function normalizeKnowledgeRole(value: unknown): KnowledgeRole {
 
 async function handleChange(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
-  if (!input.matches("[data-reference-input], [data-evidence-input], [data-methodology-input]")) return;
+  if (!input.matches("[data-reference-input], [data-reference-folder-input], [data-evidence-input], [data-methodology-input]")) return;
   const files = Array.from(input.files || []);
   input.value = "";
   if (!files.length) return;
   const knowledgeRole: KnowledgeRole = input.matches("[data-methodology-input]")
     ? "methodology"
-    : input.matches("[data-reference-input]")
+    : input.matches("[data-reference-input], [data-reference-folder-input]")
       ? "reference"
       : "evidence";
+  const isReferenceFolder = input.matches("[data-reference-folder-input]");
   await uploadFiles(
     knowledgeRole === "methodology" ? files.slice(0, 1) : files,
     (file) => knowledgeRole === "methodology" && state.topic?.methodologyPath
       ? state.topic.methodologyPath
       : knowledgeRole === "methodology"
         ? "专题方法论.md"
-        : file.name,
+        : isReferenceFolder
+          ? file.webkitRelativePath || file.name
+          : file.name,
     knowledgeRole,
   );
 }
@@ -955,7 +960,7 @@ function renderOverview(): TemplateResult {
 }
 
 function renderCreate(): TemplateResult {
-  return html`<form class="drive-form drive-create-card" data-topic-form><div class="drive-create-icon">${renderIcon("folder-plus")}</div><div><h2>专题信息</h2><p>专题创建后，可继续上传文件并等待系统处理。</p></div><label class="drive-field"><span>专题名称</span><input name="topicName" placeholder="例如：2026 年行业研究" .value=${state.topicName} required></label><div class="drive-form-actions"><button class="drive-control" type="button" data-action="back">${renderIcon("x-circle")}取消</button><button class="drive-control drive-control-primary" type="submit">${renderIcon("check", "bold")}创建专题</button></div></form>`;
+  return html`<form class="drive-form drive-create-card" data-topic-form><div class="drive-create-icon">${renderIcon("folder-plus")}</div><div><h2>专题信息</h2><p>专题创建后，可继续上传文件并等待系统处理。</p></div><label class="drive-field"><span>专题名称</span><input name="topicName" placeholder="例如：鸡蛋" .value=${state.topicName} required></label><div class="drive-form-actions"><button class="drive-control" type="button" data-action="back">${renderIcon("x-circle")}取消</button><button class="drive-control drive-control-primary" type="submit">${renderIcon("check", "bold")}创建专题</button></div></form>`;
 }
 
 function renderTopic(): TemplateResult {
@@ -1016,11 +1021,19 @@ function renderFiles(): TemplateResult {
                   <button class="drive-control drive-control-primary" type="button" data-action=${presentation.uploadAction}>
                     ${renderIcon(role === "methodology" ? "database" : "upload-simple", "bold")}${uploadLabel}
                   </button>
+                  ${role === "reference"
+                    ? html`
+                        <button class="drive-control" type="button" data-action="pick-reference-folder">
+                          ${renderIcon("folder-plus", "bold")}上传文件夹
+                        </button>
+                      `
+                    : nothing}
                 `
               : nothing}
           </div>
         </div>
         <input data-reference-input type="file" multiple hidden>
+        <input data-reference-folder-input type="file" multiple webkitdirectory directory hidden>
         <input data-evidence-input type="file" multiple hidden>
         <input data-methodology-input type="file" accept=".md,text/markdown" hidden>
         ${uploadBatch ? renderFileProcessingCenter(uploadBatch) : nothing}
