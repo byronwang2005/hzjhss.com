@@ -1,6 +1,6 @@
 import type { DriveConfig } from "./config";
 import { headObject } from "./cos";
-import { listKnowledgeTopics, normalizeTopicId, readKnowledgeTopic, readLatestEvidenceOverrideRevision, readTopicSearchIndex } from "./knowledge";
+import { listKnowledgeTopics, normalizeTopicId, readKnowledgeTopic, readTopicSearchIndex } from "./knowledge";
 import { searchSerializedIndex, type RetrievedChunk, type SerializedSearchIndex } from "./search";
 
 const indexCache = new Map<string, { etag: string; envelope: SerializedSearchIndex }>();
@@ -89,12 +89,10 @@ async function loadIndex(config: DriveConfig, topicId: string, indexVersion: num
   const path = `topics/${topicId}/index/search-index.json`;
   const metadata = await headObject(config, path);
   if (!metadata) return null;
-  const latestEvidenceRevision = await readLatestEvidenceOverrideRevision(config, topicId);
   const cached = indexCache.get(topicId);
   if (
     cached?.etag === metadata.etag
     && cached.envelope.indexVersion === indexVersion
-    && (cached.envelope.latestEvidenceRevision ?? null) === latestEvidenceRevision
   ) return cached.envelope;
   const envelope = await readTopicSearchIndex(config, topicId);
   if (
@@ -102,7 +100,6 @@ async function loadIndex(config: DriveConfig, topicId: string, indexVersion: num
     || (envelope.version !== 1 && envelope.version !== 2)
     || envelope.topicId !== topicId
     || envelope.indexVersion !== indexVersion
-    || (envelope.latestEvidenceRevision ?? null) !== latestEvidenceRevision
   ) return null;
   indexCache.set(topicId, { etag: metadata.etag, envelope });
   return envelope;

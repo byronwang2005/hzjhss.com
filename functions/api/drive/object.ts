@@ -19,19 +19,15 @@ export const onRequestPatch: PagesFunction<DriveEnv> = async ({ request, env, wa
     const session = await readDriveAdminSession({ request, env });
     if (session instanceof Response) return session;
     const body = await readJsonBody(request);
+    if (Object.prototype.hasOwnProperty.call(body, "latest")) throw new Error("不再支持设置最新资料");
     const result = await patchKnowledgeFile(getDriveConfig(env), {
       topicId: body.topicId,
       knowledgeRole: body.knowledgeRole,
       relativePath: body.path,
       incorporated: body.incorporated,
-      latest: body.latest,
       updatedBy: session.displayName,
     });
     if (result.indexChanged) waitUntil(notifyIndexer(env, { topicId: String(body.topicId) }));
-    return jsonResponse({
-      ok: true,
-      file: result.metadata,
-      ...(result.latestEvidenceGeneration ? { latestEvidenceGeneration: result.latestEvidenceGeneration } : {}),
-    });
+    return jsonResponse({ ok: true, file: result.metadata });
   } catch (error) { return errorResponse(error); }
 };

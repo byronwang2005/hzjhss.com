@@ -297,49 +297,6 @@
   background: var(--jh-color-success-soft);
 }
 
-.drive-latest-evidence {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 5px 8px;
-  color: var(--jh-color-text-secondary);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  text-align: left;
-}
-
-button.drive-latest-evidence:hover:not(:disabled) {
-  color: var(--jh-color-brand);
-  background: var(--jh-color-brand-soft);
-}
-
-.drive-latest-evidence:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.drive-latest-evidence.is-selected {
-  color: var(--jh-color-success);
-  background: var(--jh-color-success-soft);
-}
-
-.drive-latest-evidence > span:last-child {
-  display: grid;
-  gap: 1px;
-}
-
-.drive-latest-evidence strong {
-  font-size: 11px;
-}
-
-.drive-latest-evidence small {
-  color: inherit;
-  font-size: 9px;
-  opacity: 0.8;
-}
-
 .drive-file-progress-detail {
   background: var(--jh-color-surface-subtle);
 }

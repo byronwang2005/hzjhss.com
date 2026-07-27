@@ -96,7 +96,6 @@ const statusController = createTransientStatusController<"neutral" | "success" |
 );
 
 let fileRefreshTimer: number | undefined;
-let latestEvidenceRefreshTimer: number | undefined;
 let fileProgressClockTimer: number | undefined;
 let fileLoadClockTimer: number | undefined;
 let fileLoadAbortController: AbortController | null = null;
@@ -698,23 +697,6 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await applyFolderIncorporation(button.dataset.incorporated === "true");
   } else if (action === "close-folder-management") {
     closeFolderManagement();
-  } else if (action === "set-latest-evidence") {
-    const path = String(button.dataset.path || "");
-    if (!path) return;
-    const result = await api<{ latestEvidenceGeneration?: string }>("/object", {
-      method: "PATCH",
-      body: {
-        topicId: state.topic?.id,
-        knowledgeRole: "evidence",
-        path,
-        latest: true,
-      },
-    });
-    if (!result.latestEvidenceGeneration) throw new Error("最新资料选择未返回索引版本，请重试。");
-    applyLatestEvidenceSelection(path);
-    setStatus("已修正最新资料，索引正在重建。", "success");
-    renderApp();
-    scheduleLatestEvidenceRefresh(state.topic?.id || "", path, result.latestEvidenceGeneration);
   } else if (action === "delete-topic" && state.topic) {
     state.deleteConfirmation = {
       kind: "topic",
@@ -909,47 +891,6 @@ function cancelFileLoad(): void {
     window.clearTimeout(fileLoadClockTimer);
     fileLoadClockTimer = undefined;
   }
-  if (latestEvidenceRefreshTimer !== undefined) {
-    window.clearTimeout(latestEvidenceRefreshTimer);
-    latestEvidenceRefreshTimer = undefined;
-  }
-}
-
-function applyLatestEvidenceSelection(path: string): void {
-  const listings = new Set([state.listing, state.fileRoleListings.evidence]);
-  for (const listing of listings) {
-    if (!listing) continue;
-    for (const file of listing.files) {
-      if (file.knowledgeRole !== "evidence") continue;
-      if (file.path === path) {
-        file.isLatestEvidence = true;
-        file.latestEvidenceSource = "manual";
-      } else {
-        delete file.isLatestEvidence;
-        delete file.latestEvidenceSource;
-      }
-    }
-  }
-}
-
-function scheduleLatestEvidenceRefresh(topicId: string, path: string, generation: string, attempt = 0): void {
-  if (!topicId || !generation || attempt >= 60) return;
-  if (latestEvidenceRefreshTimer !== undefined) window.clearTimeout(latestEvidenceRefreshTimer);
-  latestEvidenceRefreshTimer = window.setTimeout(async () => {
-    latestEvidenceRefreshTimer = undefined;
-    if (state.topic?.id !== topicId || state.topicView !== "files" || state.fileRoleView !== "evidence") return;
-    await loadFiles({ background: true, preservePage: true });
-    const published = state.listing?.latestEvidenceRevision === generation;
-    if (!published) {
-      if (attempt + 1 >= 60) {
-        setStatus("最新资料索引仍在重建，请稍后刷新确认。", "neutral");
-        return;
-      }
-      applyLatestEvidenceSelection(path);
-      renderApp();
-      scheduleLatestEvidenceRefresh(topicId, path, generation, attempt + 1);
-    }
-  }, CLIENT_TIMING.activeFileRefreshMs);
 }
 
 function closeDeleteConfirmation(): void {
@@ -1976,7 +1917,7 @@ function renderFileList(
   return html`
     <div class="drive-file-table" role="table" aria-label=${presentation.label}>
       <div class="drive-file-row drive-file-row-head" role="row">
-        <span role="columnheader">名称</span><span role="columnheader">最新资料</span><span role="columnheader">处理状态</span><span role="columnheader">最近更新</span><span role="columnheader">操作</span>
+        <span role="columnheader">名称</span><span role="columnheader">资料日期</span><span role="columnheader">处理状态</span><span role="columnheader">最近更新</span><span role="columnheader">操作</span>
       </div>
       ${repeat(listing.folders, (folder) => folder.path, (folder) => renderFolderRow(folder, role))}
       ${repeat(files, (file) => file.path, renderFileRow)}
@@ -2015,7 +1956,7 @@ function renderFolderRow(folder: KnowledgeFolder, role: KnowledgeRole): Template
   return html`
     <div class="drive-file-row" role="row">
       <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
-      <span role="cell" data-label="最新资料">—</span>
+      <span role="cell" data-label="资料日期">—</span>
       <span role="cell" data-label="处理状态">
         <span class="drive-file-state-chip">目录</span>
       </span>
@@ -2046,7 +1987,7 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
         <span class="drive-file-type-icon">${renderIcon(fileIconName(displayName))}</span>
         <span class="drive-file-name-copy"><strong title=${displayName}>${displayName}</strong><small>${formatBytes(file.size)}</small></span>
       </span>
-      <span role="cell" data-label="最新资料">${renderLatestEvidenceControl(file)}</span>
+      <span role="cell" data-label="资料日期">${file.knowledgeRole === "evidence" ? file.reportDate || "—" : "—"}</span>
       <span role="cell" data-label="处理状态">
         <button
           class=${`drive-file-status is-${tone}`}
@@ -2084,35 +2025,6 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
       </span>
     </div>
     ${expanded ? renderFileProgressDetail(file, stage, status, detail) : nothing}
-  `;
-}
-
-function renderLatestEvidenceControl(file: KnowledgeFile): TemplateResult | string {
-  if (file.knowledgeRole !== "evidence") return "—";
-  if (file.isLatestEvidence) {
-    return html`
-      <span class="drive-latest-evidence is-selected" role="radio" aria-checked="true">
-        ${renderIcon("check-circle", "fill")}
-        <span><strong>最新</strong><small>${file.latestEvidenceSource === "manual" ? "人工修正" : "自动识别"}</small></span>
-      </span>
-    `;
-  }
-  if (state.role !== "admin") return "—";
-  const ready = file.processing?.state === "ready";
-  return html`
-    <button
-      class="drive-latest-evidence"
-      type="button"
-      role="radio"
-      aria-checked="false"
-      data-action="set-latest-evidence"
-      data-path=${file.path}
-      ?disabled=${!ready}
-      title=${ready ? "将这份资料设为当前最新资料" : "资料处理完成后才能设为最新"}
-    >
-      ${renderIcon("circle-notch")}
-      <span><strong>设为最新</strong></span>
-    </button>
   `;
 }
 

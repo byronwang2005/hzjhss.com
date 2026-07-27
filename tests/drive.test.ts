@@ -13,7 +13,6 @@ import {
   findUploadConflicts,
   listKnowledgeFiles,
   listKnowledgeTopics,
-  latestEvidenceOverrideObjectPath,
   KNOWLEDGE_LIST_PAGE_SIZE,
   KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE,
   KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE,
@@ -35,6 +34,7 @@ import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 import { onRequestPost as uploadComplete } from "../functions/api/drive/upload-complete";
 import { onRequestGet as listFiles } from "../functions/api/drive/list";
 import { onRequestGet as getFolder, onRequestPatch as patchFolder } from "../functions/api/drive/folder";
+import { onRequestPatch as patchObject } from "../functions/api/drive/object";
 
 const env: DriveEnv = {
   COS_SECRET_ID: "id",
@@ -322,7 +322,7 @@ describe("knowledge topic and upload flow", () => {
     expect(storage.has(topicIndexManifestPath(topic.id))).toBe(false);
   });
 
-  it("allows ready evidence to override the latest selection and preserves versioned override metadata across uploads", async () => {
+  it("rejects the removed latest evidence PATCH field", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "生猪");
     const first = await createUpload(config, {
@@ -334,7 +334,7 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "evidence",
     });
     storage.set(tempUploadPath(first.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-first" });
-    const firstMetadata = await completeUpload(config, {
+    await completeUpload(config, {
       topicId: topic.id,
       uploadId: first.uploadId,
       relativePath: first.path,
@@ -344,105 +344,18 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "evidence",
       uploadedBy: "汪旭",
     });
-    await expect(patchKnowledgeFile(config, {
-      topicId: topic.id,
-      knowledgeRole: "evidence",
-      relativePath: first.path,
-      latest: true,
-      updatedBy: "汪旭",
-    })).rejects.toThrow("处理完成后");
-
-    storage.set(processingStatusPath(topic.id, "evidence", first.path), {
-      body: JSON.stringify({
-        version: 1,
-        topicId: topic.id,
-        path: first.path,
-        sourceEtag: firstMetadata.etag,
-        state: "ready",
-        processingKind: firstMetadata.processingKind,
-        updatedAt: "2026-07-21T00:00:00.000Z",
+    const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
+    const response = await patchObject({
+      request: new Request("https://example.com/api/drive/object", {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ topicId: topic.id, knowledgeRole: "evidence", path: first.path, latest: true }),
       }),
-      contentType: "application/json",
-      etag: "status-first",
-    });
-    const patched = await patchKnowledgeFile(config, {
-      topicId: topic.id,
-      knowledgeRole: "evidence",
-      relativePath: first.path,
-      latest: true,
-      updatedBy: "汪旭",
-    });
-    expect(patched.indexChanged).toBe(true);
-    expect(patched.latestEvidenceGeneration).toEqual(expect.any(String));
-    const latestOverride = JSON.parse(storage.get(latestEvidenceOverrideObjectPath(topic.id))!.body) as {
-      generation: string;
-      path: string;
-      sourceEtag: string;
-    };
-    expect(latestOverride).toMatchObject({
-      generation: patched.latestEvidenceGeneration,
-      path: first.path,
-      sourceEtag: firstMetadata.etag,
-    });
-    const topicAfterOverride = await readKnowledgeTopic(config, topic.id);
-    storage.set(topicIndexManifestPath(topic.id), {
-      body: JSON.stringify({
-        version: 1,
-        topicId: topic.id,
-        indexVersion: topicAfterOverride.indexVersion,
-        latestEvidenceRevision: latestOverride.generation,
-        chunkCount: 1,
-        latestEvidencePath: first.path,
-        latestEvidenceSource: "manual",
-      }),
-      contentType: "application/json",
-      etag: "manifest-manual",
-    });
-    const listedWithLatest = await listKnowledgeFiles(config, topic.id, "evidence", "");
-    expect(listedWithLatest.latestEvidenceRevision).toBe(latestOverride.generation);
-    expect(listedWithLatest.files[0]).toMatchObject({
-      path: first.path,
-      isLatestEvidence: true,
-      latestEvidenceSource: "manual",
-    });
-
-    const second = await createUpload(config, {
-      topicId: topic.id,
-      relativePath: "周报-2026-07-27.pdf",
-      size: 3,
-      contentType: "application/pdf",
-      pdfPages: 1,
-      knowledgeRole: "evidence",
-    });
-    storage.set(tempUploadPath(second.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-second" });
-    await completeUpload(config, {
-      topicId: topic.id,
-      uploadId: second.uploadId,
-      relativePath: second.path,
-      size: 3,
-      contentType: "application/pdf",
-      pdfPages: 1,
-      knowledgeRole: "evidence",
-      uploadedBy: "汪旭",
-    });
-    expect(JSON.parse(storage.get(latestEvidenceOverrideObjectPath(topic.id))!.body)).toMatchObject({
-      generation: latestOverride.generation,
-      path: first.path,
-      sourceEtag: firstMetadata.etag,
-    });
-    await patchKnowledgeFile(config, {
-      topicId: topic.id,
-      knowledgeRole: "evidence",
-      relativePath: first.path,
-      latest: true,
-      updatedBy: "汪旭",
-    });
-    const refreshedOverride = JSON.parse(storage.get(latestEvidenceOverrideObjectPath(topic.id))!.body) as typeof latestOverride;
-    expect(refreshedOverride).toMatchObject({
-      path: first.path,
-      sourceEtag: firstMetadata.etag,
-    });
-    expect(refreshedOverride.generation).not.toBe(latestOverride.generation);
+      env,
+      waitUntil: vi.fn(),
+    } as never);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: "不再支持设置最新资料" });
   });
 
   it("hides topics that predate the role-tree storage layout", async () => {

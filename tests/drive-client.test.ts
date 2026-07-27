@@ -434,13 +434,14 @@ describe("knowledge client surface", () => {
     expect(source).toContain('<wa-dropdown-item value="logout"');
     expect(source).not.toContain('data-action="refresh"');
     expect(source).toContain('class="drive-topic-delete"');
-    expect(source).toContain('data-action="set-latest-evidence"');
+    expect(source).not.toContain('data-action="set-latest-evidence"');
     expect(source).not.toContain('data-action="edit-report-date"');
-    expect(source).toContain("applyLatestEvidenceSelection(path)");
-    expect(source).toContain("scheduleLatestEvidenceRefresh");
-    expect(source).toContain("state.listing?.latestEvidenceRevision === generation");
+    expect(source).toContain('<span role="columnheader">资料日期</span>');
+    expect(source).toContain('file.knowledgeRole === "evidence" ? file.reportDate || "—" : "—"');
+    expect(source).not.toContain("scheduleLatestEvidenceRefresh");
     expect(source).not.toContain("window.prompt");
     expect(fileStyles).toContain(".drive-row-action-menu");
+    expect(fileStyles).not.toContain(".drive-latest-evidence");
   });
 
   it("limits page-level motion to explicit workspace navigation", () => {

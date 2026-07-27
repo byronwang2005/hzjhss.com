@@ -116,8 +116,6 @@ export interface KnowledgeFile {
   knowledgeRole: KnowledgeRole;
   reportDate?: string;
   reportDateSource?: ReportDateSource;
-  isLatestEvidence?: boolean;
-  latestEvidenceSource?: "auto" | "manual";
   incorporatedAt?: string;
   incorporatedBy?: string;
   processing?: ProcessingStatus;
@@ -153,7 +151,6 @@ export interface FolderIncorporationResult {
 export interface FileListResponse {
   role: KnowledgeRole;
   prefix: string;
-  latestEvidenceRevision?: string;
   folders: KnowledgeFolder[];
   files: KnowledgeFile[];
   nextCursor: string | null;
