@@ -1,4 +1,4 @@
-import type { FileListProgressStage, FileListResponse, KnowledgeRole, TopicSummary, UserRole } from "../shared/contracts";
+import type { FileListProgressStage, FileListResponse, KnowledgeRole, TopicSummary, UploadConflict, UserRole } from "../shared/contracts";
 import type { UploadBatchState } from "./file-progress";
 import { createFilePagination, type FilePaginationState } from "./file-pagination";
 
@@ -51,6 +51,10 @@ export interface FolderManagementState {
   error: string;
 }
 
+export interface UploadConflictConfirmation {
+  conflicts: UploadConflict[];
+}
+
 declare global {
   interface Window {
     jhssTheme: {
@@ -92,6 +96,7 @@ export interface DriveClientState {
   uploadBatch: UploadBatchState | null;
   expandedFilePath: string | null;
   folderManagement: FolderManagementState | null;
+  uploadConflictConfirmation: UploadConflictConfirmation | null;
 }
 
 export const state: DriveClientState = {
@@ -123,4 +128,5 @@ export const state: DriveClientState = {
   uploadBatch: null,
   expandedFilePath: null,
   folderManagement: null,
+  uploadConflictConfirmation: null,
 };

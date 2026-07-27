@@ -10,6 +10,7 @@ import {
   deleteKnowledgeTopic,
   filePolicy,
   fileMetaPath,
+  findUploadConflicts,
   listKnowledgeFiles,
   listKnowledgeTopics,
   latestEvidenceOverrideObjectPath,
@@ -24,6 +25,7 @@ import {
   readKnowledgeTopic,
   sourcePath,
   tempUploadPath,
+  topicIndexPath,
   topicIndexManifestPath,
   updateKnowledgeTopic,
 } from "../src/drive/server/knowledge";
@@ -184,6 +186,140 @@ describe("knowledge topic and upload flow", () => {
       retryable: true,
     });
     expect(nested.files[0].processing).not.toHaveProperty("error");
+  });
+
+  it("preflights exact evidence paths and requires the confirmed ETag at completion", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "替换预检");
+    const relativePath = "周报/经营数据.xlsx";
+    const first = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(first.uploadId), { body: "old", contentType: first.contentType, etag: "etag-old" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: first.uploadId,
+      relativePath,
+      size: 3,
+      contentType: first.contentType,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    });
+
+    await expect(findUploadConflicts(config, {
+      topicId: topic.id,
+      knowledgeRole: "evidence",
+      relativePaths: [relativePath, "归档/经营数据.xlsx"],
+    })).resolves.toEqual([{ relativePath, etag: "etag-old" }]);
+    await expect(createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: first.contentType,
+      knowledgeRole: "evidence",
+    })).rejects.toMatchObject({ name: "UploadConflictError" });
+
+    const replacement = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: first.contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: "etag-old",
+    });
+    storage.set(tempUploadPath(replacement.uploadId), { body: "new", contentType: first.contentType, etag: "etag-new" });
+    storage.set(sourcePath(topic.id, "evidence", relativePath), { body: "newer", contentType: first.contentType, etag: "etag-concurrent" });
+    await expect(completeUpload(config, {
+      topicId: topic.id,
+      uploadId: replacement.uploadId,
+      relativePath,
+      size: 3,
+      contentType: first.contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: replacement.replaceEtag,
+      uploadedBy: "汪旭",
+    })).rejects.toMatchObject({ name: "UploadConflictError" });
+    expect(storage.get(sourcePath(topic.id, "evidence", relativePath))?.etag).toBe("etag-concurrent");
+  });
+
+  it("restores the previous evidence source and index snapshots when replacement registration fails", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "替换回滚");
+    const relativePath = "月报.xlsx";
+    const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const first = await createUpload(config, { topicId: topic.id, relativePath, size: 3, contentType, knowledgeRole: "evidence" });
+    storage.set(tempUploadPath(first.uploadId), { body: "old", contentType, etag: "etag-old" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: first.uploadId,
+      relativePath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    });
+    storage.set(topicIndexPath(topic.id), { body: "{\"oldIndex\":true}", contentType: "application/json", etag: "etag-index" });
+    storage.set(topicIndexManifestPath(topic.id), { body: "{\"oldManifest\":true}", contentType: "application/json", etag: "etag-manifest" });
+    const snapshot = new Map([
+      [fileMetaPath(topic.id, "evidence", relativePath), storage.get(fileMetaPath(topic.id, "evidence", relativePath))!.body],
+      [processingStatusPath(topic.id, "evidence", relativePath), storage.get(processingStatusPath(topic.id, "evidence", relativePath))!.body],
+      [topicIndexPath(topic.id), storage.get(topicIndexPath(topic.id))!.body],
+      [topicIndexManifestPath(topic.id), storage.get(topicIndexManifestPath(topic.id))!.body],
+    ]);
+    const replacement = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: "etag-old",
+    });
+    storage.set(tempUploadPath(replacement.uploadId), { body: "new", contentType, etag: "etag-new" });
+
+    const cosFetch = globalThis.fetch;
+    let failStatusWrite = true;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const key = decodeURIComponent(new URL(request.url).pathname.replace(/^\//, "")).replace(/^ai-knowledge-base\//, "");
+      if (failStatusWrite && request.method === "PUT" && !request.headers.has("x-cos-copy-source") && key === processingStatusPath(topic.id, "evidence", relativePath)) {
+        failStatusWrite = false;
+        return new Response("", { status: 500 });
+      }
+      return cosFetch(request);
+    };
+
+    await expect(completeUpload(config, {
+      topicId: topic.id,
+      uploadId: replacement.uploadId,
+      relativePath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: replacement.replaceEtag,
+      uploadedBy: "汪旭",
+    })).rejects.toThrow("替换登记失败");
+    expect(storage.get(sourcePath(topic.id, "evidence", relativePath))).toMatchObject({ body: "old", etag: "etag-old" });
+    for (const [path, body] of snapshot) expect(storage.get(path)?.body).toBe(body);
+
+    const completed = await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: replacement.uploadId,
+      relativePath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: replacement.replaceEtag,
+      uploadedBy: "汪旭",
+    });
+    expect(completed.etag).toBe("etag-new");
+    expect(storage.get(sourcePath(topic.id, "evidence", relativePath))).toMatchObject({ body: "new", etag: "etag-new" });
+    expect(JSON.parse(storage.get(processingStatusPath(topic.id, "evidence", relativePath))!.body)).toMatchObject({ state: "queued", sourceEtag: "etag-new" });
+    expect(storage.has(topicIndexPath(topic.id))).toBe(false);
+    expect(storage.has(topicIndexManifestPath(topic.id))).toBe(false);
   });
 
   it("allows ready evidence to override the latest selection and preserves versioned override metadata across uploads", async () => {
@@ -1001,6 +1137,25 @@ describe("administrator API enforcement", () => {
       env,
     } as never);
     expect(response.status).toBe(403);
+  });
+
+  it("returns a stable 409 conflict when an evidence replacement was not confirmed", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "冲突响应");
+    const first = await createUpload(config, { topicId: topic.id, relativePath: "周报.xlsx", size: 3, contentType: "application/octet-stream", knowledgeRole: "evidence" });
+    storage.set(tempUploadPath(first.uploadId), { body: "old", contentType: "application/octet-stream", etag: "etag-old" });
+    await completeUpload(config, { topicId: topic.id, uploadId: first.uploadId, relativePath: first.path, size: 3, contentType: "application/octet-stream", knowledgeRole: "evidence", uploadedBy: "汪旭" });
+    const cookie = (await createSessionCookie(env, "https://example.com", "汪旭")).split(";", 1)[0];
+    const response = await uploadUrl({
+      request: new Request("https://example.com/api/drive/upload-url", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ topicId: topic.id, relativePath: first.path, size: 3, contentType: "application/octet-stream", knowledgeRole: "evidence" }),
+      }),
+      env,
+    } as never);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: "UPLOAD_CONFLICT" });
   });
 
   it("returns per-file registration results without exposing internal failures", async () => {

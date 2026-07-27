@@ -14,6 +14,7 @@ export interface UploadRegistrationReceipt {
   contentType: string;
   knowledgeRole: KnowledgeRole;
   pdfPages?: number;
+  replaceEtag?: string;
   createdAt: string;
 }
 
@@ -69,10 +70,19 @@ export function createUploadRegistrationScheduler(options: {
             throw new Error(result.failures[0]?.message || "文件登记失败，请重新上传该文件。");
           }
           return result;
-        }, { retries: options.retries ?? 3, minTimeout: 500, maxTimeout: 4_000, factor: 2 });
+        }, {
+          retries: options.retries ?? 3,
+          minTimeout: 500,
+          maxTimeout: 4_000,
+          factor: 2,
+          shouldRetry: (error) => !("status" in error && error.status === 409),
+        });
         removePendingUpload(receipt.uploadId, storage);
         await options.onSuccess(response, receipt);
       } catch (error) {
+        if (error && typeof error === "object" && "status" in error && error.status === 409) {
+          removePendingUpload(receipt.uploadId, storage);
+        }
         await options.onFailure(error, receipt);
       }
     });
@@ -98,6 +108,7 @@ function isUploadRegistrationReceipt(value: unknown): value is UploadRegistratio
     && typeof receipt.relativePath === "string"
     && typeof receipt.size === "number"
     && typeof receipt.contentType === "string"
+    && (receipt.replaceEtag === undefined || typeof receipt.replaceEtag === "string")
     && ["reference", "methodology", "evidence"].includes(String(receipt.knowledgeRole))
     && typeof receipt.createdAt === "string";
 }

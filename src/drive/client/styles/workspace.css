@@ -4255,6 +4255,90 @@ drive-pdf-preview {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--jh-color-danger) 18%, transparent);
 }
 
+.drive-upload-conflict-dialog::part(dialog) {
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: var(--drive-radius);
+  box-shadow: var(--jh-shadow-floating);
+}
+
+.drive-upload-conflict-dialog::part(header),
+.drive-upload-conflict-dialog::part(footer) {
+  border-color: var(--jh-color-border-soft);
+}
+
+.drive-upload-conflict-body {
+  display: grid;
+  gap: 14px;
+}
+
+.drive-upload-conflict-warning {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: var(--jh-radius-control);
+}
+
+.drive-upload-conflict-warning > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--jh-color-warning);
+}
+
+.drive-upload-conflict-warning strong,
+.drive-upload-conflict-warning p {
+  margin: 0;
+}
+
+.drive-upload-conflict-warning strong {
+  font-size: 14px;
+}
+
+.drive-upload-conflict-warning p {
+  margin-top: 4px;
+  color: var(--jh-color-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.drive-upload-conflict-list {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.drive-upload-conflict-list li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 10px;
+  color: var(--jh-color-text-muted);
+  background: var(--jh-color-page);
+  border: 1px solid var(--jh-color-border-soft);
+  border-radius: var(--jh-radius-control);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.drive-upload-conflict-more {
+  margin: 0;
+  color: var(--jh-color-text-muted);
+  font-size: 12px;
+}
+
 .drive-delete-dialog-error {
   padding: 10px 12px;
   color: var(--jh-color-danger);

@@ -26,6 +26,8 @@ import type {
   KnowledgeFolder,
   KnowledgeRole,
   OverviewResponse,
+  UploadConflict,
+  UploadConflictsResponse,
   UploadCompleteResponse,
 } from "../shared/contracts";
 import { CLIENT_TIMING } from "../shared/runtime";
@@ -63,7 +65,7 @@ import {
   type UploadBatchState,
 } from "./file-progress";
 
-type UppyMeta = { relativePath?: string; pdfPages?: number; knowledgeRole?: KnowledgeRole };
+type UppyMeta = { relativePath?: string; pdfPages?: number; knowledgeRole?: KnowledgeRole; replaceEtag?: string };
 type UppyBody = Record<string, unknown>;
 type DriveUppyFile = UppyFile<UppyMeta, UppyBody>;
 
@@ -74,7 +76,10 @@ interface UploadSignature {
   contentType: string;
   knowledgeRole: KnowledgeRole;
   requiredHeaders: Record<string, string>;
+  replaceEtag?: string;
 }
+
+type UploadConflictDecision = "replace" | "skip" | "cancel";
 
 const rootElement = document.querySelector<HTMLElement>("[data-drive-root]");
 if (!rootElement) throw new Error("Missing [data-drive-root] mount element");
@@ -99,6 +104,7 @@ let folderManagementAbortController: AbortController | null = null;
 let fileLoadRequestId = 0;
 let uploadOperationActive = false;
 let pendingRegistrationResumeActive = false;
+let uploadConflictResolver: ((decision: UploadConflictDecision) => void) | null = null;
 let observedScopeList: HTMLElement | null = null;
 const scopeListResizeObserver = typeof ResizeObserver === "function"
   ? new ResizeObserver(() => syncScopeIndicator(false))
@@ -639,6 +645,12 @@ async function handleClick(event: MouseEvent): Promise<void> {
     root.querySelector<HTMLInputElement>("[data-evidence-input]")?.click();
   } else if (action === "pick-methodology") {
     root.querySelector<HTMLInputElement>("[data-methodology-input]")?.click();
+  } else if (action === "replace-upload-conflicts") {
+    resolveUploadConflictDecision("replace");
+  } else if (action === "skip-upload-conflicts") {
+    resolveUploadConflictDecision("skip");
+  } else if (action === "cancel-upload-conflicts") {
+    resolveUploadConflictDecision("cancel");
   } else if (action === "download-file") {
     const result = await api<{ url: string }>("/download-url", { method: "POST", body: { topicId: state.topic?.id, knowledgeRole: state.fileRoleView, path: button.dataset.path } });
     window.open(result.url, "_blank", "noopener,noreferrer");
@@ -1020,6 +1032,7 @@ async function registerUploadedFile(receipt: UploadRegistrationReceipt): Promise
         contentType: receipt.contentType,
         knowledgeRole: receipt.knowledgeRole,
         pdfPages: receipt.pdfPages,
+        replaceEtag: receipt.replaceEtag,
       }],
     },
   });
@@ -1095,7 +1108,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
     renderUploadBatch(batch);
     syncFileProgressClock();
 
-    const prepared = [] as Array<{ file: File; relativePath: string; knowledgeRole: KnowledgeRole; pdfPages?: number }>;
+    let prepared = [] as Array<{ file: File; relativePath: string; knowledgeRole: KnowledgeRole; pdfPages?: number; replaceEtag?: string }>;
     for (const { file, relativePath } of candidates) {
       try {
         validateFileSizeAndType(file, relativePath, knowledgeRole);
@@ -1119,6 +1132,40 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       return;
     }
 
+    if (knowledgeRole === "evidence") {
+      const { conflicts } = await api<UploadConflictsResponse>("/upload-conflicts", {
+        method: "POST",
+        body: { topicId, knowledgeRole, relativePaths: prepared.map((entry) => entry.relativePath) },
+      });
+      if (conflicts.length) {
+        const decision = await requestUploadConflictDecision(conflicts);
+        if (decision === "cancel") {
+          state.uploadBatch = null;
+          setStatus("已取消本批次上传。", "neutral");
+          renderApp();
+          return;
+        }
+        const conflictsByPath = new Map(conflicts.map((conflict) => [conflict.relativePath, conflict.etag]));
+        if (decision === "skip") {
+          prepared = prepared.filter((entry) => !conflictsByPath.has(entry.relativePath));
+          batch.items = batch.items.filter((item) => !conflictsByPath.has(item.relativePath));
+          renderUploadBatch(batch);
+          if (!prepared.length) {
+            if (!batch.items.length) state.uploadBatch = null;
+            setStatus(`已跳过 ${conflicts.length} 个同名文件，没有需要上传的新资料。`, "neutral");
+            renderApp();
+            return;
+          }
+          setStatus(`已跳过 ${conflicts.length} 个同名文件，继续上传 ${prepared.length} 份新资料。`, "neutral");
+        } else {
+          prepared = prepared.map((entry) => ({
+            ...entry,
+            replaceEtag: conflictsByPath.get(entry.relativePath),
+          }));
+        }
+      }
+    }
+
     const signatures = new Map<string, UploadSignature>();
     let uploadedCount = 0;
     const registrationScheduler = createUploadRegistrationScheduler({
@@ -1138,7 +1185,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       onFailure(error, receipt) {
         advanceFileTask(batch!, receipt.relativePath, "failed", {
           error: error instanceof Error ? error.message : "文件登记失败，请重新登记。",
-          retryable: true,
+          retryable: !(error instanceof ApiError && error.status === 409),
         });
         renderUploadBatch(batch!);
       },
@@ -1160,6 +1207,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
             contentType: file.type || "application/octet-stream",
             pdfPages: file.meta.pdfPages,
             knowledgeRole: file.meta.knowledgeRole,
+            replaceEtag: file.meta.replaceEtag,
           },
         });
         signatures.set(file.id, signature);
@@ -1192,6 +1240,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
         size: data.size,
         contentType: file.type || "application/octet-stream",
         knowledgeRole: signature.knowledgeRole,
+        ...(signature.replaceEtag ? { replaceEtag: signature.replaceEtag } : {}),
         ...(file.meta.pdfPages ? { pdfPages: file.meta.pdfPages } : {}),
         createdAt: new Date().toISOString(),
       };
@@ -1203,15 +1252,26 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       renderUploadBatch(batch!);
       void registrationScheduler.enqueue(receipt);
     });
+    uppy.on("upload-error", (file, error) => {
+      if (!file) return;
+      const conflict = error instanceof ApiError && error.status === 409;
+      advanceFileTask(batch!, String(file.meta.relativePath || file.name), "failed", {
+        error: conflict ? error.message : "上传未完成，请检查网络后重新上传。",
+        retryable: !conflict,
+      });
+      renderUploadBatch(batch!);
+    });
     for (const entry of prepared) uppy.addFile({
       name: entry.file.name,
       type: entry.file.type || "application/octet-stream",
       data: entry.file,
-      meta: { relativePath: entry.relativePath, pdfPages: entry.pdfPages, knowledgeRole: entry.knowledgeRole },
+      meta: { relativePath: entry.relativePath, pdfPages: entry.pdfPages, knowledgeRole: entry.knowledgeRole, replaceEtag: entry.replaceEtag },
     });
     const result = await uppy.upload();
     for (const failed of result?.failed || []) {
-      advanceFileTask(batch, String(failed.meta.relativePath || failed.name), "failed", {
+      const failedPath = String(failed.meta.relativePath || failed.name);
+      if (batch.items.find((item) => item.relativePath === failedPath)?.stage === "failed") continue;
+      advanceFileTask(batch, failedPath, "failed", {
         error: "上传未完成，请检查网络后重新上传。",
         retryable: true,
       });
@@ -1450,6 +1510,7 @@ function renderShell(): TemplateResult {
     ${renderDeleteConfirmation()}
     ${renderCreateTopicDialog()}
     ${renderFolderManagementDialog()}
+    ${renderUploadConflictDialog()}
   </section>`;
 }
 
@@ -1506,6 +1567,62 @@ function renderTopicHeader(): TemplateResult | typeof nothing {
         ${tabButton("files", state.role === "admin" ? "文件" : "资料", "files")}
       </div>
     </header>
+  `;
+}
+
+function requestUploadConflictDecision(conflicts: UploadConflict[]): Promise<UploadConflictDecision> {
+  if (uploadConflictResolver) resolveUploadConflictDecision("cancel");
+  return new Promise((resolve) => {
+    uploadConflictResolver = resolve;
+    state.uploadConflictConfirmation = { conflicts };
+    renderApp();
+  });
+}
+
+function resolveUploadConflictDecision(decision: UploadConflictDecision): void {
+  const resolve = uploadConflictResolver;
+  uploadConflictResolver = null;
+  state.uploadConflictConfirmation = null;
+  renderApp();
+  resolve?.(decision);
+}
+
+function handleUploadConflictDialogHide(): void {
+  resolveUploadConflictDecision("cancel");
+}
+
+function renderUploadConflictDialog(): TemplateResult | typeof nothing {
+  const confirmation = state.uploadConflictConfirmation;
+  if (!confirmation) return nothing;
+  const visible = confirmation.conflicts.slice(0, 8);
+  const remaining = confirmation.conflicts.length - visible.length;
+  return html`
+    <wa-dialog
+      class="drive-upload-conflict-dialog"
+      label="发现同名时效资料"
+      with-footer
+      .open=${true}
+      @wa-hide=${handleUploadConflictDialogHide}
+    >
+      <div class="drive-upload-conflict-body">
+        <div class="drive-upload-conflict-warning">
+          <span aria-hidden="true">${renderIcon("warning", "duotone")}</span>
+          <div>
+            <strong>${confirmation.conflicts.length} 个文件已存在</strong>
+            <p>替换后将重新解析文件并更新问答索引；也可以跳过这些文件，只上传本批次中的新资料。</p>
+          </div>
+        </div>
+        <ul class="drive-upload-conflict-list" aria-label="同名文件列表">
+          ${visible.map((conflict) => html`<li title=${conflict.relativePath}>${renderIcon("file")}${conflict.relativePath}</li>`)}
+        </ul>
+        ${remaining > 0 ? html`<p class="drive-upload-conflict-more">另有 ${remaining} 个同名文件</p>` : nothing}
+      </div>
+      <div class="drive-delete-dialog-actions" slot="footer">
+        <button class="drive-control" type="button" data-action="cancel-upload-conflicts">${renderIcon("x-circle")}取消上传</button>
+        <button class="drive-control" type="button" data-action="skip-upload-conflicts">${renderIcon("arrow-right")}跳过同名</button>
+        <button class="drive-control drive-control-primary" type="button" data-action="replace-upload-conflicts">${renderIcon("arrows-clockwise")}替换并继续</button>
+      </div>
+    </wa-dialog>
   `;
 }
 

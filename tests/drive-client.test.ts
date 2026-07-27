@@ -150,6 +150,36 @@ describe("upload registration queue", () => {
     expect(readPendingUploads(storage)).toEqual([receipt(1)]);
   });
 
+  it("persists the confirmed replacement ETag across registration recovery", () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const replacement = { ...receipt(3), knowledgeRole: "evidence" as const, replaceEtag: "etag-confirmed" };
+    persistPendingUpload(replacement, storage);
+    expect(readPendingUploads(storage)).toEqual([replacement]);
+  });
+
+  it("does not retry or retain a registration after a 409 replacement conflict", async () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    const replacement = { ...receipt(4), knowledgeRole: "evidence" as const, replaceEtag: "etag-confirmed" };
+    let attempts = 0;
+    const scheduler = createUploadRegistrationScheduler({
+      concurrency: 1,
+      storage,
+      retries: 3,
+      async register() {
+        attempts += 1;
+        throw Object.assign(new Error("文件已变化"), { status: 409 });
+      },
+      onSuccess() {},
+      onFailure() {},
+    });
+    void scheduler.enqueue(replacement);
+    await scheduler.waitForIdle();
+    expect(attempts).toBe(1);
+    expect(readPendingUploads(storage)).toEqual([]);
+  });
+
   it("continues after one permanent registration failure", async () => {
     const values = new Map<string, string>();
     const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
@@ -355,6 +385,20 @@ describe("knowledge client surface", () => {
     expect(source).toContain('api<FolderSummaryPage>(`/folder?${query}`');
     expect(source).not.toContain(">上传周报<");
     expect(source).not.toContain("drive-file-role-badge");
+  });
+
+  it("preflights evidence conflicts before upload and exposes all batch decisions", () => {
+    expect(source).toContain('api<UploadConflictsResponse>("/upload-conflicts"');
+    expect(source).toContain('type UploadConflictDecision = "replace" | "skip" | "cancel"');
+    expect(source).toContain('data-action="replace-upload-conflicts"');
+    expect(source).toContain('data-action="skip-upload-conflicts"');
+    expect(source).toContain('data-action="cancel-upload-conflicts"');
+    expect(source).toContain("replaceEtag: conflictsByPath.get(entry.relativePath)");
+    expect(source).toContain("replaceEtag: receipt.replaceEtag");
+    expect(source.indexOf('api<UploadConflictsResponse>("/upload-conflicts"')).toBeLessThan(source.indexOf("new Uppy<UppyMeta, UppyBody>"));
+    expect(source).toContain('@wa-hide=${handleUploadConflictDialogHide}');
+    expect(stateSource).toContain("uploadConflictConfirmation: UploadConflictConfirmation | null");
+    expect(workspaceStyles).toContain(".drive-upload-conflict-dialog");
   });
 
   it("keeps a visual preflight shell and uses one background file refresh timer", () => {

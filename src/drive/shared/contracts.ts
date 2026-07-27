@@ -194,3 +194,12 @@ export interface UploadCompleteResponse {
   files: KnowledgeFile[];
   failures: UploadRegistrationFailure[];
 }
+
+export interface UploadConflict {
+  relativePath: string;
+  etag: string;
+}
+
+export interface UploadConflictsResponse {
+  conflicts: UploadConflict[];
+}

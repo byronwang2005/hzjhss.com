@@ -47,6 +47,7 @@ async function processRecord(record) {
     if (!value) throw new Error("文件元数据尚未登记");
     return value;
   }, { retries: 5, minTimeout: 1000, maxTimeout: 3000 });
+  if (metadata.replacementPending === true) return;
   const knowledgeRole = knowledgeRoleForPath(metadata.knowledgeRole, source.path);
   if (knowledgeRole !== source.knowledgeRole) throw new Error("文件资料类型与存储路径不匹配");
   const previous = await getJson(`${processedBase(source.topicId, knowledgeRole, source.path)}status.json`);

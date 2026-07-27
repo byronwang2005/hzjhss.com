@@ -12,6 +12,7 @@ import {
   putObjectText,
   type DriveFile,
   type DriveFolder,
+  type DriveObjectMetadata,
 } from "./cos";
 import { normalizePrefix, normalizeRelativeFilePath } from "./paths";
 import type { SerializedSearchIndex } from "./search";
@@ -44,6 +45,7 @@ export const MAX_PDF_PAGES = FILE_LIMITS.pdfPages;
 export const KNOWLEDGE_LIST_PAGE_SIZE = 10;
 export const KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE = 10;
 export const KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE = 10;
+export const MAX_UPLOAD_CONFLICT_PATHS = 1000;
 
 const TOPIC_ID_PATTERN = /^t_[A-Za-z0-9_-]{12,32}$/;
 export const METHODOLOGY_PATH = LEGACY_METHODOLOGY_PATH;
@@ -81,6 +83,7 @@ interface FileMetadataBase {
   incorporatedBy?: string;
   pdfPages?: number;
   uploadId?: string;
+  replacementPending?: boolean;
 }
 
 export type FileMetadata = FileMetadataBase & (
@@ -117,6 +120,13 @@ export interface KnowledgeFile extends DriveFile {
 }
 
 export type FilePolicy = SharedFilePolicy;
+
+export class UploadConflictError extends Error {
+  constructor(message = "同名文件已发生变化，请重新选择并确认替换") {
+    super(message);
+    this.name = "UploadConflictError";
+  }
+}
 
 export interface FileListProgressUpdate {
   stage: FileListProgressStage;
@@ -208,6 +218,10 @@ export function processedPrefix(topicId: string, knowledgeRole: KnowledgeRole, r
 
 export function tempUploadPath(uploadIdInput: unknown): string {
   return `system/temp/${normalizeUploadId(uploadIdInput)}/source`;
+}
+
+function previousUploadPath(uploadIdInput: unknown): string {
+  return `system/temp/${normalizeUploadId(uploadIdInput)}/previous`;
 }
 
 export function processingStatusPath(topicId: string, knowledgeRole: KnowledgeRole, relativePath: string): string {
@@ -520,7 +534,28 @@ async function listReferenceMetadataPage(
   };
 }
 
-export async function createUpload(config: DriveConfig, input: { topicId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown }): Promise<{ url: string; uploadId: string; path: string; contentType: string; knowledgeRole: KnowledgeRole; maxFileBytes: number; requiredHeaders: Record<string, string>; expiresIn: number }> {
+export async function findUploadConflicts(
+  config: DriveConfig,
+  input: { topicId: unknown; knowledgeRole: unknown; relativePaths: unknown },
+): Promise<Array<{ relativePath: string; etag: string }>> {
+  const topicId = normalizeTopicId(input.topicId);
+  const knowledgeRole = normalizeRequiredKnowledgeRole(input.knowledgeRole);
+  if (knowledgeRole !== "evidence") throw new Error("仅时效资料支持同名文件预检");
+  await readKnowledgeTopic(config, topicId);
+  if (!Array.isArray(input.relativePaths) || !input.relativePaths.length || input.relativePaths.length > MAX_UPLOAD_CONFLICT_PATHS) {
+    throw new Error(`请提供 1 到 ${MAX_UPLOAD_CONFLICT_PATHS} 个文件路径`);
+  }
+  const relativePaths = input.relativePaths.map(normalizeRelativeFilePath);
+  if (new Set(relativePaths).size !== relativePaths.length) throw new Error("文件路径不能重复");
+  const limit = pLimit(12);
+  const conflicts = await Promise.all(relativePaths.map((relativePath) => limit(async () => {
+    const existing = await headObject(config, sourcePath(topicId, knowledgeRole, relativePath));
+    return existing ? { relativePath, etag: existing.etag } : null;
+  })));
+  return conflicts.filter((conflict): conflict is { relativePath: string; etag: string } => Boolean(conflict));
+}
+
+export async function createUpload(config: DriveConfig, input: { topicId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown; replaceEtag?: unknown }): Promise<{ url: string; uploadId: string; path: string; contentType: string; knowledgeRole: KnowledgeRole; maxFileBytes: number; requiredHeaders: Record<string, string>; expiresIn: number; replaceEtag?: string }> {
   const topicId = normalizeTopicId(input.topicId);
   const topic = await readKnowledgeTopic(config, topicId);
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
@@ -532,6 +567,10 @@ export async function createUpload(config: DriveConfig, input: { topicId: unknow
   if (size > policy.maxBytes) throw sizeLimitError(policy.maxBytes);
   const pdfPages = knowledgeRole === "reference" ? undefined : normalizePdfPages(policy.extension, input.pdfPages);
   const contentType = normalizeContentType(input.contentType);
+  const replaceEtag = normalizeReplaceEtag(input.replaceEtag);
+  if (knowledgeRole === "evidence") {
+    assertReplacementConsent(await headObject(config, sourcePath(topicId, knowledgeRole, relativePath)), replaceEtag);
+  }
   const uploadId = createUploadId();
   const path = tempUploadPath(uploadId);
   const requiredHeaders = { "content-type": contentType };
@@ -544,11 +583,12 @@ export async function createUpload(config: DriveConfig, input: { topicId: unknow
     maxFileBytes: policy.maxBytes,
     requiredHeaders,
     expiresIn: config.signExpiresSeconds,
+    ...(replaceEtag ? { replaceEtag } : {}),
     ...(pdfPages ? { pdfPages } : {}),
   };
 }
 
-export async function completeUpload(config: DriveConfig, input: { topicId: unknown; uploadId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown; uploadedBy: string }): Promise<FileMetadata> {
+export async function completeUpload(config: DriveConfig, input: { topicId: unknown; uploadId: unknown; relativePath: unknown; size: unknown; contentType: unknown; pdfPages?: unknown; knowledgeRole?: unknown; replaceEtag?: unknown; uploadedBy: string }): Promise<FileMetadata> {
   const topicId = normalizeTopicId(input.topicId);
   const topic = await readKnowledgeTopic(config, topicId);
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
@@ -558,6 +598,7 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const declaredSize = normalizePositiveSize(input.size);
   const declaredContentType = normalizeContentType(input.contentType);
+  const replaceEtag = normalizeReplaceEtag(input.replaceEtag);
   const pdfPages = knowledgeRole === "reference" ? undefined : normalizePdfPages(policy.extension, input.pdfPages);
   const temporaryPath = tempUploadPath(input.uploadId);
   const actual = await headObject(config, temporaryPath);
@@ -599,6 +640,7 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     await deleteObject(config, temporaryPath);
     throw new Error("同名文件的元数据缺失，请先删除后再上传");
   }
+  if (knowledgeRole === "evidence") assertReplacementConsent(existingSource, replaceEtag);
   const uploadedAt = new Date().toISOString();
   const metadataBase: FileMetadataBase = {
     version: 1,
@@ -624,8 +666,8 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   }
   const affectsIndex = knowledgeRole !== "reference";
   const nextTopic = { ...topic, updatedAt: uploadedAt, indexVersion: topic.indexVersion + (affectsIndex ? 1 : 0) };
-  const registrations: Promise<unknown>[] = [
-    putObjectText(config, fileMetaPath(topicId, knowledgeRole, relativePath), JSON.stringify(metadata, null, 2), "application/json; charset=utf-8"),
+  const registrations: Array<() => Promise<unknown>> = [
+    () => putObjectText(config, fileMetaPath(topicId, knowledgeRole, relativePath), JSON.stringify(metadata, null, 2), "application/json; charset=utf-8"),
   ];
   if (affectsIndex) {
     if (policy.kind !== "processed") throw new Error("文件处理策略缺失");
@@ -639,15 +681,29 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
       updatedAt: uploadedAt,
     };
     registrations.push(
-      putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8"),
-      putObjectText(config, processingStatusPath(topicId, knowledgeRole, relativePath), JSON.stringify(status, null, 2), "application/json; charset=utf-8"),
-      deleteObject(config, topicIndexPath(topicId)),
-      deleteObject(config, topicIndexManifestPath(topicId)),
+      () => putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8"),
+      () => putObjectText(config, processingStatusPath(topicId, knowledgeRole, relativePath), JSON.stringify(status, null, 2), "application/json; charset=utf-8"),
+      () => deleteObject(config, topicIndexPath(topicId)),
+      () => deleteObject(config, topicIndexManifestPath(topicId)),
     );
   } else {
-    registrations.push(deletePrefix(config, processedPrefix(topicId, knowledgeRole, relativePath)));
+    registrations.push(() => deletePrefix(config, processedPrefix(topicId, knowledgeRole, relativePath)));
   }
-  await Promise.all(registrations);
+  if (knowledgeRole === "evidence" && existingSource) {
+    await replaceEvidenceFile(config, {
+      topicId,
+      relativePath,
+      uploadId: input.uploadId,
+      temporaryPath,
+      actual,
+      existingSource,
+      metadata,
+      registrations: registrations.slice(1),
+    });
+    await cleanupReplacementObject(config, temporaryPath, topicId, relativePath);
+    return metadata;
+  }
+  await Promise.all(registrations.map((register) => register()));
   try {
     // The COS ObjectCreated event must not become visible before its processing metadata.
     await copyObject(config, temporaryPath, sourcePath(topicId, knowledgeRole, relativePath), actual.etag);
@@ -802,6 +858,134 @@ export async function deletePrefix(config: DriveConfig, prefix: string): Promise
   return deleted;
 }
 
+async function replaceEvidenceFile(
+  config: DriveConfig,
+  input: {
+    topicId: string;
+    relativePath: string;
+    uploadId: unknown;
+    temporaryPath: string;
+    actual: DriveObjectMetadata;
+    existingSource: DriveObjectMetadata;
+    metadata: FileMetadata;
+    registrations: Array<() => Promise<unknown>>;
+  },
+): Promise<void> {
+  const targetPath = sourcePath(input.topicId, "evidence", input.relativePath);
+  const backupPath = previousUploadPath(input.uploadId);
+  const snapshots = await snapshotReplacementObjects(config, input.topicId, input.relativePath);
+  await copyObject(config, targetPath, backupPath, input.existingSource.etag);
+  const backup = await headObject(config, backupPath);
+  if (!backup || backup.etag !== input.existingSource.etag || backup.size !== input.existingSource.size) {
+    await cleanupReplacementObject(config, backupPath, input.topicId, input.relativePath);
+    throw new Error("旧文件备份校验失败，未执行替换");
+  }
+
+  let targetChanged = false;
+  try {
+    await putObjectText(
+      config,
+      fileMetaPath(input.topicId, "evidence", input.relativePath),
+      JSON.stringify({ ...input.metadata, replacementPending: true }, null, 2),
+      "application/json; charset=utf-8",
+    );
+    await copyObject(config, input.temporaryPath, targetPath, input.actual.etag);
+    const copied = await headObject(config, targetPath);
+    if (!copied || copied.etag !== input.actual.etag || copied.size !== input.actual.size) {
+      throw new Error("COS 文件转存校验失败");
+    }
+    targetChanged = true;
+    const registrations = await Promise.allSettled(input.registrations.map((register) => register()));
+    const failures = registrations.filter((result) => result.status === "rejected");
+    if (failures.length) {
+      throw new AggregateError(failures.map((result) => result.reason), "替换登记失败");
+    }
+    await putObjectText(
+      config,
+      fileMetaPath(input.topicId, "evidence", input.relativePath),
+      JSON.stringify(input.metadata, null, 2),
+      "application/json; charset=utf-8",
+    );
+  } catch (error) {
+    const rollback = await Promise.allSettled([
+      ...(targetChanged ? [restorePreviousSource(config, backupPath, targetPath, input.existingSource)] : []),
+      ...snapshots.map((snapshot) => restoreReplacementObject(config, snapshot)),
+    ]);
+    const rollbackFailures = rollback.filter((result) => result.status === "rejected");
+    if (rollbackFailures.length) {
+      throw new AggregateError([error, ...rollbackFailures.map((result) => result.reason)], "替换失败且旧文件恢复不完整");
+    }
+    await cleanupReplacementObject(config, backupPath, input.topicId, input.relativePath);
+    throw error;
+  }
+  await cleanupReplacementObject(config, backupPath, input.topicId, input.relativePath);
+}
+
+async function cleanupReplacementObject(
+  config: DriveConfig,
+  path: string,
+  topicId: string,
+  relativePath: string,
+): Promise<void> {
+  try {
+    await deleteObject(config, path);
+  } catch (error) {
+    console.error("Replacement temporary object cleanup failed", {
+      code: "REPLACEMENT_TEMP_CLEANUP_FAILED",
+      topicId,
+      path: relativePath,
+      error: serverErrorDetails(error),
+    });
+  }
+}
+
+async function restorePreviousSource(
+  config: DriveConfig,
+  backupPath: string,
+  targetPath: string,
+  expected: DriveObjectMetadata,
+): Promise<void> {
+  await copyObject(config, backupPath, targetPath, expected.etag);
+  const restored = await headObject(config, targetPath);
+  if (!restored || restored.etag !== expected.etag || restored.size !== expected.size) {
+    throw new Error("旧文件恢复校验失败");
+  }
+}
+
+interface ReplacementObjectSnapshot {
+  path: string;
+  text: string | null;
+  contentType: string;
+}
+
+async function snapshotReplacementObjects(
+  config: DriveConfig,
+  topicId: string,
+  relativePath: string,
+): Promise<ReplacementObjectSnapshot[]> {
+  const paths = [
+    { path: fileMetaPath(topicId, "evidence", relativePath), contentType: "application/json; charset=utf-8" },
+    { path: processingStatusPath(topicId, "evidence", relativePath), contentType: "application/json; charset=utf-8" },
+    { path: `${topicPrefix(topicId)}topic.json`, contentType: "application/json; charset=utf-8" },
+    { path: topicIndexPath(topicId), contentType: "application/json; charset=utf-8" },
+    { path: topicIndexManifestPath(topicId), contentType: "application/json; charset=utf-8" },
+  ];
+  return Promise.all(paths.map(async (entry) => ({ ...entry, text: await getObjectText(config, entry.path) })));
+}
+
+async function restoreReplacementObject(config: DriveConfig, snapshot: ReplacementObjectSnapshot): Promise<void> {
+  if (snapshot.text === null) {
+    await deleteObject(config, snapshot.path);
+    return;
+  }
+  await putObjectText(config, snapshot.path, snapshot.text, snapshot.contentType);
+}
+
+function assertReplacementConsent(existing: DriveObjectMetadata | null, replaceEtag: string | undefined): void {
+  if (!existing && !replaceEtag) return;
+  if (!existing || !replaceEtag || existing.etag !== replaceEtag) throw new UploadConflictError();
+}
+
 function createTopicId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(12));
   const value = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -816,6 +1000,14 @@ function createUploadId(): string {
 function normalizeUploadId(input: unknown): string {
   if (typeof input !== "string" || !/^[A-Za-z0-9_-]{24}$/.test(input)) throw new Error("上传任务 ID 无效");
   return input;
+}
+
+function normalizeReplaceEtag(input: unknown): string | undefined {
+  if (input === undefined || input === null || input === "") return undefined;
+  if (typeof input !== "string") throw new UploadConflictError();
+  const value = input.trim();
+  if (!value || value.length > 200 || /[\u0000-\u001f\u007f]/.test(value)) throw new UploadConflictError();
+  return value;
 }
 
 export function normalizeKnowledgeRole(input: unknown): KnowledgeRole {

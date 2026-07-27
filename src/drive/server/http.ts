@@ -50,6 +50,9 @@ export async function readDriveAdminSession(context: AuthedContext): Promise<Dri
 
 export function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : "请求处理失败";
+  if (error instanceof Error && error.name === "UploadConflictError") {
+    return jsonResponse({ error: message, code: "UPLOAD_CONFLICT" }, 409);
+  }
   const status =
     error instanceof Error && error.name === "DriveForbiddenError"
       ? 403

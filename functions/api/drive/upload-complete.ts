@@ -1,10 +1,11 @@
 import { getDriveConfig, type DriveEnv } from "../../../src/drive/server/config";
 import { errorResponse, jsonResponse, readDriveAdminSession, readJsonBody } from "../../../src/drive/server/http";
-import { completeUpload } from "../../../src/drive/server/knowledge";
+import { completeUpload, UploadConflictError } from "../../../src/drive/server/knowledge";
 import { normalizeRelativeFilePath } from "../../../src/drive/server/paths";
 import type { KnowledgeRole, UploadCompleteResponse, UploadRegistrationFailure } from "../../../src/drive/shared/contracts";
+import { notifyProcessor } from "../../../src/drive/server/webhooks";
 
-export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
   try {
     const session = await readDriveAdminSession({ request, env });
     if (session instanceof Response) return session;
@@ -27,6 +28,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
           contentType: file.contentType,
           pdfPages: file.pdfPages,
           knowledgeRole: file.knowledgeRole,
+          replaceEtag: file.replaceEtag,
           uploadedBy: session.displayName,
         });
         const knowledgeRole: KnowledgeRole = completed.knowledgeRole === "reference" || completed.knowledgeRole === "methodology"
@@ -46,7 +48,11 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
           reportDate: completed.reportDate,
           reportDateSource: completed.reportDateSource,
         });
-      } catch {
+        if (knowledgeRole !== "reference" && typeof waitUntil === "function") {
+          waitUntil(notifyProcessor(env, { topicId: completed.topicId, path: completed.path, knowledgeRole }));
+        }
+      } catch (error) {
+        if (error instanceof UploadConflictError) throw error;
         console.error("File registration failed", {
           code: "FILE_REGISTRATION_FAILED",
           requestId,
