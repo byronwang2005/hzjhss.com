@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, createRetrievedQaSystemMessage, finishQaStreamEvents, isContextLengthError, normalizeQaMessages, qaInputTokenBudget, qaProviderDeltaEvents, QaCapacityError, retryOnceOnContextLength, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../src/drive/server/qa";
-import { isMethodologyQuery } from "../src/drive/server/retrieval";
-import { buildSerializedSearchIndex, searchSerializedIndex, tokenizeKnowledgeText } from "../src/drive/server/search";
+import OpenAI from "openai";
+import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, createRetrievedQaSystemMessage, finishQaStreamEvents, isContextLengthError, normalizeQaMessages, qaInputTokenBudget, qaModelStartError, qaProviderDeltaEvents, QaCapacityError, retryOnceOnContextLength, upstreamAiDiagnostic, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../src/drive/server/qa";
+import { isMethodologyQuery, SearchIndexCache } from "../src/drive/server/retrieval";
+import { buildSerializedSearchIndex, loadSerializedSearchIndex, searchLoadedIndex, searchSerializedIndex, tokenizeKnowledgeText } from "../src/drive/server/search";
 
 describe("knowledge retrieval", () => {
   it("tokenizes Chinese terms, bigrams, numbers and identifiers", () => {
@@ -32,6 +33,34 @@ describe("knowledge retrieval", () => {
     expect(evidence[0].id).toBe("new");
     expect(methodology).toHaveLength(1);
     expect(methodology[0].knowledgeRole).toBe("methodology");
+  });
+
+  it("loads a serialized index once and partitions one search into role-specific results", () => {
+    const envelope = buildSerializedSearchIndex("t_abcdefghijkl", "新能源", [
+      { id: "evidence", topicId: "t_abcdefghijkl", topicName: "新能源", path: "week.pdf", fileName: "week.pdf", locator: "第 1 页", etag: "a", content: "库存变化分析", knowledgeRole: "evidence" },
+      { id: "method", topicId: "t_abcdefghijkl", topicName: "新能源", path: "method.md", fileName: "method.md", locator: "库存章节", etag: "b", content: "库存变化分析", knowledgeRole: "methodology" },
+    ]);
+    const loaded = loadSerializedSearchIndex(envelope);
+    const candidates = searchLoadedIndex(loaded, "库存变化");
+    const evidence = candidates.filter((chunk) => chunk.knowledgeRole === "evidence");
+    const methodology = candidates.filter((chunk) => chunk.knowledgeRole === "methodology");
+
+    expect(loaded).toMatchObject({ topicId: envelope.topicId, indexVersion: envelope.indexVersion });
+    expect(evidence).toEqual(searchLoadedIndex(loaded, "库存变化", { role: "evidence" }));
+    expect(methodology).toEqual(searchLoadedIndex(loaded, "库存变化", { role: "methodology" }));
+  });
+
+  it("reuses loaded indexes only while both ETag and index version match", () => {
+    const envelope = buildSerializedSearchIndex("t_abcdefghijkl", "新能源", [
+      { id: "evidence", topicId: "t_abcdefghijkl", topicName: "新能源", path: "week.pdf", fileName: "week.pdf", locator: "第 1 页", etag: "a", content: "库存变化" },
+    ], 7);
+    const loaded = loadSerializedSearchIndex(envelope);
+    const cache = new SearchIndexCache();
+    cache.set(envelope.topicId, "etag-7", loaded);
+
+    expect(cache.get(envelope.topicId, "etag-7", 7)).toBe(loaded);
+    expect(cache.get(envelope.topicId, "etag-changed", 7)).toBeUndefined();
+    expect(cache.get(envelope.topicId, "etag-7", 8)).toBeUndefined();
   });
 
   it("keeps multiple current files searchable and ignores legacy latest markers", () => {
@@ -192,6 +221,37 @@ describe("retrieval-grounded prompt", () => {
     expect(error).toBeInstanceOf(QaCapacityError);
     expect(upstreamAiErrorMessage(error)).toContain("最新问题超过");
     expect(upstreamAiHttpStatus(error)).toBe(413);
+  });
+
+  it.each([
+    [400, "MODEL_REQUEST_INVALID", false],
+    [401, "MODEL_AUTHENTICATION_FAILED", false],
+    [402, "MODEL_BALANCE_EXHAUSTED", false],
+    [404, "MODEL_REQUEST_INVALID", false],
+    [422, "MODEL_REQUEST_INVALID", false],
+    [429, "MODEL_BUSY", true],
+    [503, "MODEL_UPSTREAM_UNAVAILABLE", true],
+  ] as const)("maps upstream status %i to a precise safe Q&A error", (status, code, retryable) => {
+    const error = new OpenAI.APIError(
+      status,
+      { code: "provider_code", type: "provider_type" },
+      "sensitive provider message containing a user prompt",
+      new Headers({ "x-request-id": "provider-request-123" }),
+    );
+    expect(qaModelStartError(error, "request-123")).toMatchObject({
+      requestId: "request-123",
+      code,
+      retryable,
+    });
+    const diagnostic = upstreamAiDiagnostic(error);
+    expect(diagnostic).toMatchObject({
+      status,
+      code: "provider_code",
+      type: "provider_type",
+      providerRequestId: "provider-request-123",
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("sensitive provider message");
+    expect(JSON.stringify(diagnostic)).not.toContain("user prompt");
   });
 
   it("retries a provider context overflow exactly once with an 80% budget", async () => {

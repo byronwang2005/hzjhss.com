@@ -28,6 +28,8 @@ dist/                   # 构建生成，不提交 Git
 
 ## Cloudflare Pages
 
+`wrangler.toml` 是 Pages Functions 运行配置的版本化真源，当前将每次请求的 CPU 上限设置为 1000 ms；项目因此需要启用 Workers Paid。非 Secret 变量由顶层 `[vars]` 共享给本地、预览和生产环境，Secret 继续按环境在 Cloudflare Dashboard、`.dev.vars` 或 `wrangler pages secret` 中维护，不得写入配置文件。需要同步 Dashboard 中的非 Secret 配置时，先在临时目录运行 `wrangler pages download config hzjhss-com`，人工核对后再更新仓库版本。
+
 构建设置：
 
 - Build command：`npm run build:pages`

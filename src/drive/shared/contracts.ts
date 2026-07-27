@@ -37,17 +37,26 @@ export interface QaNoResultsEventData extends QaRetrievalSummary {
 
 export interface QaErrorEventData {
   stage: QaProgressStage;
+  requestId?: string;
   code:
     | "RETRIEVAL_SCOPE_INVALID"
     | "RETRIEVAL_SCOPE_UNAVAILABLE"
     | "RETRIEVAL_FAILED"
     | "MODEL_CAPACITY_EXCEEDED"
+    | "MODEL_AUTHENTICATION_FAILED"
+    | "MODEL_BALANCE_EXHAUSTED"
+    | "MODEL_REQUEST_INVALID"
     | "MODEL_CONFIGURATION_ERROR"
     | "MODEL_BUSY"
+    | "MODEL_UPSTREAM_UNAVAILABLE"
     | "MODEL_START_FAILED"
     | "MODEL_STREAM_FAILED";
   retryable: boolean;
   message: string;
+}
+
+export interface QaJsonErrorResponse extends QaErrorEventData {
+  error: string;
 }
 
 export type QaSseEvent =

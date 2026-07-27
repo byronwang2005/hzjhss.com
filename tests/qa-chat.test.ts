@@ -264,7 +264,7 @@ describe("drive AI Q&A component", () => {
   it("respects non-retryable structured stream errors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response([
       'event: phase\ndata: {"stage":"retrieving","state":"active","elapsedMs":1}',
-      'event: error\ndata: {"stage":"retrieving","code":"RETRIEVAL_SCOPE_UNAVAILABLE","retryable":false,"message":"当前专题已不存在或暂不可用，请返回专题列表重新选择。"}',
+      'event: error\ndata: {"stage":"retrieving","requestId":"request-unavailable","code":"RETRIEVAL_SCOPE_UNAVAILABLE","retryable":false,"message":"当前专题已不存在或暂不可用，请返回专题列表重新选择。"}',
       "",
     ].join("\n\n"), { headers: { "content-type": "text/event-stream" } })));
     const qa = await mountQa("topic");
@@ -277,6 +277,31 @@ describe("drive AI Q&A component", () => {
 
     expect(qa.querySelector(".drive-ai-qa-message.is-error")).not.toBeNull();
     expect(qa.querySelector(".drive-ai-qa-error")?.textContent).toContain("当前专题已不存在");
+    expect(qa.querySelector(".drive-ai-qa-error")?.textContent).toContain("request-unavailable");
+    expect(qa.querySelector(".drive-ai-qa-error button")).toBeNull();
+  });
+
+  it("preserves request IDs from non-streaming JSON errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      error: "模型服务账户余额不足，请联系管理员充值。",
+      message: "模型服务账户余额不足，请联系管理员充值。",
+      requestId: "request-balance",
+      stage: "reasoning",
+      code: "MODEL_BALANCE_EXHAUSTED",
+      retryable: false,
+    }), {
+      status: 402,
+      headers: { "content-type": "application/json" },
+    })));
+    const qa = await mountQa();
+    const textarea = qa.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.value = "查询余额错误";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await qa.updateComplete;
+    qa.querySelector<HTMLFormElement>("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await waitForText(qa, "模型服务账户余额不足");
+
+    expect(qa.querySelector(".drive-ai-qa-error")?.textContent).toContain("request-balance");
     expect(qa.querySelector(".drive-ai-qa-error button")).toBeNull();
   });
 

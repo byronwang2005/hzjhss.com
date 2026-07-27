@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionCreateParamsStreaming, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import type { AiConfig, AiProvider } from "./config";
 import type { RetrievedKnowledge } from "./retrieval";
-import type { KnowledgeRole } from "../shared/contracts";
+import type { KnowledgeRole, QaErrorEventData } from "../shared/contracts";
 
 export interface QaMessage {
   role: "user" | "assistant";
@@ -300,6 +300,102 @@ export function upstreamAiHttpStatus(error: unknown): number {
     return 429;
   }
   return 502;
+}
+
+export interface UpstreamAiDiagnostic {
+  name: string;
+  status?: number;
+  code?: string;
+  type?: string;
+  providerRequestId?: string;
+}
+
+export function upstreamAiDiagnostic(error: unknown): UpstreamAiDiagnostic {
+  if (error instanceof OpenAI.APIError) {
+    return {
+      name: error.name,
+      status: typeof error.status === "number" ? error.status : undefined,
+      code: safeDiagnosticField(error.code),
+      type: safeDiagnosticField(error.type),
+      providerRequestId: safeDiagnosticField(error.requestID),
+    };
+  }
+  if (error instanceof Error) return { name: error.name };
+  return { name: "UnknownError" };
+}
+
+export function qaModelStartError(error: unknown, requestId: string): QaErrorEventData {
+  const diagnostic = upstreamAiDiagnostic(error);
+  const status = diagnostic.status;
+  if (error instanceof QaCapacityError || status === 413) {
+    return {
+      stage: "reasoning",
+      requestId,
+      code: "MODEL_CAPACITY_EXCEEDED",
+      retryable: false,
+      message: "当前问题和资料超过模型可处理容量，请缩小问题范围。",
+    };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      stage: "reasoning",
+      requestId,
+      code: "MODEL_AUTHENTICATION_FAILED",
+      retryable: false,
+      message: "模型服务认证失败，请联系管理员检查 API Key。",
+    };
+  }
+  if (status === 402) {
+    return {
+      stage: "reasoning",
+      requestId,
+      code: "MODEL_BALANCE_EXHAUSTED",
+      retryable: false,
+      message: "模型服务账户余额不足，请联系管理员充值。",
+    };
+  }
+  if (status === 400 || status === 404 || status === 422) {
+    return {
+      stage: "reasoning",
+      requestId,
+      code: "MODEL_REQUEST_INVALID",
+      retryable: false,
+      message: "模型请求参数不兼容，请联系管理员检查模型配置。",
+    };
+  }
+  if (status === 429) {
+    return {
+      stage: "reasoning",
+      requestId,
+      code: "MODEL_BUSY",
+      retryable: true,
+      message: "模型服务当前繁忙，请稍后重试。",
+    };
+  }
+  if (status !== undefined && status >= 500) {
+    return {
+      stage: "reasoning",
+      requestId,
+      code: "MODEL_UPSTREAM_UNAVAILABLE",
+      retryable: true,
+      message: "模型服务暂时不可用，请稍后重试。",
+    };
+  }
+  return {
+    stage: "reasoning",
+    requestId,
+    code: "MODEL_START_FAILED",
+    retryable: true,
+    message: "模型服务暂时无法开始分析，请稍后重试。",
+  };
+}
+
+function safeDiagnosticField(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized && /^[a-z0-9_.:/-]+$/i.test(normalized)
+    ? normalized.slice(0, 160)
+    : undefined;
 }
 
 export interface QaStreamState {

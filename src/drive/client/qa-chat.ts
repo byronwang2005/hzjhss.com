@@ -11,6 +11,7 @@ import type {
   CodexHandoffServerStage,
   CodexHandoffStage,
   QaErrorEventData,
+  QaJsonErrorResponse,
   QaNoResultsEventData,
   QaProgressStage,
   QaRetrievalSummary,
@@ -417,7 +418,10 @@ export class DriveAiQa extends LitElement {
           : html`<p>${message.content}</p>`}
         ${message.error
           ? html`<div class="drive-ai-qa-error">
-              <span>${message.failure?.message || "本次生成失败。"}</span>
+              <span>
+                ${message.failure?.message || "本次生成失败。"}
+                ${message.failure?.requestId ? html`<small>请求 ID：${message.failure.requestId}</small>` : nothing}
+              </span>
               ${message.failure?.retryable === false
                 ? nothing
                 : html`<button type="button" @click=${() => this.retry(message.id)}>${renderIcon("arrow-clockwise")}重试</button>`}
@@ -1102,8 +1106,15 @@ export class DriveAiQa extends LitElement {
         }),
       });
       if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: unknown };
-        throw new Error(typeof data.error === "string" ? data.error : `问答请求失败（${response.status}）`);
+        const data = (await response.json().catch(() => ({}))) as Partial<QaJsonErrorResponse>;
+        const failure = parseQaError(data as Record<string, unknown>);
+        if (failure) {
+          assistantMessage.failure = failure;
+          if (assistantMessage.progress) {
+            assistantMessage.progress = { ...assistantMessage.progress, stage: failure.stage, mode: "error" };
+          }
+        }
+        throw new Error(failure?.message || (typeof data.error === "string" ? data.error : `问答请求失败（${response.status}）`));
       }
       if (!response.body) throw new Error("模型没有返回流式响应");
       await this.consumeStream(response.body, assistantMessage);
@@ -1461,12 +1472,14 @@ function parseQaError(value: Record<string, unknown>): QaErrorEventData | null {
   if (
     !isQaProgressStage(value.stage)
     || !isQaErrorCode(value.code)
+    || (value.requestId !== undefined && (typeof value.requestId !== "string" || !value.requestId.trim()))
     || typeof value.retryable !== "boolean"
     || typeof value.message !== "string"
     || !value.message.trim()
   ) return null;
   return {
     stage: value.stage,
+    requestId: typeof value.requestId === "string" ? value.requestId.trim() : undefined,
     code: value.code,
     retryable: value.retryable,
     message: value.message.trim(),
@@ -1478,8 +1491,12 @@ function isQaErrorCode(value: unknown): value is QaErrorEventData["code"] {
     || value === "RETRIEVAL_SCOPE_UNAVAILABLE"
     || value === "RETRIEVAL_FAILED"
     || value === "MODEL_CAPACITY_EXCEEDED"
+    || value === "MODEL_AUTHENTICATION_FAILED"
+    || value === "MODEL_BALANCE_EXHAUSTED"
+    || value === "MODEL_REQUEST_INVALID"
     || value === "MODEL_CONFIGURATION_ERROR"
     || value === "MODEL_BUSY"
+    || value === "MODEL_UPSTREAM_UNAVAILABLE"
     || value === "MODEL_START_FAILED"
     || value === "MODEL_STREAM_FAILED";
 }

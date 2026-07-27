@@ -1002,6 +1002,17 @@
   font-size: 12px;
 }
 
+.drive-ai-qa-error > span {
+  display: grid;
+  gap: 3px;
+}
+
+.drive-ai-qa-error small {
+  color: var(--jh-color-text-muted);
+  font-family: var(--jh-font-mono);
+  font-size: 10px;
+}
+
 .drive-ai-qa-error button {
   display: inline-flex;
   align-items: center;

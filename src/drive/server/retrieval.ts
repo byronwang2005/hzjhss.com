@@ -1,9 +1,29 @@
 import type { DriveConfig } from "./config";
 import { headObject } from "./cos";
 import { listKnowledgeTopics, normalizeTopicId, readKnowledgeTopic, readTopicSearchIndex } from "./knowledge";
-import { searchSerializedIndex, type RetrievedChunk, type SerializedSearchIndex } from "./search";
+import {
+  loadSerializedSearchIndex,
+  searchLoadedIndex,
+  type LoadedSearchIndex,
+  type RetrievedChunk,
+} from "./search";
 
-const indexCache = new Map<string, { etag: string; envelope: SerializedSearchIndex }>();
+export class SearchIndexCache {
+  private readonly entries = new Map<string, { etag: string; loaded: LoadedSearchIndex }>();
+
+  get(topicId: string, etag: string, indexVersion: number): LoadedSearchIndex | undefined {
+    const cached = this.entries.get(topicId);
+    return cached?.etag === etag && cached.loaded.indexVersion === indexVersion
+      ? cached.loaded
+      : undefined;
+  }
+
+  set(topicId: string, etag: string, loaded: LoadedSearchIndex): void {
+    this.entries.set(topicId, { etag, loaded });
+  }
+}
+
+const indexCache = new SearchIndexCache();
 
 export interface RetrievedKnowledge {
   evidence: RetrievedChunk[];
@@ -33,11 +53,12 @@ export async function retrieveKnowledge(config: DriveConfig, input: { scope: "gl
     ? [await readScopedTopic(config, input.topicId)]
     : (await listKnowledgeTopics(config)).filter((topic) => topic.ready);
   const resultSets = await Promise.all(topics.map(async (topic) => {
-    const envelope = await loadIndex(config, topic.id, topic.indexVersion);
+    const loaded = await loadIndex(config, topic.id, topic.indexVersion);
+    const candidates = loaded ? searchLoadedIndex(loaded, input.query, { now: input.now }) : [];
     return {
       topicId: topic.id,
-      evidence: envelope ? searchSerializedIndex(envelope, input.query, { role: "evidence", now: input.now }) : [],
-      methodology: envelope ? searchSerializedIndex(envelope, input.query, { role: "methodology", now: input.now }) : [],
+      evidence: candidates.filter((chunk) => chunk.knowledgeRole === "evidence"),
+      methodology: candidates.filter((chunk) => chunk.knowledgeRole === "methodology"),
     };
   }));
   const evidence = resultSets.flatMap((set) => set.evidence).sort((a, b) => b.score - a.score);
@@ -84,16 +105,13 @@ export function isMethodologyQuery(query: string): boolean {
   return /如何|怎么|怎样|方法论|分析方法|研究方法|分析框架|框架|步骤|指标体系|分析维度|评估方法/.test(query);
 }
 
-async function loadIndex(config: DriveConfig, topicId: string, indexVersion: number): Promise<SerializedSearchIndex | null> {
+async function loadIndex(config: DriveConfig, topicId: string, indexVersion: number): Promise<LoadedSearchIndex | null> {
   topicId = normalizeTopicId(topicId);
   const path = `topics/${topicId}/index/search-index.json`;
   const metadata = await headObject(config, path);
   if (!metadata) return null;
-  const cached = indexCache.get(topicId);
-  if (
-    cached?.etag === metadata.etag
-    && cached.envelope.indexVersion === indexVersion
-  ) return cached.envelope;
+  const cached = indexCache.get(topicId, metadata.etag, indexVersion);
+  if (cached) return cached;
   const envelope = await readTopicSearchIndex(config, topicId);
   if (
     !envelope
@@ -101,6 +119,7 @@ async function loadIndex(config: DriveConfig, topicId: string, indexVersion: num
     || envelope.topicId !== topicId
     || envelope.indexVersion !== indexVersion
   ) return null;
-  indexCache.set(topicId, { etag: metadata.etag, envelope });
-  return envelope;
+  const loaded = loadSerializedSearchIndex(envelope);
+  indexCache.set(topicId, metadata.etag, loaded);
+  return loaded;
 }

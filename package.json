@@ -11,7 +11,7 @@
     "build:drive": "node scripts/build-drive.mjs",
     "build:pages": "node scripts/build-pages.mjs",
     "build:scf": "node scripts/package-scf.mjs",
-    "dev": "npm run build:pages && wrangler pages dev dist --compatibility-date=2026-07-08",
+    "dev": "npm run build:pages && wrangler pages dev dist",
     "pretest": "npm run build:pages",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

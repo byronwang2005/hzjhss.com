@@ -1,4 +1,4 @@
-import MiniSearch, { type Options, type SearchResult } from "minisearch";
+import MiniSearch, { type AsPlainObject, type Options, type SearchResult } from "minisearch";
 import type { KnowledgeRole, ReportDateSource } from "../shared/contracts";
 
 export interface SearchChunk {
@@ -28,6 +28,13 @@ export interface SerializedSearchIndex {
 export interface RetrievedChunk extends SearchChunk {
   score: number;
   knowledgeRole: KnowledgeRole;
+}
+
+export interface LoadedSearchIndex {
+  topicId: string;
+  indexVersion: number;
+  search: MiniSearch<SearchChunk>;
+  chunksById: Map<string, SearchChunk>;
 }
 
 const segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter("zh-CN", { granularity: "word" }) : null;
@@ -78,26 +85,41 @@ export function buildSerializedSearchIndex(topicId: string, topicName: string, c
   };
 }
 
+export function loadSerializedSearchIndex(envelope: SerializedSearchIndex): LoadedSearchIndex {
+  return {
+    topicId: envelope.topicId,
+    indexVersion: envelope.indexVersion,
+    search: MiniSearch.loadJS<SearchChunk>(envelope.index as AsPlainObject, miniSearchOptions()),
+    chunksById: new Map(envelope.chunks.map((chunk) => [chunk.id, chunk])),
+  };
+}
+
 export function searchSerializedIndex(
   envelope: SerializedSearchIndex,
   query: string,
   options: number | { role?: KnowledgeRole; limit?: number; now?: Date } = {},
 ): RetrievedChunk[] {
-  const search = MiniSearch.loadJSON<SearchChunk>(JSON.stringify(envelope.index), miniSearchOptions());
-  const byId = new Map(envelope.chunks.map((chunk) => [chunk.id, chunk]));
+  return searchLoadedIndex(loadSerializedSearchIndex(envelope), query, options);
+}
+
+export function searchLoadedIndex(
+  loaded: LoadedSearchIndex,
+  query: string,
+  options: number | { role?: KnowledgeRole; limit?: number; now?: Date } = {},
+): RetrievedChunk[] {
   const normalizedOptions = typeof options === "number" ? { limit: options } : options;
   const temporal = isTemporalQuery(query);
   const now = normalizedOptions.now || new Date();
-  const results = search.search(query, {
+  const results = loaded.search.search(query, {
     prefix: (term) => term.length >= 3,
     fuzzy: (term) => term.length >= 5 ? 0.1 : false,
     boost: { fileName: 2, locator: 1.4, topicName: 1.2 },
     filter: (result) => {
       if (!normalizedOptions.role) return true;
-      return knowledgeRoleOf(byId.get(String(result.id))) === normalizedOptions.role;
+      return knowledgeRoleOf(loaded.chunksById.get(String(result.id))) === normalizedOptions.role;
     },
     boostDocument: (id) => {
-      const chunk = byId.get(String(id));
+      const chunk = loaded.chunksById.get(String(id));
       return temporal && knowledgeRoleOf(chunk) === "evidence"
         ? reportDateBoost(chunk?.reportDate, now)
         : 1;
@@ -105,7 +127,7 @@ export function searchSerializedIndex(
   });
   const limited = normalizedOptions.limit === undefined ? results : results.slice(0, normalizedOptions.limit);
   return limited.flatMap((result: SearchResult) => {
-    const chunk = byId.get(String(result.id));
+    const chunk = loaded.chunksById.get(String(result.id));
     return chunk ? [{ ...chunk, knowledgeRole: knowledgeRoleOf(chunk), score: result.score }] : [];
   });
 }
