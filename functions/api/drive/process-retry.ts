@@ -19,6 +19,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, wai
     if (!metaText) throw new Error("文件元数据不存在");
     const metadata = JSON.parse(metaText) as FileMetadata;
     if (knowledgeRole === "reference" || metadata.knowledgeRole !== knowledgeRole) throw new Error("研报原件不参与AI处理");
+    if (!metadata.processingKind) throw new Error("文件处理类型缺失");
     const current = await headObject(config, sourcePath(topicId, knowledgeRole, path));
     if (!current || current.etag !== metadata.etag) throw new Error("源文件已变化，请刷新后重试");
     const status: ProcessingStatus = { version: 1, topicId, path, sourceEtag: metadata.etag, state: "queued", processingKind: metadata.processingKind, updatedAt: new Date().toISOString() };

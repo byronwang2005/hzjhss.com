@@ -185,10 +185,10 @@ SCF 角色额外需要：
 
 ## 文件限制
 
-- PNG/JPG/JPEG/BMP、XLS/XLSX、MD、TXT、WPS：最大 10 MB
-- PDF、DOC/DOCX、PPT/PPTX：最大 100 MB
+- 研报原件：不限文件类型，每个文件最大 100 MB，不进行 AI 处理
+- 方法论和时效资料：PNG/JPG/JPEG/BMP、XLS/XLSX、MD、TXT、WPS 最大 10 MB；PDF、DOC/DOCX、PPT/PPTX 最大 100 MB
 - 需要 AI 处理的 PDF：最多 300 页；仅存档下载的研报原件不校验页数
-- CSV 和未列出的格式不允许上传
+- 方法论和时效资料不允许上传 CSV 及未列出的格式
 
 上传完成后服务端使用 COS HEAD 复核大小、Content-Type 和 ETag。需要 AI 处理的 PDF 在 SCF 内再次校验真实页数，超过 300 页不会调用腾讯解析。图片使用精简 OCR，方法论 Markdown 直接读取，其余时效文档使用多模态解析。处理结果切块后由 MiniSearch 建立每专题关键词索引。
 

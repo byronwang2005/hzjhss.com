@@ -6,6 +6,8 @@ import {
   FILE_LIMITS,
   SUPPORTED_FILE_EXTENSIONS,
   filePolicyForExtension,
+  filePolicyForUpload,
+  isIgnoredUploadPath,
 } from "../src/drive/shared/policy";
 
 describe("shared application policy", () => {
@@ -14,6 +16,16 @@ describe("shared application policy", () => {
     expect(filePolicyForExtension("png")?.maxBytes).toBe(FILE_LIMITS.compactBytes);
     expect(filePolicyForExtension("pdf")?.maxBytes).toBe(FILE_LIMITS.documentBytes);
     expect(filePolicyForExtension("csv")).toBeNull();
+    expect(filePolicyForUpload("archive.caj", "reference")).toEqual({
+      kind: "archive",
+      extension: "caj",
+      maxBytes: FILE_LIMITS.documentBytes,
+    });
+    expect(filePolicyForUpload("archive", "reference")?.maxBytes).toBe(FILE_LIMITS.documentBytes);
+    expect(filePolicyForUpload("archive.caj", "evidence")).toBeNull();
+    expect(isIgnoredUploadPath("reports/.DS_Store")).toBe(true);
+    expect(isIgnoredUploadPath("reports/._report.pdf")).toBe(true);
+    expect(isIgnoredUploadPath("reports/report.pdf")).toBe(false);
 
     const client = readFileSync("src/drive/client/upload-policy.ts", "utf8");
     const server = readFileSync("src/drive/server/knowledge.ts", "utf8");

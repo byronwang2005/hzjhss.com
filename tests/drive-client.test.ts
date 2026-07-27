@@ -4,6 +4,7 @@ import { transitionEntryState } from "../src/drive/client/entry-flow";
 import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath, filesForKnowledgeRole, formatBytes, methodologyDisplayName, normalizeClientRelativePath, processingDisplay, visibleFileRole, visibleFileRoles } from "../src/drive/client/utils";
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
 import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
+import { validateFileSizeAndType } from "../src/drive/client/upload-policy";
 import { createUploadRegistrationScheduler, persistPendingUpload, readPendingUploads, type UploadRegistrationReceipt } from "../src/drive/client/upload-registrations";
 import {
   createFilePagination,
@@ -39,6 +40,7 @@ describe("knowledge client helpers", () => {
   it("formats files for the administrator table", () => {
     expect(fileIconName("report.pdf")).toBe("file-pdf");
     expect(fileIconName("data.xlsx")).toBe("file-xls");
+    expect(fileIconName("archive.caj")).toBe("file");
     expect(formatBytes(2 * 1024 * 1024)).toBe("2.0 MB");
     expect(directoryPrefix("a/b/")).toBe("a/");
     expect(fileNameFromPath("报告/年度总结.pdf")).toBe("年度总结.pdf");
@@ -52,6 +54,16 @@ describe("knowledge client helpers", () => {
       name: "嘉合杉升机器人方法论.md",
       path: "嘉合杉升机器人方法论.md",
     })).toBe("嘉合杉升机器人方法论.md");
+  });
+
+  it("accepts any reference type up to 100 MB without relaxing evidence types", () => {
+    const caj = new File(["report"], "report.caj", { type: "application/octet-stream" });
+    expect(() => validateFileSizeAndType(caj, "report.caj", "reference")).not.toThrow();
+    expect(() => validateFileSizeAndType(caj, "report.caj", "evidence")).toThrow("格式不受支持");
+
+    const oversized = { name: "large.zip", size: 100 * 1024 * 1024 + 1 } as File;
+    expect(() => validateFileSizeAndType(oversized, "large.zip", "reference")).toThrow("不能超过 100 MB");
+    expect(() => validateFileSizeAndType(caj, ".DS_Store", "reference")).toThrow("系统文件");
   });
 
   it("stops polling files whose processing never started", () => {

@@ -34,6 +34,7 @@ import { api, apiStream, ApiError, consumeSse } from "./api";
 import { state, type TopicView } from "./state";
 import { createTransientStatusController } from "./transient-status";
 import { pdfPageCount, validateFileSizeAndType } from "./upload-policy";
+import { isIgnoredUploadPath } from "../shared/policy";
 import { runWorkspaceTransition } from "./workspace-transition";
 import {
   createFilePagination,
@@ -1077,7 +1078,11 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       relativePath: normalizeClientRelativePath(
         knowledgeRole === "methodology" ? pathForFile(file) : `${prefix}${pathForFile(file)}`,
       ),
-    }));
+    })).filter(({ relativePath }) => !isIgnoredUploadPath(relativePath));
+    if (!candidates.length) {
+      setStatus("所选内容中没有可上传的文件。", "neutral");
+      return;
+    }
     if (new Set(candidates.map((entry) => entry.relativePath)).size !== candidates.length) {
       throw new Error("同一批次不能上传多个同名文件，请分开上传。");
     }
@@ -1095,7 +1100,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
     const prepared = [] as Array<{ file: File; relativePath: string; knowledgeRole: KnowledgeRole; pdfPages?: number }>;
     for (const { file, relativePath } of candidates) {
       try {
-        validateFileSizeAndType(file, relativePath);
+        validateFileSizeAndType(file, relativePath, knowledgeRole);
         if (knowledgeRole === "methodology" && !relativePath.toLowerCase().endsWith(".md")) throw new Error("专题方法论只支持 Markdown 文件");
         prepared.push({
           file,

@@ -187,11 +187,14 @@ export async function presignObjectUrl(
   method: "GET" | "PUT",
   relativePath: string,
   headers: HeadersInit = {},
-  options: { expiresSeconds?: number } = {},
+  options: { expiresSeconds?: number; responseContentDisposition?: string } = {},
 ): Promise<string> {
   const key = makeObjectKey(config.rootPrefix, relativePath);
   const client = createClient(config);
   const url = new URL(objectUrl(config, key));
+  if (options.responseContentDisposition) {
+    url.searchParams.set("response-content-disposition", options.responseContentDisposition);
+  }
   const expiresSeconds = Math.max(1, Math.min(options.expiresSeconds ?? config.signExpiresSeconds, config.signExpiresSeconds));
   url.searchParams.set("X-Amz-Expires", String(expiresSeconds));
   const signedRequest = await client.sign(url.toString(), {

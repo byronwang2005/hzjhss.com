@@ -94,7 +94,8 @@ export function fileIconName(name: string): string {
   if (["xls", "xlsx"].includes(extension || "")) return "file-xls";
   if (["doc", "docx", "wps"].includes(extension || "")) return "file-doc";
   if (["ppt", "pptx"].includes(extension || "")) return "file-ppt";
-  return "file-text";
+  if (["md", "txt"].includes(extension || "")) return "file-text";
+  return "file";
 }
 
 export interface ProcessingDisplay {

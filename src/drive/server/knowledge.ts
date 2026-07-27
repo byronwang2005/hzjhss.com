@@ -17,9 +17,10 @@ import { normalizePrefix, normalizeRelativeFilePath } from "./paths";
 import type { SerializedSearchIndex } from "./search";
 import {
   FILE_LIMITS,
-  extensionFromPath,
-  filePolicyForExtension,
+  filePolicyForUpload,
+  isIgnoredUploadPath,
   type ProcessingKind,
+  type SharedFilePolicy,
 } from "../shared/policy";
 import type {
   FileListProgressStage,
@@ -64,7 +65,7 @@ export interface TopicSummary extends TopicMetadata {
   ready: boolean;
 }
 
-export interface FileMetadata {
+interface FileMetadataBase {
   version: 1;
   topicId: string;
   path: string;
@@ -74,8 +75,6 @@ export interface FileMetadata {
   etag: string;
   uploadedBy: string;
   uploadedAt: string;
-  processingKind: ProcessingKind;
-  knowledgeRole?: KnowledgeRole;
   reportDate?: string;
   reportDateSource?: ReportDateSource;
   incorporatedAt?: string;
@@ -83,6 +82,11 @@ export interface FileMetadata {
   pdfPages?: number;
   uploadId?: string;
 }
+
+export type FileMetadata = FileMetadataBase & (
+  | { knowledgeRole: "reference"; processingKind?: never }
+  | { knowledgeRole?: "methodology" | "evidence"; processingKind: ProcessingKind }
+);
 
 export interface ProcessingStatus {
   version: 1;
@@ -112,11 +116,7 @@ export interface KnowledgeFile extends DriveFile {
   processing?: ProcessingStatus;
 }
 
-export interface FilePolicy {
-  extension: string;
-  maxBytes: number;
-  processingKind: ProcessingKind;
-}
+export type FilePolicy = SharedFilePolicy;
 
 export interface FileListProgressUpdate {
   stage: FileListProgressStage;
@@ -168,10 +168,10 @@ export function methodologyPathForTopic(topic: Pick<TopicMetadata, "methodologyP
   return topic.methodologyPath || METHODOLOGY_PATH;
 }
 
-export function filePolicy(path: string): FilePolicy {
+export function filePolicy(path: string, knowledgeRole: KnowledgeRole = "evidence"): FilePolicy {
   const normalized = normalizeRelativeFilePath(path);
-  const extension = extensionFromPath(normalized);
-  const policy = filePolicyForExtension(extension);
+  if (isIgnoredUploadPath(normalized)) throw new Error("系统文件不允许上传");
+  const policy = filePolicyForUpload(normalized, knowledgeRole);
   if (policy) return policy;
   throw new Error("仅支持 PNG、JPG、JPEG、BMP、PDF、Word、PPT、Excel、Markdown、TXT 和 WPS 文件");
 }
@@ -526,7 +526,7 @@ export async function createUpload(config: DriveConfig, input: { topicId: unknow
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
   const methodologyPath = methodologyPathForTopic(topic);
   const relativePath = knowledgeRole === "methodology" ? methodologyPath : normalizeRelativeFilePath(input.relativePath);
-  const policy = filePolicy(relativePath);
+  const policy = filePolicy(relativePath, knowledgeRole);
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const size = normalizePositiveSize(input.size);
   if (size > policy.maxBytes) throw sizeLimitError(policy.maxBytes);
@@ -554,7 +554,7 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
   const knowledgeRole = normalizeKnowledgeRole(input.knowledgeRole);
   const methodologyPath = methodologyPathForTopic(topic);
   const relativePath = knowledgeRole === "methodology" ? methodologyPath : normalizeRelativeFilePath(input.relativePath);
-  const policy = filePolicy(relativePath);
+  const policy = filePolicy(relativePath, knowledgeRole);
   if (knowledgeRole === "methodology" && policy.extension !== "md") throw new Error("专题方法论只支持 Markdown 文件");
   const declaredSize = normalizePositiveSize(input.size);
   const declaredContentType = normalizeContentType(input.contentType);
@@ -600,7 +600,7 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     throw new Error("同名文件的元数据缺失，请先删除后再上传");
   }
   const uploadedAt = new Date().toISOString();
-  const metadata: FileMetadata = {
+  const metadataBase: FileMetadataBase = {
     version: 1,
     topicId,
     path: relativePath,
@@ -610,27 +610,34 @@ export async function completeUpload(config: DriveConfig, input: { topicId: unkn
     etag: actual.etag,
     uploadedBy: input.uploadedBy,
     uploadedAt,
-    processingKind: policy.processingKind,
-    knowledgeRole,
     uploadId: String(input.uploadId),
     ...(knowledgeRole === "evidence" ? { reportDate: uploadedAt.slice(0, 10), reportDateSource: "upload" as const } : {}),
     ...(pdfPages ? { pdfPages } : {}),
   };
-  const status: ProcessingStatus = {
-    version: 1,
-    topicId,
-    path: relativePath,
-    sourceEtag: actual.etag,
-    state: "queued",
-    processingKind: policy.processingKind,
-    updatedAt: uploadedAt,
-  };
+  let metadata: FileMetadata;
+  if (knowledgeRole === "reference") {
+    if (policy.kind !== "archive") throw new Error("文件归档策略缺失");
+    metadata = { ...metadataBase, knowledgeRole };
+  } else {
+    if (policy.kind !== "processed") throw new Error("文件处理策略缺失");
+    metadata = { ...metadataBase, knowledgeRole, processingKind: policy.processingKind };
+  }
   const affectsIndex = knowledgeRole !== "reference";
   const nextTopic = { ...topic, updatedAt: uploadedAt, indexVersion: topic.indexVersion + (affectsIndex ? 1 : 0) };
   const registrations: Promise<unknown>[] = [
     putObjectText(config, fileMetaPath(topicId, knowledgeRole, relativePath), JSON.stringify(metadata, null, 2), "application/json; charset=utf-8"),
   ];
   if (affectsIndex) {
+    if (policy.kind !== "processed") throw new Error("文件处理策略缺失");
+    const status: ProcessingStatus = {
+      version: 1,
+      topicId,
+      path: relativePath,
+      sourceEtag: actual.etag,
+      state: "queued",
+      processingKind: policy.processingKind,
+      updatedAt: uploadedAt,
+    };
     registrations.push(
       putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8"),
       putObjectText(config, processingStatusPath(topicId, knowledgeRole, relativePath), JSON.stringify(status, null, 2), "application/json; charset=utf-8"),
@@ -702,7 +709,14 @@ export async function createDownloadUrl(config: DriveConfig, topicIdInput: unkno
   ]);
   if (!metadata || metadata.knowledgeRole !== knowledgeRole) throw new Error("文件元数据不存在");
   if (!(await headObject(config, sourcePath(topicId, knowledgeRole, relativePath)))) throw new Error("文件不存在");
-  return { url: await presignObjectUrl(config, "GET", sourcePath(topicId, knowledgeRole, relativePath)), name: relativePath.split("/").at(-1) || relativePath, expiresIn: config.signExpiresSeconds };
+  const name = relativePath.split("/").at(-1) || relativePath;
+  const fallbackName = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_") || "download";
+  const disposition = `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeRfc5987Value(name)}`;
+  return {
+    url: await presignObjectUrl(config, "GET", sourcePath(topicId, knowledgeRole, relativePath), {}, { responseContentDisposition: disposition }),
+    name,
+    expiresIn: config.signExpiresSeconds,
+  };
 }
 
 export async function patchKnowledgeFile(
@@ -716,7 +730,7 @@ export async function patchKnowledgeFile(
   if (!metadata) throw new Error("文件元数据不存在");
   if (metadata.knowledgeRole !== role) throw new Error("资料类型不匹配");
   const now = new Date().toISOString();
-  let next = { ...metadata, knowledgeRole: role };
+  let next: FileMetadata = metadataForRole(metadata, role);
   let indexChanged = false;
   let latestEvidenceGeneration: string | undefined;
   let metadataChanged = false;
@@ -846,6 +860,19 @@ function normalizePdfPages(extension: string, input: unknown): number | undefine
 
 function baseContentType(value: string): string {
   return value.split(";", 1)[0].trim().toLowerCase();
+}
+
+function encodeRfc5987Value(value: string): string {
+  return encodeURIComponent(value).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function metadataForRole(metadata: FileMetadata, role: KnowledgeRole): FileMetadata {
+  if (role === "reference") {
+    const { processingKind: _legacyProcessingKind, ...archiveMetadata } = metadata;
+    return { ...archiveMetadata, knowledgeRole: role };
+  }
+  if (!metadata.processingKind) throw new Error("文件处理类型缺失");
+  return { ...metadata, knowledgeRole: role, processingKind: metadata.processingKind };
 }
 
 function serverErrorDetails(error: unknown): { name: string; message: string; stack?: string } {

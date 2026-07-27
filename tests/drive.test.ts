@@ -70,6 +70,10 @@ describe("new COS namespace and policies", () => {
     expect(isDriveAdmin(" 汪旭 ")).toBe(false);
     expect(filePolicy("a.pdf").maxBytes).toBe(100 * 1024 * 1024);
     expect(filePolicy("a.xlsx").maxBytes).toBe(10 * 1024 * 1024);
+    expect(filePolicy("archive.caj", "reference")).toEqual({ kind: "archive", extension: "caj", maxBytes: 100 * 1024 * 1024 });
+    expect(filePolicy("README", "reference")).toEqual({ kind: "archive", extension: "readme", maxBytes: 100 * 1024 * 1024 });
+    expect(() => filePolicy("archive.caj", "evidence")).toThrow("仅支持");
+    expect(() => filePolicy(".DS_Store", "reference")).toThrow("系统文件");
     expect(() => filePolicy("a.csv")).toThrow("仅支持");
   });
 
@@ -374,7 +378,7 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "reference",
     });
     storage.set(tempUploadPath(reference.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-reference" });
-    await completeUpload(config, {
+    const referenceMetadata = await completeUpload(config, {
       topicId: topic.id,
       uploadId: reference.uploadId,
       relativePath: reference.path,
@@ -383,8 +387,32 @@ describe("knowledge topic and upload flow", () => {
       knowledgeRole: "reference",
       uploadedBy: "汪旭",
     });
+    expect(referenceMetadata.processingKind).toBeUndefined();
     expect(storage.has(processingStatusPath(topic.id, "reference", reference.path))).toBe(false);
     expect((await readKnowledgeTopic(config, topic.id)).indexVersion).toBe(1);
+
+    const archive = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "研报/原始'数据.caj",
+      size: 3,
+      contentType: "application/octet-stream",
+      knowledgeRole: "reference",
+    });
+    storage.set(tempUploadPath(archive.uploadId), { body: "caj", contentType: "application/octet-stream", etag: "etag-caj" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: archive.uploadId,
+      relativePath: archive.path,
+      size: 3,
+      contentType: "application/octet-stream",
+      knowledgeRole: "reference",
+      uploadedBy: "汪旭",
+    });
+    const download = await createDownloadUrl(config, topic.id, "reference", archive.path);
+    const disposition = new URL(download.url).searchParams.get("response-content-disposition");
+    expect(disposition).toContain("attachment;");
+    expect(disposition).toContain("filename*=UTF-8''%E5");
+    expect(disposition).toContain("%27");
 
     const methodology = await createUpload(config, {
       topicId: topic.id,
