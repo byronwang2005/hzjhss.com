@@ -246,6 +246,92 @@ describe("knowledge topic and upload flow", () => {
     expect(storage.get(sourcePath(topic.id, "evidence", relativePath))?.etag).toBe("etag-concurrent");
   });
 
+  it("falls back to an exact object listing when COS rejects evidence HEAD requests", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "预检兜底");
+    const existingPath = "周报/已存在.xlsx";
+    const newPath = "周报/新资料.xlsx";
+    const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const first = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: existingPath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(first.uploadId), { body: "old", contentType, etag: "etag-old" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: first.uploadId,
+      relativePath: existingPath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    });
+
+    const cosFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const key = decodeURIComponent(new URL(request.url).pathname.replace(/^\//, "")).replace(/^ai-knowledge-base\//, "");
+      if (request.method === "HEAD" && key.startsWith(`topics/${topic.id}/files/evidence/`)) {
+        return new Response("", { status: 403 });
+      }
+      return cosFetch(request);
+    };
+
+    await expect(findUploadConflicts(config, {
+      topicId: topic.id,
+      knowledgeRole: "evidence",
+      relativePaths: [existingPath, newPath],
+    })).resolves.toEqual([{ relativePath: existingPath, etag: "etag-old" }]);
+    await expect(createUpload(config, {
+      topicId: topic.id,
+      relativePath: existingPath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+    })).rejects.toMatchObject({ name: "UploadConflictError" });
+
+    const newUpload = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: newPath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(newUpload.uploadId), { body: "new", contentType, etag: "etag-new" });
+    await expect(completeUpload(config, {
+      topicId: topic.id,
+      uploadId: newUpload.uploadId,
+      relativePath: newPath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    })).resolves.toMatchObject({ path: newPath, etag: "etag-new" });
+
+    const replacement = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: existingPath,
+      size: 3,
+      contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: "etag-old",
+    });
+    storage.set(tempUploadPath(replacement.uploadId), { body: "next", contentType, etag: "etag-next" });
+    await expect(completeUpload(config, {
+      topicId: topic.id,
+      uploadId: replacement.uploadId,
+      relativePath: existingPath,
+      size: 4,
+      contentType,
+      knowledgeRole: "evidence",
+      replaceEtag: replacement.replaceEtag,
+      uploadedBy: "汪旭",
+    })).resolves.toMatchObject({ path: existingPath, etag: "etag-next" });
+  });
+
   it("restores the previous evidence source and index snapshots when replacement registration fails", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "替换回滚");

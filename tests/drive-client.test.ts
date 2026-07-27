@@ -396,6 +396,8 @@ describe("knowledge client surface", () => {
     expect(source).toContain("replaceEtag: conflictsByPath.get(entry.relativePath)");
     expect(source).toContain("replaceEtag: receipt.replaceEtag");
     expect(source.indexOf('api<UploadConflictsResponse>("/upload-conflicts"')).toBeLessThan(source.indexOf("new Uppy<UppyMeta, UppyBody>"));
+    expect(source).toContain("同名文件检查失败：${detail}");
+    expect(source).toContain('setUploadBatchStatus(batch, "同名文件检查失败，请重试。", "danger")');
     expect(source).toContain('@wa-hide=${handleUploadConflictDialogHide}');
     expect(stateSource).toContain("uploadConflictConfirmation: UploadConflictConfirmation | null");
     expect(workspaceStyles).toContain(".drive-upload-conflict-dialog");

@@ -1074,10 +1074,23 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
     }
 
     if (knowledgeRole === "evidence") {
-      const { conflicts } = await api<UploadConflictsResponse>("/upload-conflicts", {
-        method: "POST",
-        body: { topicId, knowledgeRole, relativePaths: prepared.map((entry) => entry.relativePath) },
-      });
+      let conflicts: UploadConflict[];
+      try {
+        ({ conflicts } = await api<UploadConflictsResponse>("/upload-conflicts", {
+          method: "POST",
+          body: { topicId, knowledgeRole, relativePaths: prepared.map((entry) => entry.relativePath) },
+        }));
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "服务暂时不可用";
+        for (const entry of prepared) {
+          advanceFileTask(batch, entry.relativePath, "failed", {
+            error: `同名文件检查失败：${detail}`,
+            retryable: true,
+          });
+        }
+        setUploadBatchStatus(batch, "同名文件检查失败，请重试。", "danger");
+        return;
+      }
       if (conflicts.length) {
         const decision = await requestUploadConflictDecision(conflicts);
         if (decision === "cancel") {

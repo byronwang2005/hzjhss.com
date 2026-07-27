@@ -138,7 +138,11 @@ export async function headObject(config: DriveConfig, relativePath: string): Pro
     return null;
   }
   if (!response.ok) {
-    throw new Error(`COS 文件检查失败: ${response.status}`);
+    try {
+      return await listExactObject(config, key);
+    } catch {
+      throw new Error(`COS 文件检查失败: ${response.status}`);
+    }
   }
 
   const contentLength = response.headers.get("content-length");
@@ -151,6 +155,28 @@ export async function headObject(config: DriveConfig, relativePath: string): Pro
     contentType: response.headers.get("content-type") || "",
     etag: (response.headers.get("etag") || "").replace(/^"|"$/g, ""),
   };
+}
+
+async function listExactObject(config: DriveConfig, key: string): Promise<DriveObjectMetadata | null> {
+  const url = new URL(config.endpoint);
+  url.searchParams.set("list-type", "2");
+  url.searchParams.set("prefix", key);
+  url.searchParams.set("max-keys", "1");
+  const response = await signedFetch(config, url.toString(), { method: "GET" });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`COS 精确文件查询失败: ${response.status}`);
+  }
+  const parsed = parser.parse(text) as { ListBucketResult?: { Contents?: unknown } };
+  const entry = toArray<Record<string, unknown>>(parsed.ListBucketResult?.Contents)
+    .find((item) => String(item.Key ?? "") === key);
+  if (!entry) return null;
+  const size = Number(entry.Size);
+  const etag = String(entry.ETag ?? "").replace(/^"|"$/g, "");
+  if (!Number.isSafeInteger(size) || size < 0 || !etag) {
+    throw new Error("COS 精确文件元数据无效");
+  }
+  return { size, contentType: "", etag };
 }
 
 export async function deleteObject(config: DriveConfig, relativePath: string): Promise<void> {
