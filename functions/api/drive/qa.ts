@@ -74,6 +74,13 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
       const streamState = createQaStreamState();
       let activeStage: QaProgressStage = "parsing";
       let retrievalSummaryForLog: QaRetrievalSummary | undefined;
+      let promptSummaryForLog: {
+        budgetScale: number;
+        estimatedInputTokens: number;
+        evidenceCount: number;
+        methodologyCount: number;
+        historyCount: number;
+      } | undefined;
       const phase = (stage: QaProgressStage, state: "active" | "complete"): void => {
         activeStage = stage;
         emitQaEvent(controller, {
@@ -130,6 +137,13 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
           const client = createQaClient(aiConfig);
           const createStream = (budgetScale = 1) => {
             const built = buildQaRequestMessages(aiConfig, qaMessages, retrieved, scope === "global", { budgetScale });
+            promptSummaryForLog = {
+              budgetScale,
+              estimatedInputTokens: built.estimatedInputTokens,
+              evidenceCount: built.evidenceCount,
+              methodologyCount: built.methodologyCount,
+              historyCount: built.historyCount,
+            };
             return client.chat.completions.create(
               createQaCompletionParams(aiConfig, built.messages),
               { signal: request.signal },
@@ -144,6 +158,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env }) =
             provider: aiConfig.provider,
             model: aiConfig.model,
             retrieval: retrievalSummaryForLog,
+            prompt: promptSummaryForLog,
             error: upstreamAiDiagnostic(error),
           });
           emitQaError(controller, qaModelStartError(error, requestId));

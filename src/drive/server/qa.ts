@@ -75,6 +75,8 @@ export interface BuiltQaMessages {
   estimatedInputTokens: number;
 }
 
+const QA_PROMPT_INPUT_TOKEN_CAP = 128_000;
+
 export type QaChatCompletionParams = ChatCompletionCreateParamsStreaming & {
   thinking?: { type: "enabled" };
 };
@@ -107,7 +109,7 @@ export function buildQaRequestMessages(
   if (!latest || latest.role !== "user") throw new Error("最新一条对话必须是用户问题");
   const now = options.now || new Date();
   const budgetScale = Math.min(1, Math.max(0.1, options.budgetScale ?? 1));
-  const inputBudget = qaInputTokenBudget(config);
+  const inputBudget = qaPromptInputTokenBudget(config);
   const emptySystem = systemMessage([], [], globalScope, shanghaiDate(now));
   const requiredTokens = estimateMessagesTokens([
     { role: "system", content: emptySystem },
@@ -164,6 +166,10 @@ export function buildQaRequestMessages(
 
 export function qaInputTokenBudget(config: Pick<AiConfig, "contextWindowTokens" | "maxOutputTokens">): number {
   return config.contextWindowTokens - config.maxOutputTokens - Math.ceil(config.contextWindowTokens * 0.05);
+}
+
+export function qaPromptInputTokenBudget(config: Pick<AiConfig, "contextWindowTokens" | "maxOutputTokens">): number {
+  return Math.min(qaInputTokenBudget(config), QA_PROMPT_INPUT_TOKEN_CAP);
 }
 
 export function estimateTextTokens(input: string): number {

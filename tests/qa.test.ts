@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import OpenAI from "openai";
-import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, createRetrievedQaSystemMessage, finishQaStreamEvents, isContextLengthError, normalizeQaMessages, qaInputTokenBudget, qaModelStartError, qaProviderDeltaEvents, QaCapacityError, retryOnceOnContextLength, upstreamAiDiagnostic, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../src/drive/server/qa";
+import { buildQaRequestMessages, createQaClient, createQaCompletionParams, createQaStreamState, createRetrievedQaSystemMessage, finishQaStreamEvents, isContextLengthError, normalizeQaMessages, qaInputTokenBudget, qaModelStartError, qaPromptInputTokenBudget, qaProviderDeltaEvents, QaCapacityError, retryOnceOnContextLength, upstreamAiDiagnostic, upstreamAiErrorMessage, upstreamAiHttpStatus } from "../src/drive/server/qa";
 import { isMethodologyQuery, SearchIndexCache } from "../src/drive/server/retrieval";
 import { buildSerializedSearchIndex, loadSerializedSearchIndex, searchLoadedIndex, searchSerializedIndex, tokenizeKnowledgeText } from "../src/drive/server/search";
 
@@ -116,6 +116,8 @@ describe("retrieval-grounded prompt", () => {
     expect(compatibleParams).not.toHaveProperty("thinking");
     expect(compatibleParams).not.toHaveProperty("reasoning_effort");
     expect(qaInputTokenBudget({ contextWindowTokens: 1_000_000, maxOutputTokens: 384_000 })).toBe(566_000);
+    expect(qaPromptInputTokenBudget({ contextWindowTokens: 1_000_000, maxOutputTokens: 384_000 })).toBe(128_000);
+    expect(qaPromptInputTokenBudget({ contextWindowTokens: 100_000, maxOutputTokens: 2_500 })).toBe(92_500);
     expect(createQaClient({
       apiKey: "key",
       baseURL: "https://api.deepseek.com",
