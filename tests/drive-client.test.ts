@@ -356,8 +356,11 @@ describe("knowledge client surface", () => {
     expect(source).toContain('uppy.on("upload-progress"');
     expect(source).toContain("createUploadBatch");
     expect(source).toContain("renderFileProcessingCenter");
-    expect(source).toContain("`已归档 ${archived}`");
-    expect(source).toContain("`剩余 ${remaining}`");
+    expect(source).toContain("`已归档 ${counts.complete}`");
+    expect(source).toContain("`已登记 ${registered}`");
+    expect(source).toContain("const remaining = counts.active");
+    expect(source).toContain("`处理中 ${counts.active}`");
+    expect(source).toContain("`已完成 ${counts.complete}`");
     expect(source).toContain('aria-label="批次处理阶段"');
     expect(source).toContain('api<UploadCompleteResponse>("/upload-complete"');
     expect(source).toContain("createUploadRegistrationScheduler");
@@ -369,8 +372,8 @@ describe("knowledge client surface", () => {
     expect(source).toContain('data-action="file-role-view"');
     expect(source).toContain('state.role === "admin" ? "" : " is-two-column"');
     expect(source).toContain("visibleFileRole(state.role, state.fileRoleView)");
-    expect(workspaceStyles).toContain(".drive-file-role-tabs.is-two-column");
-    expect(workspaceStyles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(fileStyles).toContain(".drive-file-role-tabs.is-two-column");
+    expect(fileStyles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(source).toContain('role="tabpanel"');
     expect(source).toContain('role="columnheader"');
     expect(source).toContain('data-label="处理状态"');
@@ -401,6 +404,14 @@ describe("knowledge client surface", () => {
     expect(source).toContain('@wa-hide=${handleUploadConflictDialogHide}');
     expect(stateSource).toContain("uploadConflictConfirmation: UploadConflictConfirmation | null");
     expect(workspaceStyles).toContain(".drive-upload-conflict-dialog");
+  });
+
+  it("isolates native file controls from WebAwesome button styles", () => {
+    expect(workspaceStyles).toMatch(/\.drive-file-processing-head \{[\s\S]*?appearance: none;[\s\S]*?background: transparent;[\s\S]*?border: 0;/);
+    expect(fileStyles).toMatch(/\.drive-file-role-tab \{[\s\S]*?appearance: none;[\s\S]*?background: transparent;/);
+    expect(fileStyles).toMatch(/\.drive-file-status \{[\s\S]*?appearance: none;[\s\S]*?box-shadow: none;/);
+    expect(workspaceStyles).toMatch(/\.drive-file-pipeline li:not\(:last-child\)::after \{[\s\S]*?left: calc\(50% \+ 11px\);/);
+    expect(workspaceStyles).toContain(".drive-upload-conflict-actions");
   });
 
   it("keeps a visual preflight shell and uses one background file refresh timer", () => {

@@ -6,28 +6,108 @@
 }
 
 .drive-file-role-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 6px;
   background: var(--jh-color-surface-muted);
+  border-bottom: 1px solid var(--jh-color-border-soft);
+}
+
+.drive-file-role-tabs.is-two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .drive-file-role-tab {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   min-height: 54px;
   padding: 8px 12px;
+  color: var(--jh-color-text-muted);
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 9px;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-align: left;
+  transition:
+    color var(--jh-duration-fast) var(--jh-motion-control),
+    background-color var(--jh-duration-fast) var(--jh-motion-control),
+    border-color var(--jh-duration-fast) var(--jh-motion-control),
+    box-shadow var(--jh-duration-fast) var(--jh-motion-control);
+}
+
+.drive-file-role-tab:hover {
+  color: var(--jh-color-text);
+  background: var(--jh-color-surface);
+  border-color: var(--jh-color-border-soft);
+}
+
+.drive-file-role-tab:focus-visible {
+  outline: 0;
+  box-shadow: var(--jh-focus-ring);
 }
 
 .drive-file-role-tab.is-active {
+  color: var(--jh-color-text);
   background: var(--jh-color-surface);
   border-color: var(--jh-color-border);
   box-shadow: 0 5px 16px rgb(31 39 48 / 5%);
 }
 
 .drive-file-role-tab-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
   width: 34px;
   height: 34px;
+  color: var(--file-role-accent, var(--jh-color-brand));
+  background: var(--file-role-soft, var(--jh-color-brand-soft));
   border-radius: 8px;
+  font-size: 17px;
+}
+
+.drive-file-role-tab > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.drive-file-role-tab strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drive-file-role-tab small {
+  color: var(--jh-color-text-muted);
+  font-size: 10px;
+}
+
+.drive-file-role-tab.is-reference,
+.drive-files-panel.is-reference {
+  --file-role-accent: var(--jh-color-warning);
+  --file-role-soft: var(--jh-color-warning-soft);
+}
+
+.drive-file-role-tab.is-methodology,
+.drive-files-panel.is-methodology {
+  --file-role-accent: var(--jh-color-brand);
+  --file-role-soft: var(--jh-color-brand-soft);
+}
+
+.drive-file-role-tab.is-evidence,
+.drive-files-panel.is-evidence {
+  --file-role-accent: var(--jh-color-success);
+  --file-role-soft: var(--jh-color-success-soft);
 }
 
 .drive-file-role-panel {
@@ -233,6 +313,7 @@
 }
 
 .drive-file-status {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -240,15 +321,35 @@
   min-width: 0;
   min-height: 34px;
   padding: 5px 8px 5px 10px;
-  color: var(--jh-color-success);
-  background: var(--jh-color-success-soft);
+  color: var(--jh-color-text-muted);
+  background: var(--jh-color-page);
   border: 1px solid transparent;
   border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-align: left;
 }
 
-.drive-file-status.is-warning {
-  color: var(--jh-color-warning);
-  background: var(--jh-color-warning-soft);
+.drive-file-status:hover {
+  border-color: var(--jh-color-border-strong);
+}
+
+.drive-file-status:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--jh-color-surface), 0 0 0 4px color-mix(in srgb, var(--jh-color-brand) 58%, transparent);
+}
+
+.drive-file-status.is-active {
+  color: var(--jh-color-brand-hover);
+  background: var(--jh-color-brand-soft);
+}
+
+.drive-file-status.is-success {
+  color: var(--jh-color-success);
+  background: var(--jh-color-success-soft);
 }
 
 .drive-file-status.is-danger {
@@ -260,11 +361,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .drive-file-status-copy strong,
 .drive-file-status-copy small {
+  overflow: hidden;
   color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .drive-file-status-copy strong {
@@ -274,6 +379,12 @@
 .drive-file-status-copy small {
   font-size: 9px;
   opacity: 0.82;
+}
+
+.drive-file-status > .ui-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+  font-size: 12px;
 }
 
 .drive-file-state-chip {
@@ -348,12 +459,27 @@
 
   .drive-file-role-tabs {
     display: flex;
+    gap: 5px;
+    padding: 8px;
     overflow-x: auto;
   }
 
   .drive-file-role-tab {
+    align-items: flex-start;
+    flex-direction: column;
     flex: 1 0 112px;
-    min-height: 66px;
+    gap: 7px;
+    min-height: 92px;
+    padding: 9px;
+  }
+
+  .drive-file-role-tab-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .drive-file-role-tab strong {
+    white-space: normal;
   }
 
   .drive-material-toolbar {
@@ -444,5 +570,15 @@
     min-width: 44px;
     min-height: 44px;
     font-size: 11px;
+  }
+}
+
+@media (max-width: 440px) {
+  .drive-file-role-tab {
+    min-height: 96px;
+  }
+
+  .drive-file-role-tab strong {
+    font-size: 12px;
   }
 }

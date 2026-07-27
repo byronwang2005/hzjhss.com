@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI知识库布局 QA 夹具</title>
+    <script>
+      document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") || "light";
+    </script>
     <link rel="stylesheet" href="/dist/assets/drive.css">
   </head>
   <body class="drive-body">
@@ -13,6 +16,7 @@
     <script>
       const params = new URLSearchParams(location.search);
       const state = params.get("state") || "overview";
+      const fixtureCase = params.get("case") || "default";
       const root = document.querySelector("[data-drive-root]");
       const icon = (name, weight = "regular") => `
         <svg class="ui-icon" aria-hidden="true" focusable="false">
@@ -131,6 +135,44 @@
       }
 
       function files() {
+        const processingCenter = fixtureCase === "processing" ? `
+          <section class="drive-file-processing-center" aria-label="资料处理中心" aria-busy="true">
+            <button class="drive-file-processing-head" type="button" aria-expanded="true">
+              <span class="drive-file-processing-icon is-active">${icon("arrows-clockwise", "duotone")}</span>
+              <span class="drive-file-processing-title">
+                <strong>正在处理 3 份资料 · 1 份已完成</strong>
+                <small>已上传 3 · 已登记 3 · 处理中 2 · 失败 0 · 已完成 1 · 剩余 2 · 用时 1 分 6 秒</small>
+              </span>
+              ${icon("caret-up")}
+            </button>
+            <div class="drive-file-processing-body">
+              <ol class="drive-file-pipeline" aria-label="批次处理阶段">
+                ${["校验", "上传", "登记", "解析内容", "更新索引", "可问答"].map((label, index) => `
+                  <li class="${index < 3 ? "is-complete" : index === 3 ? "is-active" : "is-pending"}">
+                    <span class="drive-file-pipeline-node">${index < 3 ? icon("check", "bold") : icon("circle")}</span>
+                    <span><strong>${label}</strong><small>${index < 3 ? "3/3" : index === 3 ? "1/3" : "0/3"}</small></span>
+                  </li>`).join("")}
+              </ol>
+              <div class="drive-file-task-list">
+                <div class="drive-file-task-item is-active">
+                  <span class="drive-file-task-mark">${icon("file-arrow-up", "duotone")}</span>
+                  <span class="drive-file-task-copy">
+                    <strong>碳酸锂周报26-7-26.pdf</strong>
+                    <small>正在解析内容 · 1 分 6 秒</small>
+                  </span>
+                  <span class="drive-file-task-value">进行中</span>
+                </div>
+                <div class="drive-file-task-item is-active">
+                  <span class="drive-file-task-mark">${icon("file-arrow-up", "duotone")}</span>
+                  <span class="drive-file-task-copy">
+                    <strong>超长文件名用于验证移动端换行与状态对齐的锂电产业链专题跟踪报告2026年第30周更新版.xlsx</strong>
+                    <small>等待云处理 · 48 秒</small>
+                  </span>
+                  <span class="drive-file-task-value">进行中</span>
+                </div>
+              </div>
+            </div>
+          </section>` : "";
         return `
           ${pageHead()}
           ${topicTabs("files")}
@@ -155,6 +197,7 @@
                   </div>
                   <div class="drive-upload-actions">${control("upload-simple", "上传时效资料", "drive-control-primary")}</div>
                 </div>
+                ${processingCenter}
                 <div class="drive-file-table" role="table" aria-label="时效资料">
                   <div class="drive-file-row drive-file-row-head" role="row">
                     <span role="columnheader">名称</span><span role="columnheader">大小</span><span role="columnheader">状态</span><span role="columnheader">更新</span><span role="columnheader">操作</span>

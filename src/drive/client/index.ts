@@ -1571,7 +1571,7 @@ function renderUploadConflictDialog(): TemplateResult | typeof nothing {
         </ul>
         ${remaining > 0 ? html`<p class="drive-upload-conflict-more">另有 ${remaining} 个同名文件</p>` : nothing}
       </div>
-      <div class="drive-delete-dialog-actions" slot="footer">
+      <div class="drive-delete-dialog-actions drive-upload-conflict-actions" slot="footer">
         <button class="drive-control" type="button" data-action="cancel-upload-conflicts">${renderIcon("x-circle")}取消上传</button>
         <button class="drive-control" type="button" data-action="skip-upload-conflicts">${renderIcon("arrow-right")}跳过同名</button>
         <button class="drive-control drive-control-primary" type="button" data-action="replace-upload-conflicts">${renderIcon("arrows-clockwise")}替换并继续</button>
@@ -2045,21 +2045,30 @@ function renderFileProcessingCenter(batch: UploadBatchState): TemplateResult {
   const counts = batchCounts(batch);
   const elapsed = elapsedLabel(batch.startedAt, batch.completedAt);
   const uploaded = batch.items.filter((item) => item.bytesTotal > 0 && item.bytesUploaded >= item.bytesTotal).length;
-  const archived = batch.items.filter((item) => Boolean(item.sourceEtag)).length;
-  const remaining = Math.max(0, batch.items.length - archived - counts.failed);
+  const registered = batch.items.filter((item) => Boolean(item.sourceEtag)).length;
+  const remaining = counts.active;
   const allComplete = counts.complete === batch.items.length;
   const title = allComplete
     ? `本批次 ${batch.items.length} 份资料已处理完成`
     : counts.active
       ? `正在处理 ${batch.items.length} 份资料 · ${counts.complete} 份已完成`
       : `${counts.failed} 份资料未完成`;
-  const summary = [
-    `已上传 ${uploaded}`,
-    `已归档 ${archived}`,
-    `失败 ${counts.failed}`,
-    `剩余 ${remaining}`,
-    elapsed ? `用时 ${elapsed}` : "",
-  ].filter(Boolean).join(" · ");
+  const summaryParts = batch.knowledgeRole === "reference"
+    ? [
+        `已上传 ${uploaded}`,
+        `已归档 ${counts.complete}`,
+        `失败 ${counts.failed}`,
+        `剩余 ${remaining}`,
+      ]
+    : [
+        `已上传 ${uploaded}`,
+        `已登记 ${registered}`,
+        `处理中 ${counts.active}`,
+        `失败 ${counts.failed}`,
+        `已完成 ${counts.complete}`,
+        `剩余 ${remaining}`,
+      ];
+  const summary = [...summaryParts, elapsed ? `用时 ${elapsed}` : ""].filter(Boolean).join(" · ");
   return html`
     <section
       class=${`drive-file-processing-center${counts.failed ? " has-failure" : ""}${allComplete ? " is-complete" : ""}`}
