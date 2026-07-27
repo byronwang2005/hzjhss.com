@@ -38,6 +38,30 @@ export interface DriveObjectMetadata {
   etag: string;
 }
 
+export type CosOperation =
+  | "list-objects"
+  | "put-object"
+  | "get-object"
+  | "head-object"
+  | "delete-object"
+  | "copy-object";
+
+export class CosRequestError extends Error {
+  constructor(readonly operation: CosOperation, readonly status: number) {
+    super(cosRequestErrorMessage(operation, status));
+    this.name = "CosRequestError";
+  }
+}
+
+function cosRequestErrorMessage(operation: CosOperation, status: number): string {
+  if (operation === "list-objects") return `COS 列表请求失败: ${status}`;
+  if (operation === "put-object") return `COS 写入请求失败: ${status}`;
+  if (operation === "get-object") return `COS 读取请求失败: ${status}`;
+  if (operation === "head-object") return `COS 文件检查失败: ${status}`;
+  if (operation === "delete-object") return `COS 删除请求失败: ${status}`;
+  return `COS 文件转存失败: ${status}`;
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   parseTagValue: true,
@@ -58,7 +82,7 @@ export async function listObjects(config: DriveConfig, prefix: string, cursor?: 
   const response = await signedFetch(config, url.toString(), { method: "GET" });
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`COS 列表请求失败: ${response.status}`);
+    throw new CosRequestError("list-objects", response.status);
   }
   return parseListObjectsXml(text, config.rootPrefix, prefix);
 }
@@ -76,7 +100,7 @@ export async function listObjectPaths(config: DriveConfig, prefix: string, curso
   const response = await signedFetch(config, url.toString(), { method: "GET" });
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`COS 列表请求失败: ${response.status}`);
+    throw new CosRequestError("list-objects", response.status);
   }
   return parseObjectPathsXml(text, config.rootPrefix);
 }
@@ -96,7 +120,7 @@ export async function createFolder(config: DriveConfig, relativeFolderPath: stri
     body: "",
   });
   if (!response.ok) {
-    throw new Error(`COS 文件夹创建失败: ${response.status}`);
+    throw new CosRequestError("put-object", response.status);
   }
 }
 
@@ -115,7 +139,7 @@ export async function putObjectText(
     body: text,
   });
   if (!response.ok) {
-    throw new Error(`COS 写入请求失败: ${response.status}`);
+    throw new CosRequestError("put-object", response.status);
   }
 }
 
@@ -126,7 +150,7 @@ export async function getObjectText(config: DriveConfig, relativePath: string): 
     return null;
   }
   if (!response.ok) {
-    throw new Error(`COS 读取请求失败: ${response.status}`);
+    throw new CosRequestError("get-object", response.status);
   }
   return response.text();
 }
@@ -141,7 +165,7 @@ export async function headObject(config: DriveConfig, relativePath: string): Pro
     try {
       return await listExactObject(config, key);
     } catch {
-      throw new Error(`COS 文件检查失败: ${response.status}`);
+      throw new CosRequestError("head-object", response.status);
     }
   }
 
@@ -165,7 +189,7 @@ async function listExactObject(config: DriveConfig, key: string): Promise<DriveO
   const response = await signedFetch(config, url.toString(), { method: "GET" });
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`COS 精确文件查询失败: ${response.status}`);
+    throw new CosRequestError("list-objects", response.status);
   }
   const parsed = parser.parse(text) as { ListBucketResult?: { Contents?: unknown } };
   const entry = toArray<Record<string, unknown>>(parsed.ListBucketResult?.Contents)
@@ -183,7 +207,7 @@ export async function deleteObject(config: DriveConfig, relativePath: string): P
   const key = makeObjectKey(config.rootPrefix, relativePath);
   const response = await signedFetch(config, objectUrl(config, key), { method: "DELETE" });
   if (!response.ok && response.status !== 404) {
-    throw new Error(`COS 删除请求失败: ${response.status}`);
+    throw new CosRequestError("delete-object", response.status);
   }
 }
 
@@ -194,11 +218,14 @@ export async function copyObject(config: DriveConfig, sourceRelativePath: string
   const response = await signedFetch(config, objectUrl(config, targetKey), {
     method: "PUT",
     headers: {
-      "x-cos-copy-source": `${sourceUrl.host}/${sourceKey.split("/").map(encodeURIComponent).join("/")}`,
+      "x-cos-copy-source": `${sourceUrl.host}/${encodeCosObjectKey(sourceKey)}`,
       "x-cos-copy-source-if-match": sourceEtag,
     },
   });
-  if (!response.ok) throw new Error(`COS 文件转存失败: ${response.status}`);
+  const body = await response.text();
+  if (!response.ok || /<Error(?:\s|>)/i.test(body)) {
+    throw new CosRequestError("copy-object", response.status);
+  }
 }
 
 export async function deleteObjects(config: DriveConfig, relativePaths: string[]): Promise<void> {
@@ -303,8 +330,18 @@ async function signedFetch(config: DriveConfig, input: string, init: RequestInit
 }
 
 function objectUrl(config: DriveConfig, key: string): string {
-  const encodedPath = key.split("/").map(encodeURIComponent).join("/");
+  const encodedPath = encodeCosObjectKey(key);
   return `${config.endpoint}/${encodedPath}`;
+}
+
+export function encodeCosObjectKey(key: string): string {
+  return key.split("/").map(encodeRfc3986Segment).join("/");
+}
+
+function encodeRfc3986Segment(segment: string): string {
+  return encodeURIComponent(segment).replace(/[!'()*]/g, (character) => (
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  ));
 }
 
 function toArray<T>(value: unknown): T[] {

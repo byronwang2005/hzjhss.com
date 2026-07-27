@@ -5,7 +5,13 @@ import { directoryPrefix, FILE_ROLE_PRESENTATION, fileIconName, fileNameFromPath
 import type { KnowledgeFile } from "../src/drive/shared/contracts";
 import { advanceFileTask, batchCounts, createUploadBatch, elapsedLabel, fileTaskPercent, reconcileUploadBatch, stepState, taskSteps } from "../src/drive/client/file-progress";
 import { validateFileSizeAndType } from "../src/drive/client/upload-policy";
-import { createUploadRegistrationScheduler, persistPendingUpload, readPendingUploads, type UploadRegistrationReceipt } from "../src/drive/client/upload-registrations";
+import {
+  createUploadRegistrationScheduler,
+  LEGACY_PENDING_UPLOAD_STORAGE_KEY,
+  persistPendingUpload,
+  readPendingUploads,
+  type UploadRegistrationReceipt,
+} from "../src/drive/client/upload-registrations";
 import {
   createFilePagination,
   currentFilePageCursor,
@@ -96,7 +102,7 @@ describe("knowledge client helpers", () => {
 
 describe("upload registration queue", () => {
   const receipt = (index: number): UploadRegistrationReceipt => ({
-    version: 1,
+    version: 2,
     uploadId: `u_${String(index).padStart(22, "0")}`,
     topicId: "t_abcdefghijkl",
     relativePath: `报告/${index}.pdf`,
@@ -156,6 +162,16 @@ describe("upload registration queue", () => {
     const replacement = { ...receipt(3), knowledgeRole: "evidence" as const, replaceEtag: "etag-confirmed" };
     persistPendingUpload(replacement, storage);
     expect(readPendingUploads(storage)).toEqual([replacement]);
+  });
+
+  it("does not resume legacy v1 failed registrations", () => {
+    const values = new Map<string, string>([[
+      LEGACY_PENDING_UPLOAD_STORAGE_KEY,
+      JSON.stringify([{ ...receipt(5), version: 1 }]),
+    ]]);
+    const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    expect(readPendingUploads(storage)).toEqual([]);
+    expect(values.get(LEGACY_PENDING_UPLOAD_STORAGE_KEY)).toContain('"version":1');
   });
 
   it("does not retry or retain a registration after a 409 replacement conflict", async () => {

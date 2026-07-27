@@ -2,11 +2,12 @@ import pLimit from "p-limit";
 import pRetry from "p-retry";
 import type { KnowledgeRole, UploadCompleteResponse } from "../shared/contracts";
 
-export const PENDING_UPLOAD_STORAGE_KEY = "jhss-pending-upload-registrations-v1";
+export const LEGACY_PENDING_UPLOAD_STORAGE_KEY = "jhss-pending-upload-registrations-v1";
+export const PENDING_UPLOAD_STORAGE_KEY = "jhss-pending-upload-registrations-v2";
 export const MAX_PENDING_UPLOADS = 1000;
 
 export interface UploadRegistrationReceipt {
-  version: 1;
+  version: 2;
   uploadId: string;
   topicId: string;
   relativePath: string;
@@ -102,7 +103,7 @@ export function createUploadRegistrationScheduler(options: {
 function isUploadRegistrationReceipt(value: unknown): value is UploadRegistrationReceipt {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const receipt = value as Partial<UploadRegistrationReceipt>;
-  return receipt.version === 1
+  return receipt.version === 2
     && typeof receipt.uploadId === "string"
     && typeof receipt.topicId === "string"
     && typeof receipt.relativePath === "string"

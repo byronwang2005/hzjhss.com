@@ -30,6 +30,7 @@ import {
 } from "../src/drive/server/knowledge";
 import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/server/session";
 import { jsonResponse } from "../src/drive/server/http";
+import { encodeCosObjectKey } from "../src/drive/server/cos";
 import { onRequestPost as uploadUrl } from "../functions/api/drive/upload-url";
 import { onRequestPost as uploadComplete } from "../functions/api/drive/upload-complete";
 import { onRequestGet as listFiles } from "../functions/api/drive/list";
@@ -54,6 +55,14 @@ afterEach(() => {
 });
 
 describe("new COS namespace and policies", () => {
+  it("strictly encodes COS object keys without changing their logical names", () => {
+    expect(encodeCosObjectKey("报告(2).pdf")).toBe("%E6%8A%A5%E5%91%8A%282%29.pdf");
+    expect(encodeCosObjectKey("报告（2）.pdf")).toBe("%E6%8A%A5%E5%91%8A%EF%BC%882%EF%BC%89.pdf");
+    expect(encodeCosObjectKey("目录/工业硅&多晶硅(2).pdf")).toBe(
+      "%E7%9B%AE%E5%BD%95/%E5%B7%A5%E4%B8%9A%E7%A1%85%26%E5%A4%9A%E6%99%B6%E7%A1%85%282%29.pdf",
+    );
+  });
+
   it("round-trips the signed session cookie and preserves Set-Cookie headers", async () => {
     const cookie = await createSessionCookie(env, "https://example.com", "汪旭");
     const session = await getDriveSession(env, cookie.split(";", 1)[0]);
@@ -133,6 +142,105 @@ describe("new COS namespace and policies", () => {
 });
 
 describe("knowledge topic and upload flow", () => {
+  it.each([
+    "报告(2).pdf",
+    "报告（2）.pdf",
+    "嵌套/工业硅&多晶硅(2).pdf",
+  ])("preserves and registers bracketed filename %s", async (relativePath) => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, `括号-${relativePath.split("/").at(-1)}`);
+    const signature = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+    });
+    storage.set(tempUploadPath(signature.uploadId), {
+      body: "pdf",
+      contentType: "application/pdf",
+      etag: "etag-brackets",
+    });
+
+    const metadata = await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: signature.uploadId,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      uploadedBy: "汪旭",
+    });
+
+    expect(metadata.path).toBe(relativePath);
+    expect(metadata.name).toBe(relativePath.split("/").at(-1));
+    expect(storage.has(sourcePath(topic.id, "evidence", relativePath))).toBe(true);
+    expect(storage.has(fileMetaPath(topic.id, "evidence", relativePath))).toBe(true);
+    expect(storage.has(processingStatusPath(topic.id, "evidence", relativePath))).toBe(true);
+  });
+
+  it("uses strict wire encoding for bracketed COS paths and copy sources", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "括号替换");
+    const relativePath = "目录/报告(2)（终稿）.pdf";
+    const first = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+    });
+    storage.set(tempUploadPath(first.uploadId), { body: "old", contentType: "application/pdf", etag: "etag-old" });
+    const wireUrls: string[] = [];
+    const copySources: string[] = [];
+    const cosFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      wireUrls.push(request.url);
+      const copySource = request.headers.get("x-cos-copy-source");
+      if (copySource) copySources.push(copySource);
+      return cosFetch(input, init);
+    };
+    const original = await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: first.uploadId,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      uploadedBy: "汪旭",
+    });
+    const replacement = await createUpload(config, {
+      topicId: topic.id,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      replaceEtag: original.etag,
+    });
+    storage.set(tempUploadPath(replacement.uploadId), { body: "new", contentType: "application/pdf", etag: "etag-new" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: replacement.uploadId,
+      relativePath,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      replaceEtag: original.etag,
+      uploadedBy: "汪旭",
+    });
+
+    const bracketedRequests = wireUrls.filter((url) => decodeURIComponent(new URL(url).pathname).includes(relativePath));
+    expect(bracketedRequests.length).toBeGreaterThan(0);
+    for (const url of bracketedRequests) {
+      expect(new URL(url).pathname).toContain("%282%29%EF%BC%88%E7%BB%88%E7%A8%BF%EF%BC%89");
+      expect(new URL(url).pathname).not.toContain("(");
+      expect(new URL(url).pathname).not.toContain("%2528");
+    }
+    expect(copySources.some((source) => source.includes("%282%29%EF%BC%88%E7%BB%88%E7%A8%BF%EF%BC%89"))).toBe(true);
+    expect(copySources.every((source) => !source.includes("(") && !source.includes("%2528"))).toBe(true);
+  });
+
   it("creates topics, verifies COS HEAD metadata, and exposes processing state", async () => {
     const storage = installCosMock();
     const topic = await createKnowledgeTopic(config, "新能源");

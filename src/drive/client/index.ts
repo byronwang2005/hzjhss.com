@@ -1187,7 +1187,7 @@ async function uploadFiles(files: File[], pathForFile: (file: File) => string, k
       const signature = signatures.get(file.id);
       if (!signature) return;
       const receipt: UploadRegistrationReceipt = {
-        version: 1,
+        version: 2,
         uploadId: signature.uploadId,
         topicId,
         relativePath: signature.path,

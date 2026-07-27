@@ -4,6 +4,7 @@ import { completeUpload, UploadConflictError } from "../../../src/drive/server/k
 import { normalizeRelativeFilePath } from "../../../src/drive/server/paths";
 import type { KnowledgeRole, UploadCompleteResponse, UploadRegistrationFailure } from "../../../src/drive/shared/contracts";
 import { notifyProcessor } from "../../../src/drive/server/webhooks";
+import { CosRequestError } from "../../../src/drive/server/cos";
 
 export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, waitUntil }) => {
   try {
@@ -57,6 +58,7 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, wai
           code: "FILE_REGISTRATION_FAILED",
           requestId,
           itemIndex,
+          ...registrationErrorDetails(error),
         });
         failures.push({
           relativePath,
@@ -74,3 +76,16 @@ export const onRequestPost: PagesFunction<DriveEnv> = async ({ request, env, wai
     } satisfies UploadCompleteResponse);
   } catch (error) { return errorResponse(error); }
 };
+
+function registrationErrorDetails(error: unknown): { errorName: string; cosOperation?: string; upstreamStatus?: number } {
+  if (error instanceof CosRequestError) {
+    return {
+      errorName: error.name,
+      cosOperation: error.operation,
+      upstreamStatus: error.status,
+    };
+  }
+  return {
+    errorName: error instanceof Error ? error.name : "UnknownError",
+  };
+}
