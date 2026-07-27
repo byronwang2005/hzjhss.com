@@ -581,6 +581,22 @@
   letter-spacing: 0;
 }
 
+.drive-ai-qa-markdown details.footnotes > .footnotes-title {
+  width: fit-content;
+  cursor: pointer;
+  user-select: none;
+}
+
+.drive-ai-qa-markdown details.footnotes:not([open]) > .footnotes-title {
+  margin-bottom: 0;
+}
+
+.drive-ai-qa-markdown details.footnotes > .footnotes-title:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--jh-color-focus);
+  outline-offset: 3px;
+}
+
 .drive-ai-qa-markdown .footnotes-list {
   margin: 0;
   padding-inline-start: 1.55em;

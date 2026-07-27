@@ -446,6 +446,14 @@ export class DriveAiQa extends LitElement {
 
   private handleMarkdownClick = (event: MouseEvent): void => {
     const eventTarget = event.target as (Element & { closest?: Element["closest"] }) | null;
+    const citation = eventTarget?.closest?.(".footnote-ref a") as HTMLAnchorElement | null;
+    const footnoteId = citation?.getAttribute("href")?.replace(/^#/, "");
+    if (footnoteId) {
+      const footnote = document.getElementById(footnoteId);
+      const sources = footnote?.closest<HTMLDetailsElement>("details.footnotes");
+      if (sources) sources.open = true;
+      return;
+    }
     const target = eventTarget?.closest?.("[data-copy-code]") as HTMLButtonElement | null;
     if (!target) return;
     const code = target.closest(".drive-ai-qa-code")?.querySelector<HTMLElement>("code");

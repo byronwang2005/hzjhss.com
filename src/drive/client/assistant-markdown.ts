@@ -171,12 +171,19 @@ function configureRenderer(md: MarkdownIt): void {
   const defaultImage = md.renderer.rules.image;
   const defaultLinkOpen = md.renderer.rules.link_open;
 
-  md.renderer.rules.footnote_block_open = (_tokens, _index, options) => `
+  md.renderer.rules.footnote_block_open = (_tokens, _index, options, env) => {
+    const streaming = Boolean((env as AssistantMarkdownEnv).streaming);
+    return `
 <hr class="footnotes-sep"${options.xhtmlOut ? " /" : ""}>
-<section class="footnotes" aria-label="资料来源">
-<h3 class="footnotes-title">资料来源</h3>
+<${streaming ? "section" : "details"} class="footnotes" aria-label="资料来源">
+<${streaming ? "h3" : "summary"} class="footnotes-title">资料来源</${streaming ? "h3" : "summary"}>
 <ol class="footnotes-list">
 `;
+  };
+  md.renderer.rules.footnote_block_close = (_tokens, _index, _options, env) => {
+    const streaming = Boolean((env as AssistantMarkdownEnv).streaming);
+    return `</ol>\n</${streaming ? "section" : "details"}>\n`;
+  };
   md.renderer.rules.footnote_ref = (tokens, index, options, env, self) => {
     const rendered = defaultFootnoteRef?.(tokens, index, options, env, self) || "";
     const number = Number(tokens[index].meta?.id ?? 0) + 1;

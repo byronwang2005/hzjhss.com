@@ -73,10 +73,15 @@ $$\text{净利润}=\text{收入}-\text{成本}$$
     const second = render(source, "answer-b");
 
     expect(first.querySelector(".footnotes-title")?.textContent).toBe("资料来源");
+    expect(first.querySelector("details.footnotes")?.hasAttribute("open")).toBe(false);
     expect(first.querySelectorAll(".footnote-ref")).toHaveLength(2);
     expect(first.querySelector(".footnote-ref a")?.getAttribute("href")).toBe("#footnote-answer-a-1");
     expect(second.querySelector(".footnote-ref a")?.getAttribute("href")).toBe("#footnote-answer-b-1");
     expect(first.querySelector(".footnote-backref")?.getAttribute("aria-label")).toBe("返回正文引用 1");
+
+    const streaming = render(source, "answer-streaming", true);
+    expect(streaming.querySelector("details.footnotes")).toBeNull();
+    expect(streaming.querySelector("section.footnotes")).not.toBeNull();
 
     const legacy = render([
       "库存增长。[年度报告.pdf，第 12 页]",
