@@ -56,6 +56,7 @@ const GREETING_HOLD_MS = 1_800;
 const GREETING_DELETE_SPEED_MS = 35;
 const GREETING_GAP_MS = 250;
 const CODEX_LAUNCH_CONFIRM_MS = 2_500;
+const QA_STARTER_SUGGESTIONS_ENABLED = false;
 const QA_PROGRESS_STAGES: Array<{ stage: QaProgressStage; label: string; icon: string }> = [
   { stage: "parsing", label: "解析问题", icon: "chat-circle-dots" },
   { stage: "retrieving", label: "检索资料", icon: "magnifying-glass" },
@@ -286,7 +287,7 @@ export class DriveAiQa extends LitElement {
           <h3>${this.ready ? isGlobal ? "今天想从资料里确认什么？" : "从这个专题开始提问" : "等待文件处理"}</h3>
           <p>${this.ready ? "描述你想比较、核实或追溯的问题，回答会尽量关联到原始资料。" : "索引完成后，这里会提供基于资料的可追溯回答。"}</p>
         </div>
-        ${this.ready ? html`
+        ${this.ready && QA_STARTER_SUGGESTIONS_ENABLED ? html`
           <div class="drive-ai-qa-suggestions" aria-label="建议问题">
             ${suggestions.map((suggestion) => html`
               <button type="button" @click=${() => this.applySuggestion(suggestion)}>${renderIcon("arrow-right")}<span>${suggestion}</span></button>

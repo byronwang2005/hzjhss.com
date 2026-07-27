@@ -338,18 +338,13 @@ describe("drive AI Q&A component", () => {
     expect(topicQa.querySelector(".drive-ai-qa")?.getAttribute("aria-label")).toBe("在新能源中提问");
   });
 
-  it("offers scope-aware starter questions and copies a suggestion into the composer", async () => {
+  it("temporarily hides scope-aware starter questions", async () => {
     const globalQa = await mountQa("global");
     const topicQa = await mountQa("topic");
 
     expect(globalQa.querySelector(".drive-ai-qa-capabilities")).toBeNull();
-    expect(globalQa.querySelectorAll(".drive-ai-qa-suggestions button")).toHaveLength(3);
-    expect(topicQa.querySelectorAll(".drive-ai-qa-suggestions button")).toHaveLength(3);
-    const suggestion = globalQa.querySelector<HTMLButtonElement>(".drive-ai-qa-suggestions button")!;
-    const suggestionText = suggestion.textContent!.trim();
-    suggestion.click();
-    await globalQa.updateComplete;
-    expect(globalQa.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe(suggestionText);
+    expect(globalQa.querySelector(".drive-ai-qa-suggestions")).toBeNull();
+    expect(topicQa.querySelector(".drive-ai-qa-suggestions")).toBeNull();
     expect(globalQa.querySelector(".drive-ai-qa-typewriter")).toBeNull();
   });
 
