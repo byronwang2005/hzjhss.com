@@ -332,6 +332,7 @@ describe("knowledge client surface", () => {
     expect(source).toContain('api<UploadCompleteResponse>("/upload-complete"');
     expect(source).toContain("createUploadRegistrationScheduler");
     expect(source).toContain("readPendingUploads");
+    expect(source).not.toContain('data-action="retry-pending-registrations"');
   });
 
   it("renders role tabs, contextual uploads and accessible table cells", () => {

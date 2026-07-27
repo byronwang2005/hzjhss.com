@@ -631,8 +631,6 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await changeFilePage("previous");
   } else if (action === "next-file-page") {
     await changeFilePage("next");
-  } else if (action === "retry-pending-registrations") {
-    await resumePendingUploadRegistrations();
   } else if (action === "pick-reference") {
     root.querySelector<HTMLInputElement>("[data-reference-input]")?.click();
   } else if (action === "pick-reference-folder") {
@@ -1682,7 +1680,6 @@ function renderFiles(): TemplateResult {
   const methodologyExists = Boolean(listing?.files.some((file) => file.knowledgeRole === "methodology"));
   const uploadLabel = role === "methodology" && methodologyExists ? "替换专题方法论" : presentation.uploadLabel;
   const uploadBatch = state.uploadBatch?.topicId === state.topic?.id ? state.uploadBatch : null;
-  const pendingRegistrations = readPendingUploads().filter((receipt) => receipt.topicId === state.topic?.id && receipt.knowledgeRole === role).length;
   return html`
     <section class=${`drive-tab-panel drive-files-panel is-${role}`}>
       <div class=${`drive-file-role-tabs${state.role === "admin" ? "" : " is-two-column"}`} role="tablist" aria-label="资料类型">
@@ -1711,9 +1708,6 @@ function renderFiles(): TemplateResult {
             </button>
             ${state.role === "admin"
               ? html`
-                  ${pendingRegistrations
-                    ? html`<button class="drive-control" type="button" data-action="retry-pending-registrations" ?disabled=${pendingRegistrationResumeActive}>${renderIcon("arrow-clockwise")}重新登记 ${pendingRegistrations}</button>`
-                    : nothing}
                   <button class="drive-control drive-control-primary" type="button" data-action=${presentation.uploadAction}>
                     ${renderIcon(role === "methodology" ? "database" : "upload-simple", "bold")}${uploadLabel}
                   </button>
