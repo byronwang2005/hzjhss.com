@@ -24,10 +24,14 @@ export const onRequestPatch: PagesFunction<DriveEnv> = async ({ request, env, wa
       knowledgeRole: body.knowledgeRole,
       relativePath: body.path,
       incorporated: body.incorporated,
-      reportDate: body.reportDate,
+      latest: body.latest,
       updatedBy: session.displayName,
     });
     if (result.indexChanged) waitUntil(notifyIndexer(env, { topicId: String(body.topicId) }));
-    return jsonResponse({ ok: true, file: result.metadata });
+    return jsonResponse({
+      ok: true,
+      file: result.metadata,
+      ...(result.latestEvidenceGeneration ? { latestEvidenceGeneration: result.latestEvidenceGeneration } : {}),
+    });
   } catch (error) { return errorResponse(error); }
 };

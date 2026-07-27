@@ -105,6 +105,8 @@ export interface KnowledgeFile extends DriveFile {
   knowledgeRole: KnowledgeRole;
   reportDate?: string;
   reportDateSource?: ReportDateSource;
+  isLatestEvidence?: boolean;
+  latestEvidenceSource?: "auto" | "manual";
   incorporatedAt?: string;
   incorporatedBy?: string;
   processing?: ProcessingStatus;
@@ -121,6 +123,21 @@ export interface FileListProgressUpdate {
   state: FileListProgressState;
   completed?: number;
   total?: number;
+}
+
+interface LatestEvidenceOverride {
+  version: 1;
+  generation: string;
+  path: string;
+  sourceEtag: string;
+  selectedAt: string;
+}
+
+interface LatestEvidenceManifest {
+  indexVersion?: number;
+  latestEvidencePath?: string;
+  latestEvidenceSource?: "auto" | "manual";
+  latestEvidenceRevision?: string;
 }
 
 interface ReferenceMetadataEntry {
@@ -205,6 +222,16 @@ export function topicIndexManifestPath(topicId: string): string {
   return `${topicPrefix(topicId)}index/manifest.json`;
 }
 
+export function latestEvidenceOverrideObjectPath(topicId: string): string {
+  return `${topicPrefix(topicId)}latest-evidence-override.json`;
+}
+
+export async function readLatestEvidenceOverrideRevision(config: DriveConfig, topicIdInput: unknown): Promise<string | null> {
+  const topicId = normalizeTopicId(topicIdInput);
+  const override = await readJson<LatestEvidenceOverride>(config, latestEvidenceOverrideObjectPath(topicId));
+  return override?.version === 1 && typeof override.generation === "string" ? override.generation : null;
+}
+
 export async function createKnowledgeTopic(config: DriveConfig, nameInput: unknown): Promise<TopicMetadata> {
   const now = new Date().toISOString();
   const name = normalizeTopicName(nameInput);
@@ -285,12 +312,33 @@ export async function listKnowledgeFiles(
     metadataConcurrency?: number;
     requestId?: string;
   } = {},
-): Promise<{ role: KnowledgeRole; prefix: string; folders: DriveFolder[]; files: KnowledgeFile[]; nextCursor: string | null }> {
+): Promise<{ role: KnowledgeRole; prefix: string; latestEvidenceRevision?: string; folders: DriveFolder[]; files: KnowledgeFile[]; nextCursor: string | null }> {
   const topicId = normalizeTopicId(topicIdInput);
   const knowledgeRole = normalizeRequiredKnowledgeRole(knowledgeRoleInput);
   options.onProgress?.({ stage: "topic", state: "active" });
   const topic = await readKnowledgeTopic(config, topicId);
   options.onProgress?.({ stage: "topic", state: "complete" });
+  let manifest: LatestEvidenceManifest | null = null;
+  let latestEvidenceRevision: string | null = null;
+  if (knowledgeRole === "evidence") {
+    try {
+      [manifest, latestEvidenceRevision] = await Promise.all([
+        readJson<LatestEvidenceManifest>(config, topicIndexManifestPath(topicId)),
+        readLatestEvidenceOverrideRevision(config, topicId),
+      ]);
+    } catch (error) {
+      console.error("Latest evidence manifest read failed", {
+        code: "LATEST_EVIDENCE_MANIFEST_READ_FAILED",
+        requestId: options.requestId,
+        topicId,
+        error: serverErrorDetails(error),
+      });
+    }
+  }
+  const manifestRevision = manifest?.latestEvidenceRevision ?? null;
+  const manifestIsCurrent = manifest?.indexVersion === topic.indexVersion && manifestRevision === latestEvidenceRevision;
+  const latestEvidencePath = manifestIsCurrent ? manifest?.latestEvidencePath : undefined;
+  const latestEvidenceSource = manifestIsCurrent ? manifest?.latestEvidenceSource : undefined;
   const relativePrefix = relativePrefixInput ? normalizeDirectoryPrefix(relativePrefixInput) : "";
   const filesPrefix = roleFilesPrefix(topicId, knowledgeRole);
   const storagePrefix = `${filesPrefix}${relativePrefix}`;
@@ -334,6 +382,7 @@ export async function listKnowledgeFiles(
             : {}),
         };
       }
+      const isLatestEvidence = knowledgeRole === "evidence" && relativePath === latestEvidencePath;
       return {
         ...file,
         name: relativePath.slice(relativePrefix.length),
@@ -345,6 +394,7 @@ export async function listKnowledgeFiles(
         knowledgeRole,
         reportDate: meta?.reportDate,
         reportDateSource: meta?.reportDateSource,
+        ...(isLatestEvidence ? { isLatestEvidence: true, latestEvidenceSource } : {}),
         incorporatedAt: meta?.incorporatedAt,
         incorporatedBy: meta?.incorporatedBy,
         processing: publicProcessing,
@@ -359,6 +409,9 @@ export async function listKnowledgeFiles(
   const response = {
     role: knowledgeRole,
     prefix: relativePrefix,
+    ...(manifestIsCurrent && manifest?.latestEvidenceRevision
+      ? { latestEvidenceRevision: manifest.latestEvidenceRevision }
+      : {}),
     folders: listed.folders.map((folder) => ({ name: folder.name, path: folder.path.slice(filesPrefix.length) })),
     files: enriched.filter((file): file is KnowledgeFile => Boolean(file)),
     nextCursor: listed.nextCursor,
@@ -619,7 +672,8 @@ export async function deleteKnowledgeFile(config: DriveConfig, topicIdInput: unk
   const affectsIndex = knowledgeRole !== "reference";
   const updatedAt = new Date().toISOString();
   if (affectsIndex) {
-    await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify({ ...topic, updatedAt, indexVersion: topic.indexVersion + 1 }, null, 2), "application/json; charset=utf-8");
+    const nextTopic = { ...topic, updatedAt, indexVersion: topic.indexVersion + 1 };
+    await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify(nextTopic, null, 2), "application/json; charset=utf-8");
   }
   const deletions: Promise<unknown>[] = [
     deleteObject(config, sourcePath(topicId, knowledgeRole, relativePath)),
@@ -653,8 +707,8 @@ export async function createDownloadUrl(config: DriveConfig, topicIdInput: unkno
 
 export async function patchKnowledgeFile(
   config: DriveConfig,
-  input: { topicId: unknown; knowledgeRole: unknown; relativePath: unknown; incorporated?: unknown; reportDate?: unknown; updatedBy: string },
-): Promise<{ metadata: FileMetadata; indexChanged: boolean }> {
+  input: { topicId: unknown; knowledgeRole: unknown; relativePath: unknown; incorporated?: unknown; latest?: unknown; updatedBy: string },
+): Promise<{ metadata: FileMetadata; indexChanged: boolean; latestEvidenceGeneration?: string }> {
   const topicId = normalizeTopicId(input.topicId);
   const role = normalizeRequiredKnowledgeRole(input.knowledgeRole);
   const relativePath = normalizeRelativeFilePath(input.relativePath);
@@ -664,6 +718,8 @@ export async function patchKnowledgeFile(
   const now = new Date().toISOString();
   let next = { ...metadata, knowledgeRole: role };
   let indexChanged = false;
+  let latestEvidenceGeneration: string | undefined;
+  let metadataChanged = false;
   if (input.incorporated !== undefined) {
     if (role !== "reference" || typeof input.incorporated !== "boolean") throw new Error("仅研报原件可以修改纳入状态");
     if (input.incorporated) {
@@ -672,28 +728,45 @@ export async function patchKnowledgeFile(
       delete next.incorporatedAt;
       delete next.incorporatedBy;
     }
+    metadataChanged = true;
   }
-  if (input.reportDate !== undefined) {
-    if (role !== "evidence") throw new Error("仅时效资料可以修改资料日期");
-    const reportDate = normalizeReportDate(input.reportDate);
-    next = { ...next, reportDate, reportDateSource: "manual" };
-    indexChanged = next.reportDate !== metadata.reportDate || metadata.reportDateSource !== "manual";
-  }
-  if (input.incorporated === undefined && input.reportDate === undefined) throw new Error("没有可更新的文件字段");
-  if (indexChanged) {
-    const topic = await readKnowledgeTopic(config, topicId);
-    // Advance the version first. If a later write fails, readers will reject
-    // the old manifest instead of serving an index with a stale report date.
-    await putObjectText(config, `${topicPrefix(topicId)}topic.json`, JSON.stringify({ ...topic, updatedAt: now, indexVersion: topic.indexVersion + 1 }, null, 2), "application/json; charset=utf-8");
-    await putObjectText(config, fileMetaPath(topicId, role, relativePath), JSON.stringify(next, null, 2), "application/json; charset=utf-8");
-    await Promise.all([
+  if (input.latest !== undefined) {
+    if (role !== "evidence" || input.latest !== true) throw new Error("仅时效资料可以设为最新");
+    const processing = await readJson<ProcessingStatus>(config, processingStatusPath(topicId, role, relativePath));
+    if (processing?.sourceEtag !== metadata.etag || processing.state !== "ready") {
+      throw new Error("资料处理完成后才能设为最新");
+    }
+    const overridePath = latestEvidenceOverrideObjectPath(topicId);
+    const override: LatestEvidenceOverride = {
+      version: 1,
+      generation: crypto.randomUUID(),
+      path: relativePath,
+      sourceEtag: metadata.etag,
+      selectedAt: now,
+    };
+    latestEvidenceGeneration = override.generation;
+    await putObjectText(config, overridePath, JSON.stringify(override, null, 2), "application/json; charset=utf-8");
+    const invalidations = await Promise.allSettled([
       deleteObject(config, topicIndexPath(topicId)),
       deleteObject(config, topicIndexManifestPath(topicId)),
     ]);
-  } else {
+    for (const invalidation of invalidations) {
+      if (invalidation.status === "rejected") {
+        console.error("Latest evidence index invalidation failed", {
+          code: "LATEST_EVIDENCE_INDEX_INVALIDATION_FAILED",
+          topicId,
+          path: relativePath,
+          error: serverErrorDetails(invalidation.reason),
+        });
+      }
+    }
+    indexChanged = true;
+  }
+  if (input.incorporated === undefined && input.latest === undefined) throw new Error("没有可更新的文件字段");
+  if (metadataChanged) {
     await putObjectText(config, fileMetaPath(topicId, role, relativePath), JSON.stringify(next, null, 2), "application/json; charset=utf-8");
   }
-  return { metadata: next, indexChanged };
+  return { metadata: next, indexChanged, ...(latestEvidenceGeneration ? { latestEvidenceGeneration } : {}) };
 }
 
 export async function readTopicSearchIndex(config: DriveConfig, topicIdInput: unknown): Promise<SerializedSearchIndex | null> {
@@ -740,13 +813,6 @@ export function normalizeKnowledgeRole(input: unknown): KnowledgeRole {
 function normalizeRequiredKnowledgeRole(input: unknown): KnowledgeRole {
   if (input === undefined || input === null || input === "") throw new Error("请指定资料类型");
   return normalizeKnowledgeRole(input);
-}
-
-function normalizeReportDate(input: unknown): string {
-  if (typeof input !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(input)) throw new Error("资料日期必须为 YYYY-MM-DD");
-  const date = new Date(`${input}T00:00:00Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== input) throw new Error("资料日期无效");
-  return input;
 }
 
 async function readJson<T>(config: DriveConfig, path: string): Promise<T | null> {

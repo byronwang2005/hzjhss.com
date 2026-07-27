@@ -38,14 +38,6 @@ export interface FileListLoadState {
   error: string;
 }
 
-export interface EditReportDateState {
-  path: string;
-  fileName: string;
-  value: string;
-  pending: boolean;
-  error: string;
-}
-
 export interface FolderManagementState {
   path: string;
   name: string;
@@ -96,7 +88,6 @@ export interface DriveClientState {
   theme: ThemeName;
   deleteConfirmation: DeleteConfirmation | null;
   createTopicOpen: boolean;
-  editReportDate: EditReportDateState | null;
   fileLoad: FileListLoadState | null;
   uploadBatch: UploadBatchState | null;
   expandedFilePath: string | null;
@@ -128,7 +119,6 @@ export const state: DriveClientState = {
   theme: window.jhssTheme.getResolvedTheme(),
   deleteConfirmation: null,
   createTopicOpen: false,
-  editReportDate: null,
   fileLoad: null,
   uploadBatch: null,
   expandedFilePath: null,

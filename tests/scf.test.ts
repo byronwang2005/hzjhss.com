@@ -78,6 +78,33 @@ describe("SCF event routing and chunking", () => {
     expect(indexer.tokenize("新能源库存")).toEqual(expect.arrayContaining(["新能源", "库存"]));
   });
 
+  it("selects the newest evidence deterministically and honors a valid manual override", () => {
+    const sets = [
+      { path: "method.md", sourceEtag: "method", knowledgeRole: "methodology", reportDate: "2026-07-30", uploadedAt: "2026-07-30T00:00:00Z" },
+      { path: "older.pdf", sourceEtag: "older", knowledgeRole: "evidence", reportDate: "2026-07-20", uploadedAt: "2026-07-21T00:00:00Z" },
+      { path: "b.pdf", sourceEtag: "b", knowledgeRole: "evidence", reportDate: "2026-07-27", uploadedAt: "2026-07-28T00:00:00Z" },
+      { path: "a.pdf", sourceEtag: "a", knowledgeRole: "evidence", reportDate: "2026-07-27", uploadedAt: "2026-07-28T00:00:00Z" },
+    ];
+    expect(indexer.selectLatestEvidence(sets)).toEqual({ path: "a.pdf", source: "auto" });
+    expect(indexer.selectLatestEvidence(sets, {
+      version: 1,
+      generation: "manual-1",
+      path: "older.pdf",
+      sourceEtag: "older",
+      selectedAt: "2026-07-29T00:00:00Z",
+    })).toEqual({ path: "older.pdf", source: "manual" });
+    expect(indexer.selectLatestEvidence([
+      ...sets,
+      { path: "new-upload.pdf", sourceEtag: "new", knowledgeRole: "evidence", reportDate: "2026-07-01", uploadedAt: "2026-07-30T00:00:00Z" },
+    ], {
+      version: 1,
+      generation: "manual-1",
+      path: "older.pdf",
+      sourceEtag: "older",
+      selectedAt: "2026-07-29T00:00:00Z",
+    })).toEqual({ path: "a.pdf", source: "auto" });
+  });
+
   it("accepts topic IDs from SCF async invocation event variants", () => {
     const topicId = "t_abcdefghijkl";
     expect(indexer.extractTopicId({ topicId })).toBe(topicId);

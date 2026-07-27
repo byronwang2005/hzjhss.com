@@ -90,6 +90,7 @@ const statusController = createTransientStatusController<"neutral" | "success" |
 );
 
 let fileRefreshTimer: number | undefined;
+let latestEvidenceRefreshTimer: number | undefined;
 let fileProgressClockTimer: number | undefined;
 let fileLoadClockTimer: number | undefined;
 let fileLoadAbortController: AbortController | null = null;
@@ -476,10 +477,6 @@ function handleInput(event: Event): void {
   if (target.name === "displayName") state.loginName = target.value;
   if (target.name === "accessCode") state.accessCode = target.value;
   if (target.name === "topicName") state.topicName = target.value;
-  if (target.name === "reportDate" && state.editReportDate) {
-    state.editReportDate.value = target.value;
-    state.editReportDate.error = "";
-  }
   if (target.name === "deleteConfirmation" && state.deleteConfirmation) {
     state.deleteConfirmation.input = target.value;
     state.deleteConfirmation.error = "";
@@ -543,9 +540,6 @@ async function handleSubmit(event: SubmitEvent): Promise<void> {
       await openTopic(topic.id, "files");
     } catch (error) { showError(error); }
     return;
-  }
-  if (form.matches("[data-report-date-form]")) {
-    await submitReportDate();
   }
 }
 
@@ -693,20 +687,23 @@ async function handleClick(event: MouseEvent): Promise<void> {
     await applyFolderIncorporation(button.dataset.incorporated === "true");
   } else if (action === "close-folder-management") {
     closeFolderManagement();
-  } else if (action === "edit-report-date") {
-    state.editReportDate = {
-      path: String(button.dataset.path || ""),
-      fileName: String(button.dataset.name || fileNameFromPath(String(button.dataset.path || ""))),
-      value: String(button.dataset.reportDate || ""),
-      pending: false,
-      error: "",
-    };
+  } else if (action === "set-latest-evidence") {
+    const path = String(button.dataset.path || "");
+    if (!path) return;
+    const result = await api<{ latestEvidenceGeneration?: string }>("/object", {
+      method: "PATCH",
+      body: {
+        topicId: state.topic?.id,
+        knowledgeRole: "evidence",
+        path,
+        latest: true,
+      },
+    });
+    if (!result.latestEvidenceGeneration) throw new Error("最新资料选择未返回索引版本，请重试。");
+    applyLatestEvidenceSelection(path);
+    setStatus("已修正最新资料，索引正在重建。", "success");
     renderApp();
-  } else if (action === "cancel-report-date") {
-    if (!state.editReportDate?.pending) {
-      state.editReportDate = null;
-      renderApp();
-    }
+    scheduleLatestEvidenceRefresh(state.topic?.id || "", path, result.latestEvidenceGeneration);
   } else if (action === "delete-topic" && state.topic) {
     state.deleteConfirmation = {
       kind: "topic",
@@ -894,34 +891,6 @@ async function submitDeleteConfirmation(): Promise<void> {
   }
 }
 
-async function submitReportDate(): Promise<void> {
-  const edit = state.editReportDate;
-  if (!edit || edit.pending) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(edit.value.trim())) {
-    edit.error = "请选择有效的资料日期。";
-    renderApp();
-    return;
-  }
-  edit.pending = true;
-  edit.error = "";
-  renderApp();
-  try {
-    await api("/object", {
-      method: "PATCH",
-      body: { topicId: state.topic?.id, knowledgeRole: "evidence", path: edit.path, reportDate: edit.value.trim() },
-    });
-    if (state.editReportDate !== edit) return;
-    state.editReportDate = null;
-    setStatus("资料日期已更新，索引正在重建。", "success");
-    await loadFiles();
-  } catch (error) {
-    if (state.editReportDate !== edit) return;
-    edit.pending = false;
-    edit.error = error instanceof Error ? error.message : "资料日期更新失败，请重试。";
-    renderApp();
-  }
-}
-
 function cancelFileLoad(): void {
   fileLoadAbortController?.abort();
   fileLoadAbortController = null;
@@ -929,6 +898,47 @@ function cancelFileLoad(): void {
     window.clearTimeout(fileLoadClockTimer);
     fileLoadClockTimer = undefined;
   }
+  if (latestEvidenceRefreshTimer !== undefined) {
+    window.clearTimeout(latestEvidenceRefreshTimer);
+    latestEvidenceRefreshTimer = undefined;
+  }
+}
+
+function applyLatestEvidenceSelection(path: string): void {
+  const listings = new Set([state.listing, state.fileRoleListings.evidence]);
+  for (const listing of listings) {
+    if (!listing) continue;
+    for (const file of listing.files) {
+      if (file.knowledgeRole !== "evidence") continue;
+      if (file.path === path) {
+        file.isLatestEvidence = true;
+        file.latestEvidenceSource = "manual";
+      } else {
+        delete file.isLatestEvidence;
+        delete file.latestEvidenceSource;
+      }
+    }
+  }
+}
+
+function scheduleLatestEvidenceRefresh(topicId: string, path: string, generation: string, attempt = 0): void {
+  if (!topicId || !generation || attempt >= 60) return;
+  if (latestEvidenceRefreshTimer !== undefined) window.clearTimeout(latestEvidenceRefreshTimer);
+  latestEvidenceRefreshTimer = window.setTimeout(async () => {
+    latestEvidenceRefreshTimer = undefined;
+    if (state.topic?.id !== topicId || state.topicView !== "files" || state.fileRoleView !== "evidence") return;
+    await loadFiles({ background: true, preservePage: true });
+    const published = state.listing?.latestEvidenceRevision === generation;
+    if (!published) {
+      if (attempt + 1 >= 60) {
+        setStatus("最新资料索引仍在重建，请稍后刷新确认。", "neutral");
+        return;
+      }
+      applyLatestEvidenceSelection(path);
+      renderApp();
+      scheduleLatestEvidenceRefresh(topicId, path, generation, attempt + 1);
+    }
+  }, CLIENT_TIMING.activeFileRefreshMs);
 }
 
 function closeDeleteConfirmation(): void {
@@ -1436,7 +1446,6 @@ function renderShell(): TemplateResult {
     </div>
     ${renderDeleteConfirmation()}
     ${renderCreateTopicDialog()}
-    ${renderReportDateDialog()}
     ${renderFolderManagementDialog()}
   </section>`;
 }
@@ -1591,50 +1600,10 @@ function renderCreateTopicDialog(): TemplateResult | typeof nothing {
   `;
 }
 
-function renderReportDateDialog(): TemplateResult | typeof nothing {
-  const edit = state.editReportDate;
-  if (!edit) return nothing;
-  return html`
-    <wa-dialog
-      class="drive-report-date-dialog"
-      label="编辑资料日期"
-      with-footer
-      .open=${true}
-      @wa-hide=${(event: Event) => { if (edit.pending) event.preventDefault(); }}
-      @wa-after-hide=${handleReportDateDialogAfterHide}
-    >
-      <form id="drive-report-date-form" class="drive-dialog-form" data-report-date-form>
-        <div class="drive-date-target">
-          <span>资料</span><strong>${edit.fileName}</strong>
-        </div>
-        <label class="drive-field">
-          <span>资料日期</span>
-          <small>用于排序和检索时识别资料对应的实际日期。</small>
-          <input name="reportDate" type="date" .value=${edit.value} ?disabled=${edit.pending} required>
-        </label>
-        ${edit.error ? html`<div class="drive-delete-dialog-error" role="alert">${edit.error}</div>` : nothing}
-      </form>
-      <div class="drive-delete-dialog-actions" slot="footer">
-        <button class="drive-control" type="button" data-action="cancel-report-date" ?disabled=${edit.pending}>${renderIcon("x-circle")}取消</button>
-        <button class="drive-control drive-control-primary" type="submit" form="drive-report-date-form" ?disabled=${edit.pending || !edit.value}>
-          ${edit.pending ? html`<span class="drive-spin">${renderIcon("spinner-gap")}</span>保存中…` : html`${renderIcon("check", "bold")}保存日期`}
-        </button>
-      </div>
-    </wa-dialog>
-  `;
-}
-
 function handleCreateTopicDialogAfterHide(): void {
   state.createTopicOpen = false;
   state.topicName = "";
   renderApp();
-}
-
-function handleReportDateDialogAfterHide(): void {
-  if (!state.editReportDate?.pending) {
-    state.editReportDate = null;
-    renderApp();
-  }
 }
 
 function renderFolderManagementDialog(): TemplateResult | typeof nothing {
@@ -1891,7 +1860,7 @@ function renderFileList(
   return html`
     <div class="drive-file-table" role="table" aria-label=${presentation.label}>
       <div class="drive-file-row drive-file-row-head" role="row">
-        <span role="columnheader">名称</span><span role="columnheader">资料日期</span><span role="columnheader">处理状态</span><span role="columnheader">最近更新</span><span role="columnheader">操作</span>
+        <span role="columnheader">名称</span><span role="columnheader">最新资料</span><span role="columnheader">处理状态</span><span role="columnheader">最近更新</span><span role="columnheader">操作</span>
       </div>
       ${repeat(listing.folders, (folder) => folder.path, (folder) => renderFolderRow(folder, role))}
       ${repeat(files, (file) => file.path, renderFileRow)}
@@ -1930,7 +1899,7 @@ function renderFolderRow(folder: KnowledgeFolder, role: KnowledgeRole): Template
   return html`
     <div class="drive-file-row" role="row">
       <span class="drive-file-name" role="cell" data-label="名称">${renderIcon("folder")}<strong>${folder.name}</strong></span>
-      <span role="cell" data-label="资料日期">—</span>
+      <span role="cell" data-label="最新资料">—</span>
       <span role="cell" data-label="处理状态">
         <span class="drive-file-state-chip">目录</span>
       </span>
@@ -1961,7 +1930,7 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
         <span class="drive-file-type-icon">${renderIcon(fileIconName(displayName))}</span>
         <span class="drive-file-name-copy"><strong title=${displayName}>${displayName}</strong><small>${formatBytes(file.size)}</small></span>
       </span>
-      <span role="cell" data-label="资料日期">${file.knowledgeRole === "evidence" ? file.reportDate || "待补充" : "—"}</span>
+      <span role="cell" data-label="最新资料">${renderLatestEvidenceControl(file)}</span>
       <span role="cell" data-label="处理状态">
         <button
           class=${`drive-file-status is-${tone}`}
@@ -1979,7 +1948,6 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
         ${state.role === "admin" && processing?.retryable ? html`<button class="drive-table-action" type="button" data-action="retry-file" data-path=${file.path}>${renderIcon("arrow-clockwise")}重试</button>` : nothing}
         <span class="drive-row-actions-desktop">
           ${state.role === "admin" && file.knowledgeRole === "reference" ? html`<button class="drive-table-action" type="button" data-action="toggle-incorporated" data-path=${file.path} data-incorporated=${String(Boolean(file.incorporatedAt))}>${renderIcon(file.incorporatedAt ? "x-circle" : "check")} ${file.incorporatedAt ? "取消纳入" : "标记纳入"}</button>` : nothing}
-          ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`<button class="drive-table-action" type="button" data-action="edit-report-date" data-path=${file.path} data-name=${displayName} data-report-date=${file.reportDate || ""}>${renderIcon("calendar-dots", "duotone")}编辑资料日期</button>` : nothing}
           <button class="drive-table-action" type="button" data-action="download-file" data-path=${file.path}>${renderIcon("download-simple")}下载</button>
           ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`<button class="drive-table-action is-danger" type="button" data-action="delete-file" data-path=${file.path} data-name=${displayName}>${renderIcon("trash")}删除</button>` : nothing}
         </span>
@@ -1992,9 +1960,6 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
               ${file.incorporatedAt ? "取消纳入方法论" : "标记纳入方法论"}
             </wa-dropdown-item>
           ` : nothing}
-          ${state.role === "admin" && file.knowledgeRole === "evidence" ? html`
-            <wa-dropdown-item data-action="edit-report-date" data-path=${file.path} data-name=${displayName} data-report-date=${file.reportDate || ""}>编辑资料日期</wa-dropdown-item>
-          ` : nothing}
           <wa-dropdown-item data-action="download-file" data-path=${file.path}>下载文件</wa-dropdown-item>
           ${state.role === "admin" && file.knowledgeRole !== "methodology" ? html`
             <wa-dropdown-item variant="danger" data-action="delete-file" data-path=${file.path} data-name=${displayName}>删除文件</wa-dropdown-item>
@@ -2003,6 +1968,35 @@ function renderFileRow(file: KnowledgeFile): TemplateResult {
       </span>
     </div>
     ${expanded ? renderFileProgressDetail(file, stage, status, detail) : nothing}
+  `;
+}
+
+function renderLatestEvidenceControl(file: KnowledgeFile): TemplateResult | string {
+  if (file.knowledgeRole !== "evidence") return "—";
+  if (file.isLatestEvidence) {
+    return html`
+      <span class="drive-latest-evidence is-selected" role="radio" aria-checked="true">
+        ${renderIcon("check-circle", "fill")}
+        <span><strong>最新</strong><small>${file.latestEvidenceSource === "manual" ? "人工修正" : "自动识别"}</small></span>
+      </span>
+    `;
+  }
+  if (state.role !== "admin") return "—";
+  const ready = file.processing?.state === "ready";
+  return html`
+    <button
+      class="drive-latest-evidence"
+      type="button"
+      role="radio"
+      aria-checked="false"
+      data-action="set-latest-evidence"
+      data-path=${file.path}
+      ?disabled=${!ready}
+      title=${ready ? "将这份资料设为当前最新资料" : "资料处理完成后才能设为最新"}
+    >
+      ${renderIcon("circle-notch")}
+      <span><strong>设为最新</strong></span>
+    </button>
   `;
 }
 

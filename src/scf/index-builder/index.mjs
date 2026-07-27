@@ -9,6 +9,8 @@ export async function main(event, context) {
   const topicKey = `${ROOT_PREFIX}topics/${topicId}/topic.json`;
   const topic = await getJson(topicKey);
   if (!topic) return { ok: false, reason: "topic missing" };
+  const overrideKey = `${ROOT_PREFIX}topics/${topicId}/latest-evidence-override.json`;
+  const latestEvidenceOverride = await getJson(overrideKey);
   const indexVersion = Number(topic.indexVersion || 0);
   const chunkKeys = (await listAll(`${ROOT_PREFIX}topics/${topicId}/processed/`)).filter((key) => key.endsWith("/chunks.json"));
   const validSets = [];
@@ -21,18 +23,20 @@ export async function main(event, context) {
     ]);
     const knowledgeRole = knowledgeRoleForPath(metadata?.knowledgeRole, set.path, topic.methodologyPath);
     if (current?.etag === set.sourceEtag && knowledgeRole === set.knowledgeRole) {
-      validSets.push({ ...set, knowledgeRole, reportDate: metadata?.reportDate });
+      validSets.push({ ...set, knowledgeRole, reportDate: metadata?.reportDate, uploadedAt: metadata?.uploadedAt });
     }
   }
+  const latestEvidence = selectLatestEvidence(validSets, latestEvidenceOverride);
   const chunks = validSets.flatMap((set) => set.chunks.map((chunk) => ({
     ...chunk,
     topicName: topic.name,
     knowledgeRole: set.knowledgeRole,
     ...(set.reportDate ? { reportDate: set.reportDate } : {}),
+    ...(set.path === latestEvidence?.path ? { isLatestEvidence: true } : {}),
   })));
   const search = new MiniSearch({
     fields: ["content", "fileName", "locator", "topicName"],
-    storeFields: ["knowledgeRole", "reportDate", "topicId"],
+    storeFields: ["knowledgeRole", "reportDate", "isLatestEvidence", "topicId"],
     tokenize,
     processTerm: (term) => term,
     idField: "id",
@@ -43,20 +47,76 @@ export async function main(event, context) {
   if (!currentTopic || currentTopic.indexVersion !== indexVersion || currentTopic.name !== topic.name) {
     return { ok: false, reason: "topic changed during build" };
   }
+  if (!sameLatestEvidenceOverride(await getJson(overrideKey), latestEvidenceOverride)) {
+    return { ok: false, reason: "latest evidence selection changed during build" };
+  }
   if (!(await snapshotIsCurrent(topicId, validSets))) return { ok: false, reason: "source changed during build" };
-  await putJson(`${ROOT_PREFIX}topics/${topicId}/index/search-index.json`, { version: 2, topicId, topicName: topic.name, indexVersion, generatedAt: now, chunks, index: search.toJSON() });
+  await putJson(`${ROOT_PREFIX}topics/${topicId}/index/search-index.json`, {
+    version: 2,
+    topicId,
+    topicName: topic.name,
+    indexVersion,
+    ...(latestEvidenceOverride?.generation ? { latestEvidenceRevision: latestEvidenceOverride.generation } : {}),
+    generatedAt: now,
+    chunks,
+    index: search.toJSON(),
+  });
   if (!(await snapshotIsCurrent(topicId, validSets))) return { ok: false, reason: "source changed before publish" };
   const publishTopic = await getJson(topicKey);
   if (!publishTopic || publishTopic.indexVersion !== indexVersion || publishTopic.name !== topic.name) {
     return { ok: false, reason: "topic changed before publish" };
   }
-  await putJson(`${ROOT_PREFIX}topics/${topicId}/index/manifest.json`, { version: 1, topicId, generatedAt: now, indexVersion, fileCount: validSets.length, chunkCount: chunks.length, sourceEtags: validSets.map((set) => ({ path: set.path, etag: set.sourceEtag })) });
+  if (!sameLatestEvidenceOverride(await getJson(overrideKey), latestEvidenceOverride)) {
+    return { ok: false, reason: "latest evidence selection changed before publish" };
+  }
+  await putJson(`${ROOT_PREFIX}topics/${topicId}/index/manifest.json`, {
+    version: 1,
+    topicId,
+    generatedAt: now,
+    indexVersion,
+    ...(latestEvidenceOverride?.generation ? { latestEvidenceRevision: latestEvidenceOverride.generation } : {}),
+    fileCount: validSets.length,
+    chunkCount: chunks.length,
+    ...(latestEvidence ? {
+      latestEvidencePath: latestEvidence.path,
+      latestEvidenceSource: latestEvidence.source,
+    } : {}),
+    sourceEtags: validSets.map((set) => ({ path: set.path, etag: set.sourceEtag })),
+  });
   await Promise.all(validSets.map(async (set) => {
       const statusKey = `${ROOT_PREFIX}topics/${topicId}/processed/${set.knowledgeRole}/${set.path}.__file__/status.json`;
       const status = await getJson(statusKey);
       if (status?.sourceEtag === set.sourceEtag) await putJson(statusKey, { ...status, state: "ready", updatedAt: now });
   }));
   return { ok: true, fileCount: validSets.length, chunkCount: chunks.length };
+}
+
+export function selectLatestEvidence(sets, override) {
+  const evidence = sets.filter((set) => set.knowledgeRole === "evidence");
+  if (!evidence.length) return null;
+  const manual = override?.version === 1
+    ? evidence.find((set) =>
+        set.path === override.path
+        && set.sourceEtag === override.sourceEtag
+        && !evidence.some((candidate) => String(candidate.uploadedAt || "") > String(override.selectedAt || ""))
+      )
+    : null;
+  if (manual) return { path: manual.path, source: "manual" };
+  const [latest] = [...evidence].sort((left, right) =>
+    String(right.reportDate || "").localeCompare(String(left.reportDate || ""))
+    || String(right.uploadedAt || "").localeCompare(String(left.uploadedAt || ""))
+    || String(left.path).localeCompare(String(right.path))
+  );
+  return { path: latest.path, source: "auto" };
+}
+
+function sameLatestEvidenceOverride(left, right) {
+  if (!left || !right) return left === right;
+  return left.version === right.version
+    && left.generation === right.generation
+    && left.path === right.path
+    && left.sourceEtag === right.sourceEtag
+    && left.selectedAt === right.selectedAt;
 }
 
 async function snapshotIsCurrent(topicId, sets) {

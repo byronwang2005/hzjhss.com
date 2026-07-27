@@ -13,6 +13,7 @@ export interface SearchChunk {
   knowledgeRole?: KnowledgeRole;
   reportDate?: string;
   reportDateSource?: ReportDateSource;
+  isLatestEvidence?: boolean;
 }
 
 export interface SerializedSearchIndex {
@@ -20,6 +21,7 @@ export interface SerializedSearchIndex {
   topicId: string;
   topicName: string;
   indexVersion: number;
+  latestEvidenceRevision?: string;
   generatedAt: string;
   chunks: SearchChunk[];
   index: unknown;
@@ -57,7 +59,7 @@ export function tokenizeKnowledgeText(input: string): string[] {
 export function miniSearchOptions(): Options<SearchChunk> {
   return {
     fields: ["content", "fileName", "locator", "topicName"],
-    storeFields: ["knowledgeRole", "reportDate", "topicId"],
+    storeFields: ["knowledgeRole", "reportDate", "isLatestEvidence", "topicId"],
     tokenize: tokenizeKnowledgeText,
     processTerm: (term) => term,
     idField: "id",
@@ -99,7 +101,7 @@ export function searchSerializedIndex(
     boostDocument: (id) => {
       const chunk = byId.get(String(id));
       return temporal && knowledgeRoleOf(chunk) === "evidence"
-        ? reportDateBoost(chunk?.reportDate, now)
+        ? reportDateBoost(chunk?.reportDate, now) * (chunk?.isLatestEvidence ? 2 : 1)
         : 1;
     },
   });

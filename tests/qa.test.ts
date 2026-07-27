@@ -34,6 +34,15 @@ describe("knowledge retrieval", () => {
     expect(methodology[0].knowledgeRole).toBe("methodology");
   });
 
+  it("adds a latest-report boost only for temporal questions while keeping history searchable", () => {
+    const envelope = buildSerializedSearchIndex("t_abcdefghijkl", "生猪", [
+      { id: "history", topicId: "t_abcdefghijkl", topicName: "生猪", path: "history.pdf", fileName: "history.pdf", locator: "第 1 页", etag: "a", content: "产能库存变化", knowledgeRole: "evidence", reportDate: "2026-07-20" },
+      { id: "latest", topicId: "t_abcdefghijkl", topicName: "生猪", path: "latest.pdf", fileName: "latest.pdf", locator: "第 1 页", etag: "b", content: "产能库存变化", knowledgeRole: "evidence", reportDate: "2026-07-20", isLatestEvidence: true },
+    ]);
+    expect(searchSerializedIndex(envelope, "最新产能库存", { role: "evidence", now: new Date("2026-07-24T00:00:00Z") })[0].id).toBe("latest");
+    expect(searchSerializedIndex(envelope, "产能库存", { role: "evidence" }).map((item) => item.id)).toEqual(expect.arrayContaining(["history", "latest"]));
+  });
+
   it("treats legacy v1 chunks without roles as evidence", () => {
     const current = buildSerializedSearchIndex("t_abcdefghijkl", "新能源", [
       { id: "legacy", topicId: "t_abcdefghijkl", topicName: "新能源", path: "legacy.pdf", fileName: "legacy.pdf", locator: "第 1 页", etag: "a", content: "历史库存数据" },

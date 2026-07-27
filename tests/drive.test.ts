@@ -12,6 +12,7 @@ import {
   fileMetaPath,
   listKnowledgeFiles,
   listKnowledgeTopics,
+  latestEvidenceOverrideObjectPath,
   KNOWLEDGE_LIST_PAGE_SIZE,
   KNOWLEDGE_FOLDER_SUMMARY_PAGE_SIZE,
   KNOWLEDGE_FOLDER_UPDATE_PAGE_SIZE,
@@ -23,6 +24,7 @@ import {
   readKnowledgeTopic,
   sourcePath,
   tempUploadPath,
+  topicIndexManifestPath,
   updateKnowledgeTopic,
 } from "../src/drive/server/knowledge";
 import { createSessionCookie, getDriveSession, isDriveAdmin } from "../src/drive/server/session";
@@ -178,6 +180,129 @@ describe("knowledge topic and upload flow", () => {
       retryable: true,
     });
     expect(nested.files[0].processing).not.toHaveProperty("error");
+  });
+
+  it("allows ready evidence to override the latest selection and preserves versioned override metadata across uploads", async () => {
+    const storage = installCosMock();
+    const topic = await createKnowledgeTopic(config, "生猪");
+    const first = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "周报-2026-07-20.pdf",
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(first.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-first" });
+    const firstMetadata = await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: first.uploadId,
+      relativePath: first.path,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    });
+    await expect(patchKnowledgeFile(config, {
+      topicId: topic.id,
+      knowledgeRole: "evidence",
+      relativePath: first.path,
+      latest: true,
+      updatedBy: "汪旭",
+    })).rejects.toThrow("处理完成后");
+
+    storage.set(processingStatusPath(topic.id, "evidence", first.path), {
+      body: JSON.stringify({
+        version: 1,
+        topicId: topic.id,
+        path: first.path,
+        sourceEtag: firstMetadata.etag,
+        state: "ready",
+        processingKind: firstMetadata.processingKind,
+        updatedAt: "2026-07-21T00:00:00.000Z",
+      }),
+      contentType: "application/json",
+      etag: "status-first",
+    });
+    const patched = await patchKnowledgeFile(config, {
+      topicId: topic.id,
+      knowledgeRole: "evidence",
+      relativePath: first.path,
+      latest: true,
+      updatedBy: "汪旭",
+    });
+    expect(patched.indexChanged).toBe(true);
+    expect(patched.latestEvidenceGeneration).toEqual(expect.any(String));
+    const latestOverride = JSON.parse(storage.get(latestEvidenceOverrideObjectPath(topic.id))!.body) as {
+      generation: string;
+      path: string;
+      sourceEtag: string;
+    };
+    expect(latestOverride).toMatchObject({
+      generation: patched.latestEvidenceGeneration,
+      path: first.path,
+      sourceEtag: firstMetadata.etag,
+    });
+    const topicAfterOverride = await readKnowledgeTopic(config, topic.id);
+    storage.set(topicIndexManifestPath(topic.id), {
+      body: JSON.stringify({
+        version: 1,
+        topicId: topic.id,
+        indexVersion: topicAfterOverride.indexVersion,
+        latestEvidenceRevision: latestOverride.generation,
+        chunkCount: 1,
+        latestEvidencePath: first.path,
+        latestEvidenceSource: "manual",
+      }),
+      contentType: "application/json",
+      etag: "manifest-manual",
+    });
+    const listedWithLatest = await listKnowledgeFiles(config, topic.id, "evidence", "");
+    expect(listedWithLatest.latestEvidenceRevision).toBe(latestOverride.generation);
+    expect(listedWithLatest.files[0]).toMatchObject({
+      path: first.path,
+      isLatestEvidence: true,
+      latestEvidenceSource: "manual",
+    });
+
+    const second = await createUpload(config, {
+      topicId: topic.id,
+      relativePath: "周报-2026-07-27.pdf",
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      knowledgeRole: "evidence",
+    });
+    storage.set(tempUploadPath(second.uploadId), { body: "pdf", contentType: "application/pdf", etag: "etag-second" });
+    await completeUpload(config, {
+      topicId: topic.id,
+      uploadId: second.uploadId,
+      relativePath: second.path,
+      size: 3,
+      contentType: "application/pdf",
+      pdfPages: 1,
+      knowledgeRole: "evidence",
+      uploadedBy: "汪旭",
+    });
+    expect(JSON.parse(storage.get(latestEvidenceOverrideObjectPath(topic.id))!.body)).toMatchObject({
+      generation: latestOverride.generation,
+      path: first.path,
+      sourceEtag: firstMetadata.etag,
+    });
+    await patchKnowledgeFile(config, {
+      topicId: topic.id,
+      knowledgeRole: "evidence",
+      relativePath: first.path,
+      latest: true,
+      updatedBy: "汪旭",
+    });
+    const refreshedOverride = JSON.parse(storage.get(latestEvidenceOverrideObjectPath(topic.id))!.body) as typeof latestOverride;
+    expect(refreshedOverride).toMatchObject({
+      path: first.path,
+      sourceEtag: firstMetadata.etag,
+    });
+    expect(refreshedOverride.generation).not.toBe(latestOverride.generation);
   });
 
   it("hides topics that predate the role-tree storage layout", async () => {
