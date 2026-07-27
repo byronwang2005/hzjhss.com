@@ -5,6 +5,7 @@ import { Camera, Geometry, Mesh, Program, Renderer, Transform } from "ogl";
 import {
   SupportRenderGate,
   prefersReducedSupportMotion,
+  shouldPinSupportEcosystem,
   supportParticleBudget,
 } from "./support-motion";
 
@@ -335,6 +336,38 @@ function initMagneticControls(reducedMotion: boolean): void {
     control.addEventListener("pointermove", move);
     control.addEventListener("pointerleave", reset);
   });
+
+  document.querySelectorAll<HTMLElement>("[data-ecosystem-card]").forEach((card) => {
+    const shine = card.querySelector<HTMLElement>(".support-ecosystem-shine");
+    const move = (event: PointerEvent): void => {
+      const bounds = card.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+      const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+      gsap.to(card, {
+        rotateX: y * -7,
+        rotateY: x * 9,
+        z: 22,
+        transformPerspective: 1000,
+        duration: 0.5,
+        ease: "power3.out",
+      });
+      if (shine) {
+        gsap.to(shine, { xPercent: 250 + x * 80, duration: 0.7, ease: "power3.out" });
+      }
+    };
+    const reset = (): void => {
+      gsap.to(card, {
+        rotateX: 0,
+        rotateY: 0,
+        z: 0,
+        duration: 0.8,
+        ease: "power3.out",
+      });
+      if (shine) gsap.to(shine, { xPercent: 0, duration: 0.7 });
+    };
+    card.addEventListener("pointermove", move);
+    card.addEventListener("pointerleave", reset);
+  });
 }
 
 function initScrollAnimations(reducedMotion: boolean): void {
@@ -376,7 +409,7 @@ function initScrollAnimations(reducedMotion: boolean): void {
     delay: 0.15,
   });
 
-  document.querySelectorAll<HTMLElement>(".support-section-head, .support-proof-intro, .support-ecosystem > div, .support-roadmap-copy").forEach((section) => {
+  document.querySelectorAll<HTMLElement>(".support-section-head, .support-proof-intro, .support-roadmap-copy").forEach((section) => {
     gsap.from(section.children, {
       y: 46,
       opacity: 0,
@@ -419,6 +452,149 @@ function initScrollAnimations(reducedMotion: boolean): void {
     },
   });
 
+  const ecosystem = document.querySelector<HTMLElement>("[data-ecosystem-stage]");
+  const ecosystemCards = gsap.utils.toArray<HTMLElement>("[data-ecosystem-card]");
+  if (ecosystem && ecosystemCards.length > 0 && shouldPinSupportEcosystem(window.innerWidth, reducedMotion)) {
+    gsap.timeline({
+      scrollTrigger: {
+        trigger: ".support-hero",
+        start: "62% top",
+        end: "bottom top",
+        scrub: 0.8,
+      },
+    })
+      .to(".support-hero-copy", { y: -90, opacity: 0.12, scale: 0.94, ease: "none" }, 0)
+      .to(".support-hero-system", { x: 120, opacity: 0, rotateY: -8, ease: "none" }, 0)
+      .to(".support-hero-visual", { scale: 1.42, opacity: 0.3, filter: "blur(3px)", ease: "none" }, 0)
+      .to(".support-hero-foot", { opacity: 0, ease: "none" }, 0);
+
+    const ecosystemTimeline = gsap.timeline({
+      defaults: { ease: "power3.out" },
+      scrollTrigger: {
+        trigger: ecosystem,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 0.95,
+        invalidateOnRefresh: true,
+      },
+    });
+
+    ecosystemTimeline
+      .fromTo(".support-ecosystem-core", {
+        opacity: 0,
+        scale: 0.08,
+      }, {
+        opacity: 1,
+        scale: 1,
+        duration: 1,
+      }, 0)
+      .fromTo(".support-ecosystem-orbit", {
+        opacity: 0,
+        scale: 0.45,
+        rotate: -50,
+      }, {
+        opacity: 1,
+        scale: 1,
+        rotate: 0,
+        duration: 1.25,
+        stagger: 0.08,
+      }, 0.05)
+      .fromTo(".support-ecosystem-copy .support-section-label", {
+        opacity: 0,
+        x: -38,
+      }, {
+        opacity: 1,
+        x: 0,
+        duration: 0.48,
+      }, 0.22)
+      .fromTo(".support-ecosystem-copy h2 span", {
+        yPercent: 116,
+        rotateX: -48,
+        opacity: 0,
+      }, {
+        yPercent: 0,
+        rotateX: 0,
+        opacity: 1,
+        duration: 0.72,
+        stagger: 0.1,
+      }, 0.3)
+      .fromTo(".support-ecosystem-copy > p:last-child", {
+        opacity: 0,
+        y: 30,
+      }, {
+        opacity: 1,
+        y: 0,
+        duration: 0.5,
+      }, 0.66)
+      .fromTo(ecosystemCards, {
+        opacity: 0,
+        y: 110,
+        z: -460,
+        scale: 0.68,
+        rotateX: 18,
+        rotateY: (index) => index % 2 === 0 ? -8 : 8,
+      }, {
+        opacity: 1,
+        y: 0,
+        z: 0,
+        scale: 1,
+        rotateX: 0,
+        rotateY: 0,
+        duration: 0.95,
+        stagger: 0.15,
+      }, 0.72)
+      .to(".support-ecosystem-shine", {
+        xPercent: 430,
+        duration: 0.9,
+        stagger: 0.08,
+        ease: "power2.inOut",
+      }, 1.28)
+      .fromTo(".support-ecosystem-marquee", {
+        opacity: 0,
+      }, {
+        opacity: 1,
+        duration: 0.45,
+      }, 1.52)
+      .to(".support-ecosystem-grid", {
+        scale: 1.025,
+        duration: 0.5,
+        ease: "power2.inOut",
+      }, 1.68);
+
+    gsap.to(".support-ecosystem-orbit-a", {
+      rotate: 360,
+      duration: 34,
+      repeat: -1,
+      ease: "none",
+    });
+    gsap.to(".support-ecosystem-orbit-b", {
+      rotate: -322,
+      duration: 27,
+      repeat: -1,
+      ease: "none",
+    });
+    gsap.to(".support-ecosystem-core", {
+      boxShadow: "0 0 90px rgb(201 167 106 / 34%), 0 0 240px rgb(201 167 106 / 20%)",
+      duration: 2.4,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+  } else if (ecosystemCards.length > 0) {
+    gsap.from(ecosystemCards, {
+      y: 48,
+      opacity: 0,
+      scale: 0.94,
+      duration: 0.8,
+      stagger: 0.1,
+      scrollTrigger: {
+        trigger: ".support-ecosystem-grid",
+        start: "top 82%",
+        once: true,
+      },
+    });
+  }
+
   document.querySelectorAll<StoryStep>("[data-story-step]").forEach((step) => {
     ScrollTrigger.create({
       trigger: step,
@@ -432,6 +608,8 @@ function initScrollAnimations(reducedMotion: boolean): void {
   gsap.from(".support-role-grid article", {
     y: 70,
     opacity: 0,
+    rotateX: 12,
+    transformPerspective: 1000,
     duration: 0.9,
     stagger: 0.12,
     scrollTrigger: {
@@ -444,6 +622,7 @@ function initScrollAnimations(reducedMotion: boolean): void {
   gsap.from(".support-architecture-node", {
     opacity: 0,
     scale: 0.88,
+    filter: "blur(8px)",
     duration: 0.7,
     stagger: 0.09,
     scrollTrigger: {
@@ -512,22 +691,11 @@ function initScrollAnimations(reducedMotion: boolean): void {
     },
   });
 
-  gsap.from(".support-ecosystem li", {
-    y: 34,
-    opacity: 0,
-    duration: 0.7,
-    stagger: 0.09,
-    scrollTrigger: {
-      trigger: ".support-ecosystem ul",
-      start: "top 78%",
-      once: true,
-    },
-  });
-
   document.querySelectorAll<HTMLElement>(".support-roadmap li").forEach((item) => {
     gsap.from(item, {
       x: 48,
       opacity: 0,
+      clipPath: "inset(0 100% 0 0)",
       duration: 0.75,
       scrollTrigger: {
         trigger: item,

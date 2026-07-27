@@ -24,6 +24,10 @@ export function supportParticleBudget(
   return { count: 340, dpr };
 }
 
+export function shouldPinSupportEcosystem(width: number, reducedMotion: boolean): boolean {
+  return width > 820 && !reducedMotion;
+}
+
 export class SupportRenderGate {
   private documentVisible = true;
   private canvasVisible = true;

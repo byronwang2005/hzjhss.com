@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   SupportRenderGate,
   prefersReducedSupportMotion,
+  shouldPinSupportEcosystem,
   supportParticleBudget,
 } from "../src/site/client/support-motion";
 
@@ -57,6 +58,20 @@ describe("support publicity page", () => {
       expect(existsSync(`dist/assets/ecosystem/${icon}.svg`)).toBe(true);
     }
   });
+
+  it("places the technology ecosystem immediately after the hero and uses direct language", () => {
+    const browserWindow = new Window({ url: "https://hzjhss.test/support/" });
+    browserWindow.document.write(source);
+    const sections = Array.from(browserWindow.document.querySelectorAll("main > section"));
+
+    expect(sections[0]?.classList.contains("support-hero")).toBe(true);
+    expect(sections[1]?.classList.contains("support-ecosystem")).toBe(true);
+    expect(source).not.toMatch(/不是[^。]*而是/);
+    expect(source).not.toContain("不是概念演示");
+    expect(source).not.toContain("上下文不是固定截断");
+    expect(source).toContain("已经上线");
+    expect(source).toContain("三类资料");
+  });
 });
 
 describe("support motion policy", () => {
@@ -75,6 +90,12 @@ describe("support motion policy", () => {
     expect(supportParticleBudget(390, 3, false)).toEqual({ count: 130, dpr: 1.5 });
     expect(supportParticleBudget(768, 1, false)).toEqual({ count: 210, dpr: 1 });
     expect(supportParticleBudget(1440, 2, false)).toEqual({ count: 340, dpr: 1.5 });
+  });
+
+  it("pins the ecosystem stage only on motion-capable desktop layouts", () => {
+    expect(shouldPinSupportEcosystem(1440, false)).toBe(true);
+    expect(shouldPinSupportEcosystem(820, false)).toBe(false);
+    expect(shouldPinSupportEcosystem(1440, true)).toBe(false);
   });
 
   it("pauses rendering when the page or canvas is not visible", () => {
